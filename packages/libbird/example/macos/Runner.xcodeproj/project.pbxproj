@@ -210,10 +210,10 @@
 			buildPhases = (
 				33CC10E92044A3C60003C045 /* Sources */,
 				33CC10EA2044A3C60003C045 /* Frameworks */,
+				079EECB12F4E91C3008B5AEF /* ShellScript */,
 				33CC10EB2044A3C60003C045 /* Resources */,
 				33CC110E2044A8840003C045 /* Bundle Framework */,
 				3399D490228B24CF009A79C7 /* ShellScript */,
-				079EECB12F4E91C3008B5AEF /* ShellScript */,
 			);
 			buildRules = (
 			);
@@ -304,6 +304,7 @@
 /* Begin PBXShellScriptBuildPhase section */
 		079EECB12F4E91C3008B5AEF /* ShellScript */ = {
 			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
 			files = (
 			);
@@ -317,7 +318,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "set -e\n\necho \"Packaging Ladybird Helpers...\"\n\n# SRCROOT points to your 'macos' folder. We go up one level to hit your Flutter root, then into packages.\nLADYBIRD_BIN_DIR=\"${SRCROOT}/../packages/libbird/third_party/ladybird/Build/release/bin\"\n\n# This is where Xcode is building your final .app bundle\nHELPERS_DIR=\"${BUILT_PRODUCTS_DIR}/${CONTENTS_FOLDER_PATH}/Helpers\"\n\nmkdir -p \"$HELPERS_DIR\"\ncp -R \"$LADYBIRD_BIN_DIR/\"* \"$HELPERS_DIR/\".\n";
+			shellScript = "echo \"Packaging Ladybird Helpers...\"\n\n# SRCROOT points to your 'macos' folder. We go up one level to hit your Flutter root, then into packages.\nLADYBIRD_BIN_DIR=\"${SRCROOT}/../packages/libbird/third_party/ladybird/Build/release/bin\"\n\n# This is where Xcode is building your final .app bundle\nHELPERS_DIR=\"${BUILT_PRODUCTS_DIR}/${CONTENTS_FOLDER_PATH}/Helpers\"\n\nmkdir -p \"$HELPERS_DIR\"\ncp -R \"$LADYBIRD_BIN_DIR/\"* \"$HELPERS_DIR/\".\n";
 		};
 		3399D490228B24CF009A79C7 /* ShellScript */ = {
 			isa = PBXShellScriptBuildPhase;
