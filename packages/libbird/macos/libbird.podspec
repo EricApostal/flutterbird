@@ -29,7 +29,8 @@ Ladybird embedding for Flutter.
     
     # We link against the dynamic libraries GN generates
     'OTHER_LDFLAGS' => '-framework Cocoa -framework Metal -framework QuartzCore -framework UniformTypeIdentifiers -llagom-web -llagom-js -llagom-core -llagom-gfx -llagom-ipc',
-    'CLANG_CXX_LANGUAGE_STANDARD' => 'c++2b'
+    'CLANG_CXX_LANGUAGE_STANDARD' => 'c++2b',
+    'LD_RUNPATH_SEARCH_PATHS' => '$(inherited) @loader_path/../Resources/Ladybird.app/Contents/lib'
   }
 
   # 2. The Build and Package Script Phase
@@ -51,33 +52,19 @@ Ladybird embedding for Flutter.
         ./Meta/ladybird.py build
         cd -
 
-        # 2. Package Artifacts into the Host App Bundle
-        # Because this script runs in the Pod context, we find the host .app dynamically
-        APP_BUNDLE=$(find "$BUILT_PRODUCTS_DIR" -maxdepth 1 -name "*.app" -print -quit)
+        # 2. Package Artifacts into the Plugin Framework
+        FRAMEWORK_DIR="${TARGET_BUILD_DIR}/${WRAPPER_NAME}"
+        echo "Packaging Ladybird.app into framework: $FRAMEWORK_DIR"
 
-        if [ -z "$APP_BUNDLE" ]; then
-            echo "❌ ERROR: Could not find host .app bundle in $BUILT_PRODUCTS_DIR"
+        if [ -d "$FRAMEWORK_DIR" ]; then
+            mkdir -p "$FRAMEWORK_DIR/Resources"
+            # We copy the entire Ladybird.app so internal rpaths between executables/dylibs remain valid
+            rsync -a --delete "${LADYBIRD_SRC}/Build/release/bin/Ladybird.app" "$FRAMEWORK_DIR/Resources/"
+            echo "✅ SUCCESS: Ladybird artifacts bundled into framework."
+        else
+            echo "❌ ERROR: Framework directory not found at $FRAMEWORK_DIR"
             exit 1
         fi
-
-        APP_CONTENTS="${LADYBIRD_SRC}/Build/release/bin/Ladybird.app/Contents"
-        echo "Packaging artifacts into host app: $APP_BUNDLE"
-
-        # A. Dynamic Libraries (GN expects them in Contents/lib)
-        mkdir -p "$APP_BUNDLE/Contents/lib"
-        cp -R "$APP_CONTENTS/lib/"* "$APP_BUNDLE/Contents/lib/"
-
-        # B. Helpers (GN expects them in MacOS alongside the main executable)
-        cp "$APP_CONTENTS/MacOS/WebContent" "$APP_BUNDLE/Contents/MacOS/"
-        cp "$APP_CONTENTS/MacOS/RequestServer" "$APP_BUNDLE/Contents/MacOS/"
-        cp "$APP_CONTENTS/MacOS/ImageDecoder" "$APP_BUNDLE/Contents/MacOS/"
-        cp "$APP_CONTENTS/MacOS/WebWorker" "$APP_BUNDLE/Contents/MacOS/"
-
-        # C. Resources (Fonts, Themes, Inspector CSS)
-        mkdir -p "$APP_BUNDLE/Contents/Resources"
-        cp -R "$APP_CONTENTS/Resources/"* "$APP_BUNDLE/Contents/Resources/"
-
-        echo "✅ SUCCESS: Ladybird artifacts bundled."
         echo "--- LADYBIRD COCOAPODS BUILD END ---"
       '
     }
