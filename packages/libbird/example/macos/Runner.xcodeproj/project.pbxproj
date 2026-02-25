@@ -624,9 +624,9 @@
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				"HEADER_SEARCH_PATHS[arch=*]" = (
-					"$(PROJECT_DIR)/../../ladybird",
-					"$(PROJECT_DIR)/../../ladybird/Build/release",
-					"$(PROJECT_DIR)/../../ladybird/UI/AppKit/interface",
+					"$(PROJECT_DIR)/../../third_party/ladybird",
+					"$(PROJECT_DIR)/../../third_party/ladybird/Build/release",
+					"$(PROJECT_DIR)/../../third_party/ladybird/UI/AppKit/interface",
 				);
 				INFOPLIST_FILE = Runner/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
