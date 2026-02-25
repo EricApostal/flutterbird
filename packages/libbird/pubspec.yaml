@@ -22,6 +22,8 @@ dev_dependencies:
 
 # The following section is specific to Flutter packages.
 flutter:
+  config:
+    enable-swift-package-manager: false
   # This section identifies this Flutter project as a plugin project.
   # The 'pluginClass' specifies the class (in Java, Kotlin, Swift, Objective-C, etc.)
   # which should be registered in the plugin registry. This is required for
@@ -38,9 +40,7 @@ flutter:
         pluginClass: LibbirdPlugin
       macos:
         pluginClass: LibbirdPlugin
-    
-  config:
-    enable-swift-package-manager: false
+  
 
   # To add custom fonts to your plugin package, add a fonts section here,
   # in this "flutter" section. Each entry in this list should have a
