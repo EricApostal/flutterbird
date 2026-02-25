@@ -30,7 +30,7 @@ Ladybird embedding for Flutter.
     # We link against the dynamic libraries GN generates
     'OTHER_LDFLAGS' => '-framework Cocoa -framework Metal -framework QuartzCore -framework UniformTypeIdentifiers -llagom-web -llagom-js -llagom-core -llagom-gfx -llagom-ipc',
     'CLANG_CXX_LANGUAGE_STANDARD' => 'c++2b',
-    'LD_RUNPATH_SEARCH_PATHS' => '$(inherited) @loader_path/../Resources/Ladybird.app/Contents/lib'
+    'LD_RUNPATH_SEARCH_PATHS' => '$(inherited) @executable_path/../Frameworks/libbird.framework/Resources/Ladybird.app/Contents/lib'
   }
 
   # 2. The Build and Package Script Phase
@@ -59,7 +59,20 @@ Ladybird embedding for Flutter.
         if [ -d "$FRAMEWORK_DIR" ]; then
             mkdir -p "$FRAMEWORK_DIR/Resources"
             # We copy the entire Ladybird.app so internal rpaths between executables/dylibs remain valid
-            rsync -a --delete "${LADYBIRD_SRC}/Build/release/bin/Ladybird.app" "$FRAMEWORK_DIR/Resources/"
+            # Use -L to dereference symlinks (e.g., Contents/lib to the build output lib dir)
+            rsync -aL --delete "${LADYBIRD_SRC}/Build/release/bin/Ladybird.app" "$FRAMEWORK_DIR/Resources/"
+            
+            # Point libbird.framework directly to the bundled dylibs via @loader_path
+            LIB_BIN="$FRAMEWORK_DIR/$WRAPPER_NAME"
+            if [ -f "$LIB_BIN" ]; then
+                echo "Remapping dynamic library paths for $LIB_BIN"
+                install_name_tool -change "@rpath/liblagom-core.0.dylib" "@loader_path/Resources/Ladybird.app/Contents/lib/liblagom-core.0.dylib" "$LIB_BIN" || true
+                install_name_tool -change "@rpath/liblagom-gfx.0.dylib" "@loader_path/Resources/Ladybird.app/Contents/lib/liblagom-gfx.0.dylib" "$LIB_BIN" || true
+                install_name_tool -change "@rpath/liblagom-ipc.0.dylib" "@loader_path/Resources/Ladybird.app/Contents/lib/liblagom-ipc.0.dylib" "$LIB_BIN" || true
+                install_name_tool -change "@rpath/liblagom-js.0.dylib" "@loader_path/Resources/Ladybird.app/Contents/lib/liblagom-js.0.dylib" "$LIB_BIN" || true
+                install_name_tool -change "@rpath/liblagom-web.0.dylib" "@loader_path/Resources/Ladybird.app/Contents/lib/liblagom-web.0.dylib" "$LIB_BIN" || true
+            fi
+            
             echo "✅ SUCCESS: Ladybird artifacts bundled into framework."
         else
             echo "❌ ERROR: Framework directory not found at $FRAMEWORK_DIR"
