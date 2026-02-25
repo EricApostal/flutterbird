@@ -16,7 +16,7 @@ Ladybird embedding for Flutter.
   
   # Ensure CocoaPods grabs your Swift files
   s.source_files     = 'libbird/Sources/libbird/**/*.{swift,h,m,mm}'
-  s.public_header_files = 'libbird/Sources/libbird/**/*.h'
+  s.public_header_files = 'libbird/Sources/libbird/LadybirdViewWrapper.h'
   s.resource_bundles = {'libbird_privacy' => ['libbird/Sources/libbird/PrivacyInfo.xcprivacy']}
   s.dependency 'FlutterMacOS'
 
@@ -25,13 +25,15 @@ Ladybird embedding for Flutter.
   # 1. Wire up the headers, dynamic libraries, and C++23 requirements
   s.pod_target_xcconfig = {
     'DEFINES_MODULE' => 'YES',
-    'HEADER_SEARCH_PATHS' => '"${PODS_TARGET_SRCROOT}/../third_party/ladybird" "${PODS_TARGET_SRCROOT}/../third_party/ladybird/Build/release" "${PODS_TARGET_SRCROOT}/../third_party/ladybird/UI/AppKit" "${PODS_TARGET_SRCROOT}/../third_party/ladybird/Libraries" "${PODS_TARGET_SRCROOT}/../third_party/ladybird/AK"',
+    'HEADER_SEARCH_PATHS' => '"${PODS_TARGET_SRCROOT}/../third_party/ladybird" "${PODS_TARGET_SRCROOT}/../third_party/ladybird/Build/release" "${PODS_TARGET_SRCROOT}/../third_party/ladybird/UI/AppKit" "${PODS_TARGET_SRCROOT}/../third_party/ladybird/Libraries" "${PODS_TARGET_SRCROOT}/../third_party/ladybird/Build/release/Lagom" "${PODS_TARGET_SRCROOT}/../third_party/ladybird/Build/release/Lagom/Libraries"',
     'LIBRARY_SEARCH_PATHS' => '"${PODS_TARGET_SRCROOT}/../third_party/ladybird/Build/release/lib"',
     
     # We link against the dynamic libraries GN generates
-    'OTHER_LDFLAGS' => '-framework Cocoa -framework Metal -framework QuartzCore -framework UniformTypeIdentifiers -llagom-web -llagom-js -llagom-core -llagom-gfx -llagom-ipc',
+    'OTHER_LDFLAGS' => '-framework Cocoa -framework Metal -framework QuartzCore -framework UniformTypeIdentifiers -lladybird_impl -llagom-web -llagom-js -llagom-core -llagom-gfx -llagom-ipc -llagom-ak -llagom-url -llagom-webview',
     'CLANG_CXX_LANGUAGE_STANDARD' => 'c++2b',
-    'LD_RUNPATH_SEARCH_PATHS' => '$(inherited) @executable_path/../Frameworks/libbird.framework/Resources/Ladybird.app/Contents/lib'
+    'CLANG_CXX_LIBRARY' => 'libc++',
+    'LD_RUNPATH_SEARCH_PATHS' => '$(inherited) @executable_path/../Frameworks/libbird.framework/Resources/Ladybird.app/Contents/lib',
+    'EXCLUDED_ARCHS[sdk=macosx*]' => 'x86_64'
   }
 
   # 2. The Build and Package Script Phase
@@ -72,6 +74,9 @@ Ladybird embedding for Flutter.
                 install_name_tool -change "@rpath/liblagom-ipc.0.dylib" "@loader_path/Resources/Ladybird.app/Contents/lib/liblagom-ipc.0.dylib" "$LIB_BIN" || true
                 install_name_tool -change "@rpath/liblagom-js.0.dylib" "@loader_path/Resources/Ladybird.app/Contents/lib/liblagom-js.0.dylib" "$LIB_BIN" || true
                 install_name_tool -change "@rpath/liblagom-web.0.dylib" "@loader_path/Resources/Ladybird.app/Contents/lib/liblagom-web.0.dylib" "$LIB_BIN" || true
+                install_name_tool -change "@rpath/liblagom-ak.0.dylib" "@loader_path/Resources/Ladybird.app/Contents/lib/liblagom-ak.0.dylib" "$LIB_BIN" || true
+                install_name_tool -change "@rpath/liblagom-url.0.dylib" "@loader_path/Resources/Ladybird.app/Contents/lib/liblagom-url.0.dylib" "$LIB_BIN" || true
+                install_name_tool -change "@rpath/liblagom-webview.0.dylib" "@loader_path/Resources/Ladybird.app/Contents/lib/liblagom-webview.0.dylib" "$LIB_BIN" || true
             fi
             
             echo "✅ SUCCESS: Ladybird artifacts bundled into framework."
