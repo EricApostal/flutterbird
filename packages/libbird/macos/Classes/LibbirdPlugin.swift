@@ -6,9 +6,6 @@ public class LibbirdPlugin: NSObject, FlutterPlugin {
     let channel = FlutterMethodChannel(name: "libbird", binaryMessenger: registrar.messenger)
     let instance = LibbirdPlugin()
     registrar.addMethodCallDelegate(instance, channel: channel)
-      
-    let viewFactory = HostedPlatformViewFactory(messenger: registrar.messenger)
-    registrar.register(viewFactory, withId: "hosted_platform_view")
   }
 
   public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {

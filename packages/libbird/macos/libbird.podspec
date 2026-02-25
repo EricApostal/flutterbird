@@ -5,88 +5,26 @@
 Pod::Spec.new do |s|
   s.name             = 'libbird'
   s.version          = '0.0.1'
-  s.summary          = 'Ladybird embedding for Flutter.'
+  s.summary          = 'A new Flutter plugin project.'
   s.description      = <<-DESC
-Ladybird embedding for Flutter.
+A new Flutter plugin project.
                        DESC
   s.homepage         = 'http://example.com'
   s.license          = { :file => '../LICENSE' }
   s.author           = { 'Your Company' => 'email@example.com' }
+
   s.source           = { :path => '.' }
-  
-  # Ensure CocoaPods grabs your Swift files
-  s.source_files     = 'libbird/Sources/libbird/**/*.{swift,h,m,mm}'
-  s.public_header_files = 'libbird/Sources/libbird/LadybirdViewWrapper.h'
-  s.resource_bundles = {'libbird_privacy' => ['libbird/Sources/libbird/PrivacyInfo.xcprivacy']}
+  s.source_files = 'Classes/**/*'
+
+  # If your plugin requires a privacy manifest, for example if it collects user
+  # data, update the PrivacyInfo.xcprivacy file to describe your plugin's
+  # privacy impact, and then uncomment this line. For more information,
+  # see https://developer.apple.com/documentation/bundleresources/privacy_manifest_files
+  # s.resource_bundles = {'libbird_privacy' => ['Resources/PrivacyInfo.xcprivacy']}
+
   s.dependency 'FlutterMacOS'
 
-  s.platform = :osx, '11.0'
-
-  # 1. Wire up the headers, dynamic libraries, and C++23 requirements
-  s.pod_target_xcconfig = {
-    'DEFINES_MODULE' => 'YES',
-    'HEADER_SEARCH_PATHS' => '"${PODS_TARGET_SRCROOT}/../third_party/ladybird" "${PODS_TARGET_SRCROOT}/../third_party/ladybird/Build/release" "${PODS_TARGET_SRCROOT}/../third_party/ladybird/UI/AppKit" "${PODS_TARGET_SRCROOT}/../third_party/ladybird/Libraries" "${PODS_TARGET_SRCROOT}/../third_party/ladybird/Build/release/Lagom" "${PODS_TARGET_SRCROOT}/../third_party/ladybird/Build/release/Lagom/Libraries" "${PODS_TARGET_SRCROOT}/../third_party/ladybird/Build/release/Lagom/Services"',
-    'LIBRARY_SEARCH_PATHS' => '"${PODS_TARGET_SRCROOT}/../third_party/ladybird/Build/release/lib"',
-    
-    # We link against the dynamic libraries GN generates
-    'OTHER_LDFLAGS' => '-framework Cocoa -framework Metal -framework QuartzCore -framework UniformTypeIdentifiers -lladybird_impl -llagom-web -llagom-js -llagom-core -llagom-coreminimal -llagom-gfx -llagom-ipc -llagom-ak -llagom-url -llagom-webview',
-    'CLANG_CXX_LANGUAGE_STANDARD' => 'c++2b',
-    'CLANG_CXX_LIBRARY' => 'libc++',
-    'LD_RUNPATH_SEARCH_PATHS' => '$(inherited) @executable_path/../Frameworks/libbird.framework/Resources/Ladybird.app/Contents/lib',
-    'EXCLUDED_ARCHS[sdk=macosx*]' => 'x86_64'
-  }
-
-  # 2. The Build and Package Script Phase
-  s.script_phases = [
-    {
-      :name => 'Build Ladybird & Bundle Artifacts',
-      :execution_position => :after_compile,
-      :script => '
-        set -e
-        echo "--- LADYBIRD COCOAPODS BUILD START ---"
-
-        # PODS_TARGET_SRCROOT points to the macos directory of this plugin
-        PLUGIN_ROOT="${PODS_TARGET_SRCROOT}/.."
-        LADYBIRD_SRC="${PLUGIN_ROOT}/third_party/ladybird"
-
-        # 1. Build Ladybird Engine
-        echo "Building Ladybird in ${LADYBIRD_SRC}..."
-        cd "$LADYBIRD_SRC"
-        ./Meta/ladybird.py build
-        cd -
-
-        # 2. Package Artifacts into the Plugin Framework
-        FRAMEWORK_DIR="${TARGET_BUILD_DIR}/${WRAPPER_NAME}"
-        echo "Packaging Ladybird.app into framework: $FRAMEWORK_DIR"
-
-        if [ -d "$FRAMEWORK_DIR" ]; then
-            mkdir -p "$FRAMEWORK_DIR/Resources"
-            # We copy the entire Ladybird.app so internal rpaths between executables/dylibs remain valid
-            # Use -L to dereference symlinks (e.g., Contents/lib to the build output lib dir)
-            rsync -aL --delete "${LADYBIRD_SRC}/Build/release/bin/Ladybird.app" "$FRAMEWORK_DIR/Resources/"
-            
-            # Point libbird.framework directly to the bundled dylibs via @loader_path
-            LIB_BIN="$FRAMEWORK_DIR/$WRAPPER_NAME"
-            if [ -f "$LIB_BIN" ]; then
-                echo "Remapping dynamic library paths for $LIB_BIN"
-                install_name_tool -change "@rpath/liblagom-core.0.dylib" "@loader_path/Resources/Ladybird.app/Contents/lib/liblagom-core.0.dylib" "$LIB_BIN" || true
-                install_name_tool -change "@rpath/liblagom-coreminimal.0.dylib" "@loader_path/Resources/Ladybird.app/Contents/lib/liblagom-coreminimal.0.dylib" "$LIB_BIN" || true
-                install_name_tool -change "@rpath/liblagom-gfx.0.dylib" "@loader_path/Resources/Ladybird.app/Contents/lib/liblagom-gfx.0.dylib" "$LIB_BIN" || true
-                install_name_tool -change "@rpath/liblagom-ipc.0.dylib" "@loader_path/Resources/Ladybird.app/Contents/lib/liblagom-ipc.0.dylib" "$LIB_BIN" || true
-                install_name_tool -change "@rpath/liblagom-js.0.dylib" "@loader_path/Resources/Ladybird.app/Contents/lib/liblagom-js.0.dylib" "$LIB_BIN" || true
-                install_name_tool -change "@rpath/liblagom-web.0.dylib" "@loader_path/Resources/Ladybird.app/Contents/lib/liblagom-web.0.dylib" "$LIB_BIN" || true
-                install_name_tool -change "@rpath/liblagom-ak.0.dylib" "@loader_path/Resources/Ladybird.app/Contents/lib/liblagom-ak.0.dylib" "$LIB_BIN" || true
-                install_name_tool -change "@rpath/liblagom-url.0.dylib" "@loader_path/Resources/Ladybird.app/Contents/lib/liblagom-url.0.dylib" "$LIB_BIN" || true
-                install_name_tool -change "@rpath/liblagom-webview.0.dylib" "@loader_path/Resources/Ladybird.app/Contents/lib/liblagom-webview.0.dylib" "$LIB_BIN" || true
-            fi
-            
-            echo "✅ SUCCESS: Ladybird artifacts bundled into framework."
-        else
-            echo "❌ ERROR: Framework directory not found at $FRAMEWORK_DIR"
-            exit 1
-        fi
-        echo "--- LADYBIRD COCOAPODS BUILD END ---"
-      '
-    }
-  ]
+  s.platform = :osx, '10.11'
+  s.pod_target_xcconfig = { 'DEFINES_MODULE' => 'YES' }
+  s.swift_version = '5.0'
 end
