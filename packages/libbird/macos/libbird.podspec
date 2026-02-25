@@ -15,7 +15,8 @@ Ladybird embedding for Flutter.
   s.source           = { :path => '.' }
   
   # Ensure CocoaPods grabs your Swift files
-  s.source_files     = 'libbird/Sources/libbird/**/*.swift'
+  s.source_files     = 'libbird/Sources/libbird/**/*.{swift,h,m,mm}'
+  s.public_header_files = 'libbird/Sources/libbird/**/*.h'
   s.resource_bundles = {'libbird_privacy' => ['libbird/Sources/libbird/PrivacyInfo.xcprivacy']}
   s.dependency 'FlutterMacOS'
 
@@ -24,7 +25,7 @@ Ladybird embedding for Flutter.
   # 1. Wire up the headers, dynamic libraries, and C++23 requirements
   s.pod_target_xcconfig = {
     'DEFINES_MODULE' => 'YES',
-    'HEADER_SEARCH_PATHS' => '"${PODS_TARGET_SRCROOT}/../third_party/ladybird" "${PODS_TARGET_SRCROOT}/../third_party/ladybird/Build/release"',
+    'HEADER_SEARCH_PATHS' => '"${PODS_TARGET_SRCROOT}/../third_party/ladybird" "${PODS_TARGET_SRCROOT}/../third_party/ladybird/Build/release" "${PODS_TARGET_SRCROOT}/../third_party/ladybird/UI/AppKit" "${PODS_TARGET_SRCROOT}/../third_party/ladybird/Libraries" "${PODS_TARGET_SRCROOT}/../third_party/ladybird/AK"',
     'LIBRARY_SEARCH_PATHS' => '"${PODS_TARGET_SRCROOT}/../third_party/ladybird/Build/release/lib"',
     
     # We link against the dynamic libraries GN generates
