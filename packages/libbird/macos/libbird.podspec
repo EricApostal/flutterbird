@@ -14,8 +14,9 @@ Ladybird embedding for Flutter.
   s.author           = { 'Your Company' => 'email@example.com' }
   s.source           = { :path => '.' }
   
-  # Ensure CocoaPods grabs your Objective-C++ files
-  s.source_files     = 'Classes/**/*'
+  # Ensure CocoaPods grabs your Swift files
+  s.source_files     = 'libbird/Sources/libbird/**/*.swift'
+  s.resource_bundles = {'libbird_privacy' => ['libbird/Sources/libbird/PrivacyInfo.xcprivacy']}
   s.dependency 'FlutterMacOS'
 
   s.platform = :osx, '11.0'
