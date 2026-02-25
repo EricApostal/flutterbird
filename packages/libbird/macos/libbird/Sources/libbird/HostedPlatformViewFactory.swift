@@ -14,7 +14,15 @@ class HostedPlatformViewFactory: NSObject, FlutterPlatformViewFactory {
         arguments args: Any?
     ) -> NSView {
         let wrapper = LadybirdViewWrapper()
-        wrapper.loadURL("https://ladybird.org")
+        if let argsDict = args as? [String: Any], let url = argsDict["url"] as? String {
+            wrapper.loadURL(url)
+        } else {
+            wrapper.loadURL("https://ladybird.org")
+        }
         return wrapper.getView()
+    }
+    
+    func createArgsCodec() -> FlutterMessageCodec & NSObjectProtocol {
+        return FlutterStandardMessageCodec.sharedInstance()
     }
 }

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 class NativeViewScreen extends StatelessWidget {
   const NativeViewScreen({super.key});
@@ -6,13 +7,11 @@ class NativeViewScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('macOS Native View')),
-      body: Center(
-        child: SizedBox(
-          width: 300,
-          height: 200,
-          child: AppKitView(viewType: 'hosted_platform_view'),
-        ),
+      appBar: AppBar(title: const Text('Ladybird Platform View')),
+      body: const AppKitView(
+        viewType: 'hosted_platform_view',
+        creationParams: {'url': 'https://serenityos.org'},
+        creationParamsCodec: StandardMessageCodec(),
       ),
     );
   }
