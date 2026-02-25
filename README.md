@@ -1,3 +1,5 @@
-# flutterbird
+# FlutterBird
 
-A new Flutter project.
+A Flutter-based browser, based on Ladybird
+
+Mostly just a toy project to learn embedded Flutter views
