@@ -1,5 +1,7 @@
 #import "LadybirdViewWrapper.h"
 #import <Interface/LadybirdWebView.h>
+#import <Application/Application.h>
+#import <LibMain/Main.h>
 #import <LibURL/URL.h>
 #import <AK/String.h>
 
@@ -12,6 +14,17 @@
 - (instancetype)init {
     self = [super init];
     if (self) {
+        static dispatch_once_t onceToken;
+        dispatch_once(&onceToken, ^{
+            Main::Arguments arguments;
+            auto app_or_error = Ladybird::Application::create(arguments);
+            if (!app_or_error.is_error()) {
+                static auto s_app = app_or_error.release_value();
+            } else {
+                NSLog(@"Ladybird Application initialization failed!");
+            }
+        });
+        
         _webView = [[LadybirdWebView alloc] init:self];
     }
     return self;

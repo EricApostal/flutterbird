@@ -25,11 +25,11 @@ Ladybird embedding for Flutter.
   # 1. Wire up the headers, dynamic libraries, and C++23 requirements
   s.pod_target_xcconfig = {
     'DEFINES_MODULE' => 'YES',
-    'HEADER_SEARCH_PATHS' => '"${PODS_TARGET_SRCROOT}/../third_party/ladybird" "${PODS_TARGET_SRCROOT}/../third_party/ladybird/Build/release" "${PODS_TARGET_SRCROOT}/../third_party/ladybird/UI/AppKit" "${PODS_TARGET_SRCROOT}/../third_party/ladybird/Libraries" "${PODS_TARGET_SRCROOT}/../third_party/ladybird/Build/release/Lagom" "${PODS_TARGET_SRCROOT}/../third_party/ladybird/Build/release/Lagom/Libraries"',
+    'HEADER_SEARCH_PATHS' => '"${PODS_TARGET_SRCROOT}/../third_party/ladybird" "${PODS_TARGET_SRCROOT}/../third_party/ladybird/Build/release" "${PODS_TARGET_SRCROOT}/../third_party/ladybird/UI/AppKit" "${PODS_TARGET_SRCROOT}/../third_party/ladybird/Libraries" "${PODS_TARGET_SRCROOT}/../third_party/ladybird/Build/release/Lagom" "${PODS_TARGET_SRCROOT}/../third_party/ladybird/Build/release/Lagom/Libraries" "${PODS_TARGET_SRCROOT}/../third_party/ladybird/Build/release/Lagom/Services"',
     'LIBRARY_SEARCH_PATHS' => '"${PODS_TARGET_SRCROOT}/../third_party/ladybird/Build/release/lib"',
     
     # We link against the dynamic libraries GN generates
-    'OTHER_LDFLAGS' => '-framework Cocoa -framework Metal -framework QuartzCore -framework UniformTypeIdentifiers -lladybird_impl -llagom-web -llagom-js -llagom-core -llagom-gfx -llagom-ipc -llagom-ak -llagom-url -llagom-webview',
+    'OTHER_LDFLAGS' => '-framework Cocoa -framework Metal -framework QuartzCore -framework UniformTypeIdentifiers -lladybird_impl -llagom-web -llagom-js -llagom-core -llagom-coreminimal -llagom-gfx -llagom-ipc -llagom-ak -llagom-url -llagom-webview',
     'CLANG_CXX_LANGUAGE_STANDARD' => 'c++2b',
     'CLANG_CXX_LIBRARY' => 'libc++',
     'LD_RUNPATH_SEARCH_PATHS' => '$(inherited) @executable_path/../Frameworks/libbird.framework/Resources/Ladybird.app/Contents/lib',
@@ -70,6 +70,7 @@ Ladybird embedding for Flutter.
             if [ -f "$LIB_BIN" ]; then
                 echo "Remapping dynamic library paths for $LIB_BIN"
                 install_name_tool -change "@rpath/liblagom-core.0.dylib" "@loader_path/Resources/Ladybird.app/Contents/lib/liblagom-core.0.dylib" "$LIB_BIN" || true
+                install_name_tool -change "@rpath/liblagom-coreminimal.0.dylib" "@loader_path/Resources/Ladybird.app/Contents/lib/liblagom-coreminimal.0.dylib" "$LIB_BIN" || true
                 install_name_tool -change "@rpath/liblagom-gfx.0.dylib" "@loader_path/Resources/Ladybird.app/Contents/lib/liblagom-gfx.0.dylib" "$LIB_BIN" || true
                 install_name_tool -change "@rpath/liblagom-ipc.0.dylib" "@loader_path/Resources/Ladybird.app/Contents/lib/liblagom-ipc.0.dylib" "$LIB_BIN" || true
                 install_name_tool -change "@rpath/liblagom-js.0.dylib" "@loader_path/Resources/Ladybird.app/Contents/lib/liblagom-js.0.dylib" "$LIB_BIN" || true

@@ -1,0 +1,57 @@
+(lldb) target create "./build/macos/Build/Products/Release/flutterbird.app/Contents/MacOS/flutterbird"
+Current executable set to '/Users/eric/Documents/development/projects/flutterbird/build/macos/Build/Products/Release/flutterbird.app/Contents/MacOS/flutterbird' (arm64).
+(lldb) run
+2026-02-25 00:11:13.701796-0500 flutterbird[86597:1626856] Running with merged UI and platform thread. Experimental.
+2026-02-25 00:11:14.306470-0500 flutterbird[86597:1626856] [StateRestoration] -[NSApplication(NSWindowRestoration) restoreWindowWithIdentifier:state:completionHandler:] Unable to find className=(null)
+Unable to register org.ladybird.Ladybird.helper.86597 with bootstrap on port 0x000000000001530b
+Failed to allocate server port: Permission denied
+Usage:
+	[1m<exe>[0m [--headless[=mode]] [--window-width pixels] [--window-height pixels] [--certificate certificate] [--new-window] [--force-new-process] [--allow-popups] [--disable-scripting] [--disable-sql-database] [--debug-process process-name] [--profile-process process-name] [--test-mode] [--log-all-js-exceptions] [--disable-site-isolation] [--enable-idl-tracing] [--disable-http-memory-cache] [--disable-http-disk-cache] [--disable-content-filter] [--enable-autoplay] [--expose-experimental-interfaces] [--expose-internals-object] [--force-cpu-painting] [--force-fontconfig] [--collect-garbage-on-every-allocation] [--disable-scrollbar-painting] [--dns-server host|address] [--dns-port port (default: 53 or 853 if --dot)] [--dot] [--dnssec] [--default-time-zone time-zone-id] [--resource-map path] [--devtools[=port]] [--user-agent-preset name] [--tuple-file-origins] [url...]
+
+Description:
+The Ladybird web browser :^)
+
+Options:
+	[1m--help[0m	Display help message and exit
+	[1m--version[0m	Print version
+	[1m--headless[0m[=mode]	Run Ladybird without a browser window. Mode may be 'screenshot' (default), 'layout-tree', 'text', or 'manual'.
+	[1m--window-width[0m pixels	Set viewport width in pixels (default: 800) (currently only supported for headless mode)
+	[1m--window-height[0m pixels	Set viewport height in pixels (default: 600) (currently only supported for headless mode)
+	[1m-C[0m certificate, [1m--certificate[0m certificate	Path to a certificate file
+	[1m-n[0m, [1m--new-window[0m	Force opening in a new window
+	[1m--force-new-process[0m	Force creation of a new browser process
+	[1m--allow-popups[0m	Disable popup blocking by default
+	[1m--disable-scripting[0m	Disable scripting by default
+	[1m--disable-sql-database[0m	Disable SQL database
+	[1m--debug-process[0m process-name	Wait for a debugger to attach to the given process name (WebContent, RequestServer, etc.)
+	[1m--profile-process[0m process-name	Enable callgrind profiling of the given process name (WebContent, RequestServer, etc.)
+	[1m--test-mode[0m	Enable test mode
+	[1m--log-all-js-exceptions[0m	Log all JavaScript exceptions
+	[1m--disable-site-isolation[0m	Disable site isolation
+	[1m--enable-idl-tracing[0m	Enable IDL tracing
+	[1m--disable-http-memory-cache[0m	Disable HTTP memory cache
+	[1m--disable-http-disk-cache[0m	Disable HTTP disk cache
+	[1m--disable-content-filter[0m	Disable content filter
+	[1m--enable-autoplay[0m	Enable multimedia autoplay
+	[1m--expose-experimental-interfaces[0m	Expose experimental IDL interfaces
+	[1m--expose-internals-object[0m	Expose internals object
+	[1m--force-cpu-painting[0m	Force CPU painting
+	[1m--force-fontconfig[0m	Force using fontconfig for font loading
+	[1m-g[0m, [1m--collect-garbage-on-every-allocation[0m	Collect garbage after every JS heap allocation
+	[1m--disable-scrollbar-painting[0m	Don't paint horizontal or vertical scrollbars on the main viewport
+	[1m--dns-server[0m host|address	Set the DNS server address
+	[1m--dns-port[0m port (default: 53 or 853 if --dot)	Set the DNS server port
+	[1m--dot[0m	Use DNS over TLS
+	[1m--dnssec[0m	Validate DNSSEC locally
+	[1m--default-time-zone[0m time-zone-id	Default time zone
+	[1m--resource-map[0m path	Path to JSON file mapping URLs to local files
+	[1m--devtools[0m[=port]	Enable the Firefox DevTools server, with an optional port
+	[1m--user-agent-preset[0m name	Name of the User-Agent preset to use in place of the default User-Agent
+	[1m--tuple-file-origins[0m	Treat file:// URLs as having tuple origins
+
+Arguments:
+	[1murl[0m	URLs to open
+Process 86597 launched: '/Users/eric/Documents/development/projects/flutterbird/build/macos/Build/Products/Release/flutterbird.app/Contents/MacOS/flutterbird' (arm64)
+Process 86597 exited with status = 1 (0x00000001)
+(lldb) bt
+error: Command requires a process which is currently stopped.
