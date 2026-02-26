@@ -1,5 +1,5 @@
 //
-//  LadybirdEngine.m
+//  LadybirdEngine.mm
 //  Pods
 //
 //  Created by Eric Apostal on 2/25/26.
@@ -12,12 +12,11 @@
 #include <LibMain/Main.h>
 #include <LibWebView/Application.h>
 
-// Assuming LadybirdWebView is the AppKit NSView subclass provided by ladybird_impl
 #import <Interface/LadybirdWebView.h> 
 
 @implementation LadybirdEngine
 
-+ (void)initializeEngine {
++ (void)initializeEngine  {
     static bool initialized = false;
     if (initialized) return;
 
