@@ -1,94 +1,102 @@
 #
-# To learn more about a Podspec see http://guides.cocoapods.org/syntax/podspec.html.
-# Run `pod lib lint libbird.podspec` to validate before publishing.
+# libbird.podspec
 #
+
+# This is largely AI. It also isn't super great.
+
+plugin_root = File.expand_path('..', __dir__)
+ladybird_build_dir = File.join(plugin_root, 'third_party', 'ladybird', 'Build')
+
+found_library_paths = ['$(inherited)']
+if Dir.exist?(ladybird_build_dir)
+  Dir.glob("#{ladybird_build_dir}/**/*.{a,dylib}").each do |file|
+    dir_path = File.dirname(file)
+    rel_dir = dir_path.sub(plugin_root, '${PODS_TARGET_SRCROOT}/..')
+    found_library_paths << "\"#{rel_dir}\""
+  end
+end
+found_library_paths.uniq!
+
 Pod::Spec.new do |s|
   s.name             = 'libbird'
   s.version          = '0.0.1'
-  s.summary          = 'Ladybird embedding for Flutter.'
-  s.description      = <<-DESC
-Ladybird embedding for Flutter.
-                       DESC
-  s.homepage         = 'http://example.com'
-  s.license          = { :file => '../LICENSE' }
-  s.author           = { 'Your Company' => 'email@example.com' }
-  s.source           = { :path => '.' }
+  s.summary          = 'Ladybird interface for Flutter.'
+  s.homepage         = 'https://ladybird.org'
+  s.license          = { :type => 'BSD', :file => '../LICENSE' }
+  s.author           = { 'Ladybird Team' => 'contact@ladybird.org' }
+  s.source           = { :git => 'https://github.com/LadybirdBrowser/ladybird.git', :tag => s.version.to_s }
+
+  s.source_files     = 'Classes/**/*'
+  s.public_header_files = 'Classes/**/*.h'
   
-  # Ensure CocoaPods grabs your Swift files
-  s.source_files = [
-  'Classes/**/*',
-  'libbird/Sources/libbird/**/*.{swift,h,m,mm}']
-
-  s.public_header_files = [
-      'Classes/**/*',
-    'libbird/Sources/libbird/**/*.h']
-  s.resource_bundles = {'libbird_privacy' => ['libbird/Sources/libbird/PrivacyInfo.xcprivacy']}
-  s.dependency 'FlutterMacOS'
-
   s.platform = :osx, '11.0'
   s.swift_version = '5.0'
+  s.dependency 'FlutterMacOS'
 
   s.frameworks = 'Cocoa', 'Metal', 'QuartzCore', 'UniformTypeIdentifiers'
 
-  # 1. Wire up the headers, dynamic libraries, and C++23 requirements
+  s.prepare_command = <<-CMD
+    mkdir -p Bundled
+    
+    # Copy Helper Executables
+    find ../third_party/ladybird/Build/release/bin -maxdepth 1 -type f ! -name "*.*" -exec cp {} Bundled/ \\;
+    
+    # Copy all Dylibs (including vcpkg ones)
+    find ../third_party/ladybird/Build -name "*.dylib" -exec cp {} Bundled/ \\;
+    
+    # Make dylibs relocatable
+    for f in Bundled/*.dylib; do
+      bn=$(basename "$f")
+      chmod +w "$f"
+      # Change the internal ID so the library knows it belongs in @rpath
+      install_name_tool -id "@rpath/$bn" "$f" || true
+    done
+  CMD
+
+  s.resources = ['Bundled/*']
+
   s.pod_target_xcconfig = {
     'DEFINES_MODULE' => 'YES',
-    'HEADER_SEARCH_PATHS' => '"${PODS_TARGET_SRCROOT}/../third_party/ladybird" "${PODS_TARGET_SRCROOT}/../third_party/ladybird/Build/release" "${PODS_TARGET_SRCROOT}/../third_party/ladybird/UI/AppKit" "${PODS_TARGET_SRCROOT}/../third_party/ladybird/Libraries" "${PODS_TARGET_SRCROOT}/../third_party/ladybird/AK"',
-    'LIBRARY_SEARCH_PATHS' => '"${PODS_TARGET_SRCROOT}/../third_party/ladybird/Build/release/lib"',
-    
-    # We link against the dynamic libraries GN generates
-    'OTHER_LDFLAGS' => '-framework Cocoa -framework Metal -framework QuartzCore -framework UniformTypeIdentifiers -llagom-web -llagom-js -llagom-core -llagom-gfx -llagom-ipc',
     'CLANG_CXX_LANGUAGE_STANDARD' => 'c++2b',
-    'LD_RUNPATH_SEARCH_PATHS' => '$(inherited) @executable_path/../Frameworks/libbird.framework/Resources/Ladybird.app/Contents/lib'
+    'CLANG_CXX_LIBRARY' => 'libc++',
+    'OTHER_CPLUSPLUSFLAGS' => '-fobjc-arc -Wno-deprecated-anon-enum-enum-conversion',
+    
+    'LIBRARY_SEARCH_PATHS' => found_library_paths.join(' '),
+    
+  'LD_RUNPATH_SEARCH_PATHS' => [
+      '$(inherited)',
+      '@executable_path/../Resources', 
+      '@loader_path/../../Resources' 
+    ].join(' '),
+    
+    'OTHER_LDFLAGS' => [
+      '$(inherited)',
+      '-framework Cocoa -framework Metal -framework QuartzCore -framework UniformTypeIdentifiers',
+      
+      '-Wl,-force_load,"${PODS_TARGET_SRCROOT}/../third_party/ladybird/Build/release/lib/libladybird_impl.a"',
+      
+      # Prefer @rpath for all dynamic libraries it links
+      '-Wl,-rpath,@loader_path/../Resources',
+      
+      '-llagom-webview', '-llagom-web', '-llagom-requests', 
+      '-llagom-js', '-llagom-gfx', '-llagom-ipc', '-llagom-url', 
+      '-llagom-filesystem', '-llagom-crypto', '-llagom-database',
+      '-llagom-core', '-llagom-coreminimal', '-llagom-ak', 
+      '-llagom-unicode', '-llagom-main',
+      '-lskia', '-lsqlite3', '-lssl', '-lcrypto', '-lz'
+    ].join(' '),
+
+    'HEADER_SEARCH_PATHS' => [
+      '$(inherited)',
+      '"${PODS_TARGET_SRCROOT}/../third_party/ladybird/UI/AppKit"',
+      '"${PODS_TARGET_SRCROOT}/../third_party/ladybird"',
+      '"${PODS_TARGET_SRCROOT}/../third_party/ladybird/Libraries"',
+      '"${PODS_TARGET_SRCROOT}/../third_party/ladybird/Services"',
+      '"${PODS_TARGET_SRCROOT}/../third_party/ladybird/Build/release"',
+      '"${PODS_TARGET_SRCROOT}/../third_party/ladybird/Build/release/Lagom"',
+      '"${PODS_TARGET_SRCROOT}/../third_party/ladybird/Build/release/Lagom/Libraries"',
+      '"${PODS_TARGET_SRCROOT}/../third_party/ladybird/Build/release/Lagom/Services"',
+      '"${PODS_TARGET_SRCROOT}/../third_party/ladybird/Build/release/vcpkg_installed/arm64-osx-dynamic/include"'
+    ].join(' ')
   }
-
-  # 2. The Build and Package Script Phase
-  s.script_phases = [
-    {
-      :name => 'Build Ladybird & Bundle Artifacts',
-      :execution_position => :after_compile,
-      :script => '
-        set -e
-        echo "--- LADYBIRD COCOAPODS BUILD START ---"
-
-        # PODS_TARGET_SRCROOT points to the macos directory of this plugin
-        PLUGIN_ROOT="${PODS_TARGET_SRCROOT}/.."
-        LADYBIRD_SRC="${PLUGIN_ROOT}/third_party/ladybird"
-
-        # 1. Build Ladybird Engine
-        echo "Building Ladybird in ${LADYBIRD_SRC}..."
-        cd "$LADYBIRD_SRC"
-        ./Meta/ladybird.py build
-        cd -
-
-        # 2. Package Artifacts into the Plugin Framework
-        FRAMEWORK_DIR="${TARGET_BUILD_DIR}/${WRAPPER_NAME}"
-        echo "Packaging Ladybird.app into framework: $FRAMEWORK_DIR"
-
-        if [ -d "$FRAMEWORK_DIR" ]; then
-            mkdir -p "$FRAMEWORK_DIR/Resources"
-            # We copy the entire Ladybird.app so internal rpaths between executables/dylibs remain valid
-            # Use -L to dereference symlinks (e.g., Contents/lib to the build output lib dir)
-            rsync -aL --delete "${LADYBIRD_SRC}/Build/release/bin/Ladybird.app" "$FRAMEWORK_DIR/Resources/"
-            
-            # Point libbird.framework directly to the bundled dylibs via @loader_path
-            LIB_BIN="$FRAMEWORK_DIR/$WRAPPER_NAME"
-            if [ -f "$LIB_BIN" ]; then
-                echo "Remapping dynamic library paths for $LIB_BIN"
-                install_name_tool -change "@rpath/liblagom-core.0.dylib" "@loader_path/Resources/Ladybird.app/Contents/lib/liblagom-core.0.dylib" "$LIB_BIN" || true
-                install_name_tool -change "@rpath/liblagom-gfx.0.dylib" "@loader_path/Resources/Ladybird.app/Contents/lib/liblagom-gfx.0.dylib" "$LIB_BIN" || true
-                install_name_tool -change "@rpath/liblagom-ipc.0.dylib" "@loader_path/Resources/Ladybird.app/Contents/lib/liblagom-ipc.0.dylib" "$LIB_BIN" || true
-                install_name_tool -change "@rpath/liblagom-js.0.dylib" "@loader_path/Resources/Ladybird.app/Contents/lib/liblagom-js.0.dylib" "$LIB_BIN" || true
-                install_name_tool -change "@rpath/liblagom-web.0.dylib" "@loader_path/Resources/Ladybird.app/Contents/lib/liblagom-web.0.dylib" "$LIB_BIN" || true
-            fi
-            
-            echo "✅ SUCCESS: Ladybird artifacts bundled into framework."
-        else
-            echo "❌ ERROR: Framework directory not found at $FRAMEWORK_DIR"
-            exit 1
-        fi
-        echo "--- LADYBIRD COCOAPODS BUILD END ---"
-      '
-    }
-  ]
 end

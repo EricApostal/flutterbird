@@ -32,3 +32,4 @@ migrate_working_dir/
 /build/
 /coverage/
 /macos/.ladybird_build_libs
+/macos/Bundled
