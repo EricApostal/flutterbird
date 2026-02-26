@@ -61,6 +61,9 @@ Pod::Spec.new do |s|
     'CLANG_CXX_LIBRARY' => 'libc++',
     'OTHER_CPLUSPLUSFLAGS' => '-fobjc-arc -Wno-deprecated-anon-enum-enum-conversion',
     
+    'VALID_ARCHS' => 'arm64',
+    'EXCLUDED_ARCHS[sdk=macosx*]' => 'x86_64',
+
     'LIBRARY_SEARCH_PATHS' => found_library_paths.join(' '),
     
   'LD_RUNPATH_SEARCH_PATHS' => [
