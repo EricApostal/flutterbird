@@ -106,16 +106,38 @@ Pod::Spec.new do |s|
       :script => <<-CMD
         echo "Copying Ladybird executables to host app MacOS directory..."
         
-        # Dynamically find the .app bundle, avoiding hardcoded names
-        APP_PATH=$(find "${BUILT_PRODUCTS_DIR}" -maxdepth 1 -name "*.app" | head -n 1)
+        # The Pod target's BUILT_PRODUCTS_DIR is scoped to the pod (e.g., .../Debug/libbird).
+        # We need to look one directory up to find the host app bundle.
+        APP_BUILD_DIR=$(dirname "${BUILT_PRODUCTS_DIR}")
         
-        if [ -z "$APP_PATH" ]; then
-           echo "Warning: No .app bundle found in ${BUILT_PRODUCTS_DIR}. Executables not copied."
+        # 1. Try to evaluate from Flutter's ephemeral file (fastest, but missing on clean builds)
+        APP_NAME_FILE="${PODS_ROOT}/../Flutter/ephemeral/.app_filename"
+        if [ -f "$APP_NAME_FILE" ]; then
+          APP_NAME=$(cat "$APP_NAME_FILE")
+        fi
+        
+        # 2. Try xcodebuild if the file wasn't there (robust for clean builds)
+        if [ -z "$APP_NAME" ]; then
+          APP_NAME=$(xcodebuild -project "${PODS_ROOT}/../Runner.xcodeproj" -showBuildSettings 2>/dev/null | grep -m 1 "FULL_PRODUCT_NAME =" | awk '{print $3}')
+        fi
+        
+        # 3. Fallback to searching if it already exists
+        if [ -z "$APP_NAME" ]; then
+          APP_NAME=$(find "${APP_BUILD_DIR}" -maxdepth 1 -name "*.app" -exec basename {} \\; | head -n 1)
+        fi
+        
+        if [ -z "$APP_NAME" ]; then
+           echo "Warning: No .app bundle found and xcodebuild failed. Executables not copied."
            exit 0
         fi
         
+        APP_PATH="${APP_BUILD_DIR}/${APP_NAME}"
+        
         DEST_DIR="${APP_PATH}/Contents/MacOS"
         mkdir -p "${DEST_DIR}"
+        
+        echo "Hardcoded DEST_DIR: ${DEST_DIR}" > /tmp/libbird_pod_log.txt
+        echo "Running pod script phase at $(date)" >> /tmp/libbird_pod_log.txt
         
         LADYBIRD_BIN_DIR="${PODS_TARGET_SRCROOT}/../third_party/ladybird/Build/release/bin/Ladybird.app/Contents/MacOS"
         
