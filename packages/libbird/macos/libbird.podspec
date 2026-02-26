@@ -22,8 +22,8 @@ Flutter plugin to provide a portable Ladybird interface.
   s.swift_version = '5.0'
 
   s.vendored_libraries = '../third_party/ladybird/Build/release/lib/**/*.a'
-
   s.frameworks = 'Cocoa', 'Metal', 'QuartzCore', 'UniformTypeIdentifiers'
+  s.public_header_files = 'Classes/**/*.h'
 
   s.pod_target_xcconfig = {
     'DEFINES_MODULE' => 'YES',
