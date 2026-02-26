@@ -18,18 +18,10 @@ Flutter plugin to provide a portable Ladybird interface.
   
   s.dependency 'FlutterMacOS'
 
-  # Bumped to 11.0 as UniformTypeIdentifiers framework requires macOS 11+
   s.platform = :osx, '11.0'
   s.swift_version = '5.0'
 
-  # 1. Copy the libraries from third_party into a local directory inside macos/
-  s.prepare_command = <<-CMD
-    mkdir -p .ladybird_build_libs
-    cp -R ../third_party/ladybird/Build/release/lib/*.a .ladybird_build_libs/ 2>/dev/null || true
-  CMD
-
-  # 2. Glob the locally copied files
-  s.vendored_libraries = '.ladybird_build_libs/**/*.a'
+  s.vendored_libraries = '../third_party/ladybird/Build/release/lib/**/*.a'
 
   s.frameworks = 'Cocoa', 'Metal', 'QuartzCore', 'UniformTypeIdentifiers'
 
@@ -39,8 +31,5 @@ Flutter plugin to provide a portable Ladybird interface.
     'CLANG_CXX_LIBRARY' => 'libc++',
     'OTHER_CPLUSPLUSFLAGS' => '-fobjc-arc -Wno-deprecated-anon-enum-enum-conversion',
     'OTHER_LDFLAGS' => '-framework Cocoa -framework Metal -framework QuartzCore -framework UniformTypeIdentifiers',
-    
-    # Ensure headers can be found when you write your C++ bridge
-    'HEADER_SEARCH_PATHS' => '"${PODS_TARGET_SRCROOT}/../third_party/ladybird" "${PODS_TARGET_SRCROOT}/../third_party/ladybird/Build/release"'
   }
 end
