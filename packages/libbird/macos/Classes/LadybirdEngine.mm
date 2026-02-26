@@ -9,16 +9,57 @@
 
 #include <AK/Enumerate.h>
 #include <AK/OwnPtr.h>
+#include <AK/String.h>
 #include <AK/StringView.h>
+#include <AK/Utf16String.h>
 #import <Application/Application.h>
+#include <LibGfx/Bitmap.h>
 #include <LibMain/Main.h>
+#include <LibURL/URL.h>
 #include <LibWebView/Application.h>
 #include <LibWebView/BrowserProcess.h>
+#import <objc/runtime.h>
 
 #import <Interface/LadybirdWebView.h>
 
 static OwnPtr<Ladybird::Application> s_app;
 static OwnPtr<WebView::BrowserProcess> s_browser_process;
+
+@interface LadybirdEngineObserver : NSObject <LadybirdWebViewObserver>
+@end
+
+@implementation LadybirdEngineObserver
+
+- (String const &)onCreateNewTab:(Optional<URL::URL> const &)url
+                     activateTab:(Web::HTML::ActivateTab)activate_tab {
+  static String empty;
+  return empty;
+}
+
+- (String const &)onCreateChildTab:(Optional<URL::URL> const &)url
+                       activateTab:(Web::HTML::ActivateTab)activate_tab
+                         pageIndex:(u64)page_index {
+  static String empty;
+  return empty;
+}
+
+- (void)onLoadStart:(URL::URL const &)url isRedirect:(BOOL)is_redirect {
+}
+- (void)onLoadFinish:(URL::URL const &)url {
+}
+- (void)onURLChange:(URL::URL const &)url {
+}
+- (void)onTitleChange:(Utf16String const &)title {
+}
+- (void)onFaviconChange:(Gfx::Bitmap const &)bitmap {
+}
+- (void)onAudioPlayStateChange:(Web::HTML::AudioPlayState)play_state {
+}
+- (void)onFindInPageResult:(size_t)current_match_index
+           totalMatchCount:(Optional<size_t> const &)total_match_count {
+}
+
+@end
 
 @implementation LadybirdEngine
 
@@ -60,9 +101,14 @@ static OwnPtr<WebView::BrowserProcess> s_browser_process;
   initialized = true;
 }
 
+static char kObserverKey;
+
 + (NSView *)createWebViewWithFrame:(NSRect)frame {
-  // Instantiate the actual AppKit view from Ladybird
-  LadybirdWebView *webView = [[LadybirdWebView alloc] initWithFrame:frame];
+  LadybirdEngineObserver *observer = [[LadybirdEngineObserver alloc] init];
+  LadybirdWebView *webView = [[LadybirdWebView alloc] init:observer];
+  [webView setFrame:frame];
+  objc_setAssociatedObject(webView, &kObserverKey, observer,
+                           OBJC_ASSOCIATION_RETAIN_NONATOMIC);
   return webView;
 }
 

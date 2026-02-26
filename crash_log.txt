@@ -1,0 +1,38 @@
+Ladybird PID file '/Users/eric/Library/Application Support/Ladybird.pid' exists with PID 25755, but process cannot be found
+2026-02-25 23:53:15.152 flutterbird[25966:4322181] Running with merged UI and platform thread. Experimental.
+flutter: The Dart VM service is listening on http://127.0.0.1:56772/cyeGT6o7QH0=/
+VERIFICATION FAILED: m_ptr at /Users/eric/Documents/development/projects/flutterbird/packages/libbird/third_party/ladybird/AK/OwnPtr.h:139
+Stack trace (most recent call first):
+#0  [34m0x0000000100aa6707[0m in [33m-[LadybirdWebView viewDidChangeEffectiveAppearance].cold.1[0m at [32m/Users/eric/Documents/development/projects/flutterbird/build/macos/Build/Products/Debug/flutterbird.app/Contents/Frameworks/libbird.framework/Versions/A/libbird[0m
+#1  [34m0x0000000100a91c07[0m in [33m-[LadybirdWebView viewDidChangeEffectiveAppearance][0m at [32m/Users/eric/Documents/development/projects/flutterbird/build/macos/Build/Products/Debug/flutterbird.app/Contents/Frameworks/libbird.framework/Versions/A/libbird[0m
+#2  [34m0x000000018606e743[0m at [32m/System/Library/Frameworks/AppKit.framework/Versions/C/AppKit[0m
+#3  [34m0x000000018606d57f[0m at [32m/System/Library/Frameworks/AppKit.framework/Versions/C/AppKit[0m
+#4  [34m0x000000018606cee3[0m at [32m/System/Library/Frameworks/AppKit.framework/Versions/C/AppKit[0m
+#5  [34m0x0000000103a4d6cf[0m in [33m-[FlutterMutatorView updatePlatformViewWithBounds:transformedBounds:transform:clipRect:][0m at [32m/Users/eric/Documents/development/projects/flutterbird/build/macos/Build/Products/Debug/flutterbird.app/Contents/Frameworks/FlutterMacOS.framework/Versions/A/FlutterMacOS[0m
+#6  [34m0x0000000103a4e8bf[0m in [33m-[FlutterMutatorView applyFlutterLayer:][0m at [32m/Users/eric/Documents/development/projects/flutterbird/build/macos/Build/Products/Debug/flutterbird.app/Contents/Frameworks/FlutterMacOS.framework/Versions/A/FlutterMacOS[0m
+#7  [34m0x0000000103a31c43[0m in [33mflutter::FlutterCompositor::ViewPresenter::PresentPlatformView(FlutterView*, flutter::PlatformViewLayer const&, unsigned long, FlutterPlatformViewController const*)[0m at [32m/Users/eric/Documents/development/projects/flutterbird/build/macos/Build/Products/Debug/flutterbird.app/Contents/Frameworks/FlutterMacOS.framework/Versions/A/FlutterMacOS[0m
+#8  [34m0x0000000103a314e3[0m in [33mflutter::FlutterCompositor::ViewPresenter::PresentPlatformViews(FlutterView*, std::__fl::vector<std::__fl::variant<flutter::PlatformViewLayer, flutter::BackingStoreLayer>, std::__fl::allocator<std::__fl::variant<flutter::PlatformViewLayer, flutter::BackingStoreLayer>>> const&, FlutterPlatformViewController const*)[0m at [32m/Users/eric/Documents/development/projects/flutterbird/build/macos/Build/Products/Debug/flutterbird.app/Contents/Frameworks/FlutterMacOS.framework/Versions/A/FlutterMacOS[0m
+#9  [34m0x0000000103a54757[0m in [33m___55-[FlutterSurfaceManager presentSurfaces:atTime:notify:]_block_invoke[0m at [32m/Users/eric/Documents/development/projects/flutterbird/build/macos/Build/Products/Debug/flutterbird.app/Contents/Frameworks/FlutterMacOS.framework/Versions/A/FlutterMacOS[0m
+#10 [34m0x0000000103aa427b[0m in [33m_$sIeyB_Ieg_TR[0m at [32m/Users/eric/Documents/development/projects/flutterbird/build/macos/Build/Products/Debug/flutterbird.app/Contents/Frameworks/FlutterMacOS.framework/Versions/A/FlutterMacOS[0m
+#11 [34m0x0000000103aa59ab[0m in [33m_$s20InternalFlutterSwift18ResizeSynchronizerC13performCommit7forSize10afterDelay6notifyySo6CGSizeV_SdyyctFyycfU_[0m at [32m/Users/eric/Documents/development/projects/flutterbird/build/macos/Build/Products/Debug/flutterbird.app/Contents/Frameworks/FlutterMacOS.framework/Versions/A/FlutterMacOS[0m
+#12 [34m0x0000000103aa32db[0m in [33m_$s20InternalFlutterSwift0B7RunLoopC19performExpiredTasks33_D4CDF1FCA38C25E611593B39D16A3F51LLyyF[0m at [32m/Users/eric/Documents/development/projects/flutterbird/build/macos/Build/Products/Debug/flutterbird.app/Contents/Frameworks/FlutterMacOS.framework/Versions/A/FlutterMacOS[0m
+#13 [34m0x0000000103aa2f2f[0m in [33m_$s20InternalFlutterSwift0B7RunLoopCACyc33_D4CDF1FCA38C25E611593B39D16A3F51LlfcySvSgcfU_[0m at [32m/Users/eric/Documents/development/projects/flutterbird/build/macos/Build/Products/Debug/flutterbird.app/Contents/Frameworks/FlutterMacOS.framework/Versions/A/FlutterMacOS[0m
+#14 [34m0x0000000103aa3323[0m in [33m_$s20InternalFlutterSwift0B7RunLoopCACyc33_D4CDF1FCA38C25E611593B39D16A3F51LlfcySvSgcfU_To[0m at [32m/Users/eric/Documents/development/projects/flutterbird/build/macos/Build/Products/Debug/flutterbird.app/Contents/Frameworks/FlutterMacOS.framework/Versions/A/FlutterMacOS[0m
+#15 [34m0x0000000181c2cb8f[0m at [32m/System/Library/Frameworks/CoreFoundation.framework/Versions/A/CoreFoundation[0m
+#16 [34m0x0000000181c2cb23[0m at [32m/System/Library/Frameworks/CoreFoundation.framework/Versions/A/CoreFoundation[0m
+#17 [34m0x0000000181c2c88f[0m at [32m/System/Library/Frameworks/CoreFoundation.framework/Versions/A/CoreFoundation[0m
+#18 [34m0x0000000181c2b4b3[0m at [32m/System/Library/Frameworks/CoreFoundation.framework/Versions/A/CoreFoundation[0m
+#19 [34m0x0000000181cfdc8b[0m at [32m/System/Library/Frameworks/CoreFoundation.framework/Versions/A/CoreFoundation[0m
+#20 [34m0x000000018eab655f[0m at [32m/System/Library/Frameworks/Carbon.framework/Versions/A/Frameworks/HIToolbox.framework/Versions/A/HIToolbox[0m
+#21 [34m0x000000018eab98bb[0m at [32m/System/Library/Frameworks/Carbon.framework/Versions/A/Frameworks/HIToolbox.framework/Versions/A/HIToolbox[0m
+#22 [34m0x000000018ec4313b[0m at [32m/System/Library/Frameworks/Carbon.framework/Versions/A/Frameworks/HIToolbox.framework/Versions/A/HIToolbox[0m
+#23 [34m0x00000001866fdc9b[0m at [32m/System/Library/Frameworks/AppKit.framework/Versions/C/AppKit[0m
+#24 [34m0x0000000186051c47[0m at [32m/System/Library/Frameworks/AppKit.framework/Versions/C/AppKit[0m
+#25 [34m0x0000000186be6c1f[0m at [32m/System/Library/Frameworks/AppKit.framework/Versions/C/AppKit[0m
+#26 [34m0x0000000186be692b[0m at [32m/System/Library/Frameworks/AppKit.framework/Versions/C/AppKit[0m
+#27 [34m0x0000000186044ed3[0m at [32m/System/Library/Frameworks/AppKit.framework/Versions/C/AppKit[0m
+#28 [34m0x000000018601d7af[0m at [32m/System/Library/Frameworks/AppKit.framework/Versions/C/AppKit[0m
+#29 [34m0x000000010099de5b[0m in [33m_$sSo21NSApplicationDelegateP6AppKitE4mainyyFZ + 39[0m at [32m/Users/eric/Documents/development/projects/flutterbird/build/macos/Build/Products/Debug/flutterbird.app/Contents/MacOS/flutterbird.debug.dylib[0m
+#30 [34m0x000000010099de23[0m in [33m_$s11flutterbird11AppDelegateC5$mainyyFZ + 43[0m at [32m/Users/eric/Documents/development/projects/flutterbird/build/macos/Build/Products/Debug/flutterbird.app/Contents/MacOS/flutterbird.debug.dylib[0m
+#31 [34m0x000000010099dec3[0m in [33m___debug_main_executable_dylib_entry_point + 27[0m at [32m/Users/eric/Documents/development/projects/flutterbird/build/macos/Build/Products/Debug/flutterbird.app/Contents/MacOS/flutterbird.debug.dylib[0m
+#32 [34m0x00000001817b3da3[0m in [33mstart + 6991[0m at [32m/usr/lib/dyld[0m
