@@ -11,6 +11,7 @@
 #include <AK/Enumerate.h>
 #include <LibMain/Main.h>
 #include <LibWebView/Application.h>
+#import <Application/Application.h>
 
 #import <Interface/LadybirdWebView.h> 
 

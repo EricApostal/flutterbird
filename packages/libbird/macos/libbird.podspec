@@ -33,10 +33,14 @@ Flutter plugin to provide a portable Ladybird interface.
     'OTHER_LDFLAGS' => '-framework Cocoa -framework Metal -framework QuartzCore -framework UniformTypeIdentifiers',
     'HEADER_SEARCH_PATHS' => [
           '$(inherited)',
+          '"${PODS_TARGET_SRCROOT}/../third_party/ladybird/UI/AppKit"',
           '"${PODS_TARGET_SRCROOT}/../third_party/ladybird"',
           '"${PODS_TARGET_SRCROOT}/../third_party/ladybird/Libraries"',
+          '"${PODS_TARGET_SRCROOT}/../third_party/ladybird/Services"',
           '"${PODS_TARGET_SRCROOT}/../third_party/ladybird/Build/release"',
-          '"${PODS_TARGET_SRCROOT}/../third_party/ladybird/Services"'
+          '"${PODS_TARGET_SRCROOT}/../third_party/ladybird/Build/release/Lagom"',
+          '"${PODS_TARGET_SRCROOT}/../third_party/ladybird/Build/release/Lagom/Libraries"',
+          '"${PODS_TARGET_SRCROOT}/../third_party/ladybird/Build/release/Lagom/Services"',
         ].join(' ')
   }
 end
