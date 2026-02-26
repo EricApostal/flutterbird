@@ -142,13 +142,15 @@ Pod::Spec.new do |s|
         LADYBIRD_BIN_DIR="${PODS_TARGET_SRCROOT}/../third_party/ladybird/Build/release/bin/Ladybird.app/Contents/MacOS"
         
         # Copy the helpers into the app's MacOS directory
-        cp -af "${LADYBIRD_BIN_DIR}/RequestServer" "${DEST_DIR}/" || true
         cp -af "${LADYBIRD_BIN_DIR}/ImageDecoder" "${DEST_DIR}/" || true
+        cp -af "${LADYBIRD_BIN_DIR}/Ladybird" "${DEST_DIR}/" || true
+        cp -af "${LADYBIRD_BIN_DIR}/RequestServer" "${DEST_DIR}/" || true
         cp -af "${LADYBIRD_BIN_DIR}/WebContent" "${DEST_DIR}/" || true
+        cp -af "${LADYBIRD_BIN_DIR}/WebDriver" "${DEST_DIR}/" || true
         cp -af "${LADYBIRD_BIN_DIR}/WebWorker" "${DEST_DIR}/" || true
 
         # Point helpers to the dylibs in Contents/Resources
-        for helper in RequestServer ImageDecoder WebContent WebWorker; do
+        for helper in ImagerDecoder Ladybird RequestServer WebContent WebDriver WebWorker; do
           if [ -f "${DEST_DIR}/$helper" ]; then
             chmod +w "${DEST_DIR}/$helper"
             install_name_tool -add_rpath "@executable_path/../Resources" "${DEST_DIR}/$helper" 2>/dev/null || true
