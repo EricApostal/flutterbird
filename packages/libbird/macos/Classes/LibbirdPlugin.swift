@@ -4,6 +4,7 @@ import FlutterMacOS
 public class LibbirdPlugin: NSObject, FlutterPlugin {
   public static func register(with registrar: FlutterPluginRegistrar) {
     LadybirdEngine.initializeEngine()
+
     let instance = LibbirdPlugin()
     
     let channel = FlutterMethodChannel(name: "libbird", binaryMessenger: registrar.messenger)
