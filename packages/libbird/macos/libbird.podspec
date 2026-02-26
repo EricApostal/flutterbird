@@ -2,8 +2,6 @@
 # libbird.podspec
 #
 
-# This is largely AI. It also isn't super great.
-
 plugin_root = File.expand_path('..', __dir__)
 ladybird_build_dir = File.join(plugin_root, 'third_party', 'ladybird', 'Build')
 
@@ -35,24 +33,22 @@ Pod::Spec.new do |s|
 
   s.frameworks = 'Cocoa', 'Metal', 'QuartzCore', 'UniformTypeIdentifiers'
 
+  # 1. Package the Dylibs to be automatically copied to Contents/Resources
   s.prepare_command = <<-CMD
     mkdir -p Bundled
     
-    # Copy Helper Executables
-    find ../third_party/ladybird/Build/release/bin -maxdepth 1 -type f ! -name "*.*" -exec cp {} Bundled/ \\;
-    
-    # Copy all Dylibs (including vcpkg ones)
+    # Copy all Dylibs (including vcpkg ones) from the build directory
     find ../third_party/ladybird/Build -name "*.dylib" -exec cp {} Bundled/ \\;
     
-    # Make dylibs relocatable
+    # Make dylibs relocatable by updating their internal IDs
     for f in Bundled/*.dylib; do
       bn=$(basename "$f")
       chmod +w "$f"
-      # Change the internal ID so the library knows it belongs in @rpath
       install_name_tool -id "@rpath/$bn" "$f" || true
     done
   CMD
 
+  # This tells CocoaPods to put the contents of Bundled/ into the app's Resources folder
   s.resources = ['Bundled/*']
 
   s.pod_target_xcconfig = {
@@ -66,7 +62,7 @@ Pod::Spec.new do |s|
 
     'LIBRARY_SEARCH_PATHS' => found_library_paths.join(' '),
     
-  'LD_RUNPATH_SEARCH_PATHS' => [
+    'LD_RUNPATH_SEARCH_PATHS' => [
       '$(inherited)',
       '@executable_path/../Resources', 
       '@loader_path/../../Resources' 
@@ -78,7 +74,6 @@ Pod::Spec.new do |s|
       
       '-Wl,-force_load,"${PODS_TARGET_SRCROOT}/../third_party/ladybird/Build/release/lib/libladybird_impl.a"',
       
-      # Prefer @rpath for all dynamic libraries it links
       '-Wl,-rpath,@loader_path/../Resources',
       
       '-llagom-webview', '-llagom-web', '-llagom-requests', 
@@ -102,4 +97,42 @@ Pod::Spec.new do |s|
       '"${PODS_TARGET_SRCROOT}/../third_party/ladybird/Build/release/vcpkg_installed/arm64-osx-dynamic/include"'
     ].join(' ')
   }
+
+  # 2. Force the Executables into Contents/MacOS post-compile
+  s.script_phases = [
+    {
+      :name => 'Copy Ladybird Executables to MacOS Bundle',
+      :execution_position => :after_compile,
+      :script => <<-CMD
+        echo "Copying Ladybird executables to host app MacOS directory..."
+        
+        # Dynamically find the .app bundle, avoiding hardcoded names
+        APP_PATH=$(find "${BUILT_PRODUCTS_DIR}" -maxdepth 1 -name "*.app" | head -n 1)
+        
+        if [ -z "$APP_PATH" ]; then
+           echo "Warning: No .app bundle found in ${BUILT_PRODUCTS_DIR}. Executables not copied."
+           exit 0
+        fi
+        
+        DEST_DIR="${APP_PATH}/Contents/MacOS"
+        mkdir -p "${DEST_DIR}"
+        
+        LADYBIRD_BIN_DIR="${PODS_TARGET_SRCROOT}/../third_party/ladybird/Build/release/bin/Ladybird.app/Contents/MacOS"
+        
+        # Copy the helpers into the app's MacOS directory
+        cp -af "${LADYBIRD_BIN_DIR}/RequestServer" "${DEST_DIR}/" || true
+        cp -af "${LADYBIRD_BIN_DIR}/ImageDecoder" "${DEST_DIR}/" || true
+        cp -af "${LADYBIRD_BIN_DIR}/WebContent" "${DEST_DIR}/" || true
+        cp -af "${LADYBIRD_BIN_DIR}/WebWorker" "${DEST_DIR}/" || true
+
+        # Point helpers to the dylibs in Contents/Resources
+        for helper in RequestServer ImageDecoder WebContent WebWorker; do
+          if [ -f "${DEST_DIR}/$helper" ]; then
+            chmod +w "${DEST_DIR}/$helper"
+            install_name_tool -add_rpath "@executable_path/../Resources" "${DEST_DIR}/$helper" 2>/dev/null || true
+          fi
+        done
+      CMD
+    }
+  ]
 end
