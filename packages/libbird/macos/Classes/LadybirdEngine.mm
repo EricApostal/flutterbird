@@ -9,6 +9,7 @@
 
 #include <AK/Enumerate.h>
 #include <AK/OwnPtr.h>
+#include <AK/StringView.h>
 #import <Application/Application.h>
 #include <LibMain/Main.h>
 #include <LibWebView/Application.h>
@@ -29,7 +30,8 @@ static OwnPtr<WebView::BrowserProcess> s_browser_process;
   AK::set_rich_debug_enabled(true);
 
   static char const *argv[] = {"Ladybird", nullptr};
-  Main::Arguments arguments = {1, (char **)argv};
+  static AK::StringView string_views[] = {AK::StringView("Ladybird", 8)};
+  Main::Arguments arguments = {1, (char **)argv, {string_views, 1}};
 
   auto app = Ladybird::Application::create(arguments);
   if (app.is_error()) {
