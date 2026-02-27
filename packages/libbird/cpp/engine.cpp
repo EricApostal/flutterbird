@@ -6,8 +6,11 @@
 #include <thread>
 #include <mutex>
 
+#include <AK/OwnPtr.h>
+#include <AK/StringView.h>
 #include <LibCore/EventLoop.h>
 #include <LibGfx/Bitmap.h>
+#include <LibWebView/BrowserProcess.h>
 #include <LibWebView/ViewImplementation.h>
 #include <LibURL/URL.h>
 #include <LibMain/Main.h>
@@ -56,22 +59,79 @@ private:
 
 AK::OwnPtr<FlutterViewImpl> g_web_view;
 
+class FlutterApplication : public WebView::Application {
+public:
+    static ErrorOr<NonnullOwnPtr<FlutterApplication>> create(Main::Arguments&) {
+        return adopt_nonnull_own_or_enomem(new (std::nothrow) FlutterApplication());
+    }
+
+    FlutterApplication() = default;
+    virtual ~FlutterApplication() override = default;
+
+    virtual void create_platform_arguments(Core::ArgsParser&) override {}
+    virtual void create_platform_options(WebView::BrowserOptions&, WebView::RequestServerOptions&, WebView::WebContentOptions&) override {}
+    
+    virtual NonnullOwnPtr<Core::EventLoop> create_platform_event_loop() override {
+        return WebView::Application::create_platform_event_loop();
+    }
+
+    virtual Optional<WebView::ViewImplementation&> active_web_view() const override { 
+        if (g_web_view) return *g_web_view;
+        return {}; 
+    }
+    
+    virtual Optional<WebView::ViewImplementation&> open_blank_new_tab(Web::HTML::ActivateTab) const override { return {}; }
+    virtual Optional<ByteString> ask_user_for_download_path(StringView) const override { return {}; }
+    virtual void display_download_confirmation_dialog(StringView, LexicalPath const&) const override {}
+    virtual void display_error_dialog(StringView) const override {}
+    
+    virtual Utf16String clipboard_text() const override { return WebView::Application::clipboard_text(); }
+    virtual Vector<Web::Clipboard::SystemClipboardRepresentation> clipboard_entries() const override { return WebView::Application::clipboard_entries(); }
+    virtual void insert_clipboard_entry(Web::Clipboard::SystemClipboardRepresentation entry) override {
+        WebView::Application::insert_clipboard_entry(move(entry));
+    }
+};
+
 #include "engine.h"
 
+static AK::OwnPtr<FlutterApplication> s_app;
+static AK::OwnPtr<WebView::BrowserProcess> s_browser_process;
+
 void init_ladybird() {
-    std::println("doing init!");
-    auto app = Ladybird::Application::create(const Main::Arguments &arguments, ApplicationArguments &&application_arguments...);
-    // static std::thread ladybird_thread([]() {
-    //     Core::EventLoop loop;
-        
-    //     g_web_view = FlutterViewImpl::create().release_value_but_fixme_should_propagate_errors();
-    //     g_web_view->initialize_client();
-        
-    //     g_web_view->load(URL::create_with_url_or_path("https://ladybird.dev").value());
-        
-    //     loop.exec();
-    // });
-    // ladybird_thread.detach();
+    static bool initialized = false;
+    if (initialized)
+        return;
+
+    AK::set_rich_debug_enabled(true);
+
+    static char const* argv[] = {"Ladybird", nullptr};
+    static AK::StringView string_views[] = {AK::StringView("Ladybird", 8)};
+    Main::Arguments arguments = {1, (char**)argv, {string_views, 1}};
+
+    auto app = FlutterApplication::create(arguments);
+    if (app.is_error()) {
+        std::println("Failed to initialize Ladybird Engine");
+        return;
+    }
+    s_app = app.release_value();
+
+    s_browser_process = make<WebView::BrowserProcess>();
+
+    if (auto const& browser_options = WebView::Application::browser_options();
+        !browser_options.headless_mode.has_value()) {
+        if (browser_options.force_new_process == WebView::ForceNewProcess::No) {
+            auto disposition = s_browser_process->connect(browser_options.raw_urls,
+                                                          browser_options.new_window);
+
+            if (!disposition.is_error() &&
+                disposition.value() == WebView::BrowserProcess::ProcessDisposition::ExitProcess) {
+                std::println("Opening in existing process");
+                return;
+            }
+        }
+    }
+
+    initialized = true;
 }
 
 uint8_t* get_latest_frame(int* out_width, int* out_height) {
