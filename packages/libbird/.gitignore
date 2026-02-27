@@ -33,4 +33,5 @@ migrate_working_dir/
 /coverage/
 /macos/.ladybird_build_libs
 /macos/Bundled
+/macos/Classes/cpp_generated
 /cpp/build

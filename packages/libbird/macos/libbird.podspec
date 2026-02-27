@@ -24,7 +24,7 @@ Pod::Spec.new do |s|
   s.author           = { 'Ladybird Team' => 'contact@ladybird.org' }
   s.source           = { :git => 'https://github.com/LadybirdBrowser/ladybird.git', :tag => s.version.to_s }
 
-  s.source_files     = ['Classes/**/*', '../cpp/**/*.{cpp,hpp,c,h}']
+  s.source_files     = 'Classes/**/*'
   s.public_header_files = 'Classes/**/*.h'
   
   s.platform = :osx, '11.0'
@@ -33,7 +33,14 @@ Pod::Spec.new do |s|
 
   s.frameworks = 'Cocoa', 'Metal', 'QuartzCore', 'UniformTypeIdentifiers'
 
+  # You may ask, why not symlinks. Great question. Can't do that.
+  # You also cannot reference files outside of this directory.
+  # This is fun.
   s.prepare_command = <<-CMD
+    rm -rf Classes/cpp_generated
+    mkdir -p Classes/cpp_generated
+    cp -R ../cpp/* Classes/cpp_generated/
+
     mkdir -p Bundled
     
     find ../third_party/ladybird/Build -name "*.dylib" -exec cp {} Bundled/ \\;
