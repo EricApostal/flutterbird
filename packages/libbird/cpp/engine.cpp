@@ -61,7 +61,11 @@ public:
                     g_latest_frame = new uint8_t[g_width * g_height * 4];
                 }
 
-                memcpy(g_latest_frame, bitmap->scanline(0), g_width * g_height * 4);
+                auto pitch = bitmap->pitch();
+                auto width_bytes = g_width * 4;
+                for (int y = 0; y < g_height; ++y) {
+                    memcpy(g_latest_frame + (y * width_bytes), bitmap->scanline_u8(y), width_bytes);
+                }
             }
         };
 

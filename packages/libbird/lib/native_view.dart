@@ -111,6 +111,7 @@ class _LadybirdCanvasState extends State<LadybirdCanvas>
     if (_currentFrame == null) {
       return const Center(child: CircularProgressIndicator());
     }
+    final density = MediaQuery.devicePixelRatioOf(context);
     return GestureDetector(
       onTapDown: (details) {
         print(
