@@ -14,6 +14,7 @@
 #include <LibWebView/ViewImplementation.h>
 #include <LibURL/URL.h>
 #include <LibMain/Main.h>
+#include <LibURL/Parser.h>
 
 std::mutex g_frame_mutex;
 uint8_t* g_latest_frame = nullptr;
@@ -60,10 +61,9 @@ private:
 AK::OwnPtr<FlutterViewImpl> g_web_view;
 
 class FlutterApplication : public WebView::Application {
+    WEB_VIEW_APPLICATION(FlutterApplication)
+
 public:
-    static ErrorOr<NonnullOwnPtr<FlutterApplication>> create(Main::Arguments&) {
-        return adopt_nonnull_own_or_enomem(new (std::nothrow) FlutterApplication());
-    }
 
     FlutterApplication() = default;
     virtual ~FlutterApplication() override = default;
@@ -88,7 +88,7 @@ public:
     virtual Utf16String clipboard_text() const override { return WebView::Application::clipboard_text(); }
     virtual Vector<Web::Clipboard::SystemClipboardRepresentation> clipboard_entries() const override { return WebView::Application::clipboard_entries(); }
     virtual void insert_clipboard_entry(Web::Clipboard::SystemClipboardRepresentation entry) override {
-        WebView::Application::insert_clipboard_entry(move(entry));
+        WebView::Application::insert_clipboard_entry(std::move(entry));
     }
 };
 
@@ -110,7 +110,7 @@ void init_ladybird() {
 
     auto app = FlutterApplication::create(arguments);
     if (app.is_error()) {
-        std::println("Failed to initialize Ladybird Engine");
+        std::println("Failed to construct Ladybird Engine Application");
         return;
     }
     s_app = app.release_value();
@@ -131,10 +131,18 @@ void init_ladybird() {
         }
     }
 
+    g_web_view = FlutterViewImpl::create().release_value();
+    g_web_view->initialize_client();
+    g_web_view->load(URL::Parser::basic_parse(AK::StringView("https://ladybird.org", 20)).value());
+
     initialized = true;
 }
 
 uint8_t* get_latest_frame(int* out_width, int* out_height) {
+    if (Core::EventLoop::is_running()) {
+        Core::EventLoop::current().pump(Core::EventLoop::WaitMode::PollForEvents);
+    }
+
     std::lock_guard<std::mutex> lock(g_frame_mutex);
     if (!g_latest_frame) return nullptr;
 
