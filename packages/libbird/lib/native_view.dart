@@ -54,10 +54,13 @@ class _LadybirdCanvasState extends State<LadybirdCanvas>
   }
 
   void _fetchFrame() {
+    print("start fetch frame");
     ffi.Pointer<ffi.Uint8> rawPixels = _bindings.get_latest_frame(
       _widthPtr,
       _heightPtr,
     );
+    print("got latest");
+    print(rawPixels != ffi.nullptr);
 
     if (rawPixels != ffi.nullptr) {
       _isDecoding = true;
