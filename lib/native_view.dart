@@ -11,15 +11,11 @@ typedef GenerateFrameDart =
 typedef FreeFrameC = ffi.Void Function(ffi.Pointer<ffi.Uint8> buffer);
 typedef FreeFrameDart = void Function(ffi.Pointer<ffi.Uint8> buffer);
 
-void main() {
-  runApp(const MaterialApp(home: Scaffold(body: LadybirdCanvas())));
-}
-
 class LadybirdCanvas extends StatefulWidget {
   const LadybirdCanvas({super.key});
 
   @override
-  _LadybirdCanvasState createState() => _LadybirdCanvasState();
+  State<LadybirdCanvas> createState() => _LadybirdCanvasState();
 }
 
 class _LadybirdCanvasState extends State<LadybirdCanvas> {
@@ -34,7 +30,12 @@ class _LadybirdCanvasState extends State<LadybirdCanvas> {
   @override
   void initState() {
     super.initState();
-    _lib = ffi.DynamicLibrary.process();
+
+    // Here come the awful macos signing security errors...
+    const String dylibPath =
+        '/Users/eric/Documents/development/projects/flutterbird/packages/libbird/cpp/build/libengine.dylib';
+    _lib = ffi.DynamicLibrary.open(dylibPath);
+
     _generateFrame = _lib.lookupFunction<GenerateFrameC, GenerateFrameDart>(
       'generate_frame',
     );
