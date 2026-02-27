@@ -5,22 +5,7 @@ import 'dart:async';
 import 'package:ffi/ffi.dart' as ffi_pkg;
 import 'package:flutter/material.dart';
 
-typedef InitLadybirdC = ffi.Void Function();
-typedef InitLadybirdDart = void Function();
-
-typedef GetLatestFrameC =
-    ffi.Pointer<ffi.Uint8> Function(
-      ffi.Pointer<ffi.Int32> width,
-      ffi.Pointer<ffi.Int32> height,
-    );
-typedef GetLatestFrameDart =
-    ffi.Pointer<ffi.Uint8> Function(
-      ffi.Pointer<ffi.Int32> width,
-      ffi.Pointer<ffi.Int32> height,
-    );
-
-typedef FreeFrameC = ffi.Void Function(ffi.Pointer<ffi.Uint8> buffer);
-typedef FreeFrameDart = void Function(ffi.Pointer<ffi.Uint8> buffer);
+import 'src/engine_bindings.g.dart';
 
 void main() {
   runApp(const MaterialApp(home: Scaffold(body: LadybirdCanvas())));
@@ -36,9 +21,7 @@ class LadybirdCanvas extends StatefulWidget {
 class _LadybirdCanvasState extends State<LadybirdCanvas> {
   ui.Image? _currentFrame;
   late ffi.DynamicLibrary _lib;
-  late InitLadybirdDart _initLadybird;
-  late GetLatestFrameDart _getLatestFrame;
-  late FreeFrameDart _freeFrame;
+  late LibbirdBindings _bindings;
   Timer? _renderLoop;
 
   @override
@@ -46,16 +29,9 @@ class _LadybirdCanvasState extends State<LadybirdCanvas> {
     super.initState();
 
     _lib = ffi.DynamicLibrary.process();
+    _bindings = LibbirdBindings(_lib);
 
-    _initLadybird = _lib.lookupFunction<InitLadybirdC, InitLadybirdDart>(
-      'init_ladybird',
-    );
-    _getLatestFrame = _lib.lookupFunction<GetLatestFrameC, GetLatestFrameDart>(
-      'get_latest_frame',
-    );
-    _freeFrame = _lib.lookupFunction<FreeFrameC, FreeFrameDart>('free_frame');
-
-    _initLadybird();
+    _bindings.init_ladybird();
 
     _renderLoop = Timer.periodic(const Duration(milliseconds: 16), (timer) {
       _fetchFrame();
@@ -63,10 +39,13 @@ class _LadybirdCanvasState extends State<LadybirdCanvas> {
   }
 
   void _fetchFrame() {
-    ffi.Pointer<ffi.Int32> widthPtr = ffi_pkg.calloc<ffi.Int32>();
-    ffi.Pointer<ffi.Int32> heightPtr = ffi_pkg.calloc<ffi.Int32>();
+    ffi.Pointer<ffi.Int> widthPtr = ffi_pkg.calloc<ffi.Int>();
+    ffi.Pointer<ffi.Int> heightPtr = ffi_pkg.calloc<ffi.Int>();
 
-    ffi.Pointer<ffi.Uint8> rawPixels = _getLatestFrame(widthPtr, heightPtr);
+    ffi.Pointer<ffi.Uint8> rawPixels = _bindings.get_latest_frame(
+      widthPtr,
+      heightPtr,
+    );
 
     if (rawPixels != ffi.nullptr) {
       int width = widthPtr.value;
@@ -85,7 +64,7 @@ class _LadybirdCanvasState extends State<LadybirdCanvas> {
               _currentFrame = img;
             });
           }
-          _freeFrame(rawPixels);
+          _bindings.free_frame(rawPixels);
         },
       );
     }
