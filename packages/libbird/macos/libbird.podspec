@@ -80,7 +80,6 @@ Pod::Spec.new do |s|
       '-lskia', '-lsqlite3', '-lssl', '-lcrypto', '-lz'
     ].join(' '),
 
-    # I am quite sure there are a few too many paths here
     'HEADER_SEARCH_PATHS' => [
       '$(inherited)',
       '"${PODS_TARGET_SRCROOT}/../third_party/ladybird/UI/AppKit"',
@@ -97,7 +96,7 @@ Pod::Spec.new do |s|
 
   s.script_phases = [
     {
-      :name => 'Copy Ladybird Executables to MacOS Bundle',
+      :name => 'Copy Ladybird Executables and Resources to MacOS Bundle',
       :execution_position => :after_compile,
       :script => <<-CMD
         APP_BUILD_DIR=$(dirname "${BUILT_PRODUCTS_DIR}")
@@ -110,15 +109,18 @@ Pod::Spec.new do |s|
         
         APP_NAME=$(cat "$APP_NAME_FILE")
         APP_PATH="${APP_BUILD_DIR}/${APP_NAME}"
-        DEST_DIR="${APP_PATH}/Contents/MacOS"
+        DEST_BIN_DIR="${APP_PATH}/Contents/MacOS"
+        DEST_RES_DIR="${APP_PATH}/Contents/Resources"
         
-        mkdir -p "${DEST_DIR}"
+        mkdir -p "${DEST_BIN_DIR}"
+        mkdir -p "${DEST_RES_DIR}"
         
-        LADYBIRD_BIN_DIR="${PODS_TARGET_SRCROOT}/../third_party/ladybird/Build/release/bin/Ladybird.app/Contents/MacOS"
+        LADYBIRD_APP_DIR="${PODS_TARGET_SRCROOT}/../third_party/ladybird/Build/release/bin/Ladybird.app"
         
-        cp -af "${LADYBIRD_BIN_DIR}/"* "${DEST_DIR}/" || true
+        cp -af "${LADYBIRD_APP_DIR}/Contents/MacOS/"* "${DEST_BIN_DIR}/" || true
+        cp -af "${LADYBIRD_APP_DIR}/Contents/Resources/"* "${DEST_RES_DIR}/" || true
 
-        for helper in "${DEST_DIR}"/*; do
+        for helper in "${DEST_BIN_DIR}"/*; do
           if [ -f "$helper" ] && [ ! -L "$helper" ]; then
             chmod +w "$helper"
             install_name_tool -add_rpath "@executable_path/../Resources" "$helper" 2>/dev/null || true
