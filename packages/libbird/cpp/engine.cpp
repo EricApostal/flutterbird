@@ -45,6 +45,8 @@ public:
         Web::DevicePixelRect screen_rect { 0, 0, 1920, 1080 }; // Dummy screen rect for now
         client().async_update_screen_rects(m_client_state.page_index, { { screen_rect } }, 0);
         
+        set_system_visibility_state(Web::HTML::VisibilityState::Visible);
+
         on_ready_to_paint = [this]() {
             if (m_client_state.has_usable_bitmap && m_client_state.front_bitmap.bitmap) {
                 auto const* bitmap = m_client_state.front_bitmap.bitmap.ptr();
@@ -94,6 +96,8 @@ public:
     virtual void create_platform_arguments(Core::ArgsParser&) override {}
     virtual void create_platform_options(WebView::BrowserOptions&, WebView::RequestServerOptions&, WebView::WebContentOptions&) override {}
     
+    virtual bool should_capture_web_content_output() const override { return true; }
+
     virtual NonnullOwnPtr<Core::EventLoop> create_platform_event_loop() override {
         return WebView::Application::create_platform_event_loop();
     }
@@ -140,6 +144,7 @@ void init_ladybird() {
         return;
     }
     s_app = app.release_value();
+    
 
     s_browser_process = make<WebView::BrowserProcess>();
     
