@@ -5,6 +5,28 @@
 plugin_root = File.expand_path('..', __dir__)
 ladybird_build_dir = File.join(plugin_root, 'third_party', 'ladybird', 'Build')
 
+puts "Preparing libbird resources and generated C++ files..."
+system(<<-'CMD')
+  cd "${PODS_TARGET_SRCROOT:-.}"
+  
+  rm -rf Classes/cpp_generated
+  mkdir -p Classes/cpp_generated
+  cp -R ../cpp/* Classes/cpp_generated/ 2>/dev/null || true
+
+  mkdir -p Bundled
+  
+  find ../third_party/ladybird/Build -name "*.dylib" -exec cp {} Bundled/ \; 2>/dev/null || true
+  
+  # Protect the loop in case the directory is empty
+  for f in Bundled/*.dylib; do
+    if [ -f "$f" ]; then
+      bn=$(basename "$f")
+      chmod +w "$f"
+      install_name_tool -id "@rpath/$bn" "$f" || true
+    fi
+  done
+CMD
+
 found_library_paths = ['$(inherited)']
 if Dir.exist?(ladybird_build_dir)
   Dir.glob("#{ladybird_build_dir}/**/*.{a,dylib}").each do |file|
@@ -33,24 +55,6 @@ Pod::Spec.new do |s|
 
   s.frameworks = 'Cocoa', 'Metal', 'QuartzCore', 'UniformTypeIdentifiers'
 
-  # You may ask, why not symlinks. Great question. Can't do that.
-  # You also cannot reference files outside of this directory.
-  # This is fun.
-  s.prepare_command = <<-CMD
-    rm -rf Classes/cpp_generated
-    mkdir -p Classes/cpp_generated
-    cp -R ../cpp/* Classes/cpp_generated/
-
-    mkdir -p Bundled
-    
-    find ../third_party/ladybird/Build -name "*.dylib" -exec cp {} Bundled/ \\;
-    
-    for f in Bundled/*.dylib; do
-      bn=$(basename "$f")
-      chmod +w "$f"
-      install_name_tool -id "@rpath/$bn" "$f" || true
-    done
-  CMD
 
   s.resources = ['Bundled/*']
 
