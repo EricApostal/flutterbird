@@ -24,7 +24,7 @@ Pod::Spec.new do |s|
   s.author           = { 'Ladybird Team' => 'contact@ladybird.org' }
   s.source           = { :git => 'https://github.com/LadybirdBrowser/ladybird.git', :tag => s.version.to_s }
 
-  s.source_files     = 'Classes/**/*'
+  s.source_files     = ['Classes/**/*', '../']
   s.public_header_files = 'Classes/**/*.h'
   
   s.platform = :osx, '11.0'

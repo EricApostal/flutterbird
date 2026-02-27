@@ -32,9 +32,9 @@ class _LadybirdCanvasState extends State<LadybirdCanvas> {
     super.initState();
 
     // Here come the awful macos signing security errors...
-    const String dylibPath =
-        '/Users/eric/Documents/development/projects/flutterbird/packages/libbird/cpp/build/libengine.dylib';
-    _lib = ffi.DynamicLibrary.open(dylibPath);
+    // const String dylibPath =
+    //     '/Users/eric/Documents/development/projects/flutterbird/packages/libbird/cpp/build/libengine.dylib';
+    _lib = ffi.DynamicLibrary.process();
 
     _generateFrame = _lib.lookupFunction<GenerateFrameC, GenerateFrameDart>(
       'generate_frame',
