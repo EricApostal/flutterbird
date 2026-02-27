@@ -31,11 +31,12 @@ class _LadybirdCanvasState extends State<LadybirdCanvas> {
     _lib = ffi.DynamicLibrary.process();
     _bindings = LibbirdBindings(_lib);
 
+    print("doing init");
     _bindings.init_ladybird();
 
-    _renderLoop = Timer.periodic(const Duration(milliseconds: 16), (timer) {
-      _fetchFrame();
-    });
+    // _renderLoop = Timer.periodic(const Duration(milliseconds: 16), (timer) {
+    //   _fetchFrame();
+    // });
   }
 
   void _fetchFrame() {

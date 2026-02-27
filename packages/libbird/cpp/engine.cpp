@@ -1,3 +1,5 @@
+#include "LibWebView/Application.h"
+#include <print>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -8,6 +10,7 @@
 #include <LibGfx/Bitmap.h>
 #include <LibWebView/ViewImplementation.h>
 #include <LibURL/URL.h>
+#include <LibMain/Main.h>
 
 std::mutex g_frame_mutex;
 uint8_t* g_latest_frame = nullptr;
@@ -56,17 +59,19 @@ AK::OwnPtr<FlutterViewImpl> g_web_view;
 #include "engine.h"
 
 void init_ladybird() {
-    static std::thread ladybird_thread([]() {
-        Core::EventLoop loop;
+    std::println("doing init!");
+    auto app = Ladybird::Application::create(const Main::Arguments &arguments, ApplicationArguments &&application_arguments...);
+    // static std::thread ladybird_thread([]() {
+    //     Core::EventLoop loop;
         
-        g_web_view = FlutterViewImpl::create().release_value_but_fixme_should_propagate_errors();
-        g_web_view->initialize_client();
+    //     g_web_view = FlutterViewImpl::create().release_value_but_fixme_should_propagate_errors();
+    //     g_web_view->initialize_client();
         
-        g_web_view->load(URL::create_with_url_or_path("https://ladybird.dev").value());
+    //     g_web_view->load(URL::create_with_url_or_path("https://ladybird.dev").value());
         
-        loop.exec();
-    });
-    ladybird_thread.detach();
+    //     loop.exec();
+    // });
+    // ladybird_thread.detach();
 }
 
 uint8_t* get_latest_frame(int* out_width, int* out_height) {
