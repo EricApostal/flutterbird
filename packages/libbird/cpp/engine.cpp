@@ -106,6 +106,8 @@ void init_ladybird() {
     AK::set_rich_debug_enabled(true);
 
     static char const* argv[] = {"Ladybird", nullptr};
+
+    // TODO: I don't really know what this means?
     static AK::StringView string_views[] = {AK::StringView("Ladybird", 8)};
     Main::Arguments arguments = {1, (char**)argv, {string_views, 1}};
 
@@ -117,7 +119,8 @@ void init_ladybird() {
     s_app = app.release_value();
 
     s_browser_process = make<WebView::BrowserProcess>();
-
+    
+    std::println("doing options");
     if (auto const& browser_options = WebView::Application::browser_options();
         !browser_options.headless_mode.has_value()) {
         if (browser_options.force_new_process == WebView::ForceNewProcess::No) {
@@ -131,11 +134,12 @@ void init_ladybird() {
             }
         }
     }
+    std::println("end options");
 
     g_web_view = FlutterViewImpl::create().release_value();
     g_web_view->initialize_client();
     g_web_view->load(URL::Parser::basic_parse(AK::StringView("https://ladybird.org", 20)).value());
-
+    std::println("loaded webview!");
     initialized = true;
 }
 
