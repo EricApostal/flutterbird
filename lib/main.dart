@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutterbird/native_view.dart';
+import 'package:libbird/native_view.dart';
 
 void main() {
   runApp(const MainApp());
