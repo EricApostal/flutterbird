@@ -63,3 +63,13 @@ flutter:
   #
   # For details regarding fonts in packages, see
   # https://flutter.dev/to/font-from-package
+
+ffigen:
+  name: LibbirdBindings
+  description: Bindings to libbird C++ engine
+  output: 'lib/src/engine_bindings.g.dart'
+  headers:
+    entry-points:
+      - 'cpp/engine.h'
+  compiler-opts:
+    - '-Icpp'
