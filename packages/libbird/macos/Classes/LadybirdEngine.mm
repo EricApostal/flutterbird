@@ -22,6 +22,8 @@
 
 #import <Interface/LadybirdWebView.h>
 
+// TODO: I think I can just use cpp thank god
+
 static OwnPtr<Ladybird::Application> s_app;
 static OwnPtr<WebView::BrowserProcess> s_browser_process;
 
@@ -98,6 +100,7 @@ static OwnPtr<WebView::BrowserProcess> s_browser_process;
     }
   }
 
+  WebView::Application::the().execute();
   initialized = true;
 }
 
