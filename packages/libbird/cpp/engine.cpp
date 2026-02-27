@@ -15,6 +15,11 @@
 #include <LibURL/URL.h>
 #include <LibMain/Main.h>
 #include <LibURL/Parser.h>
+#include <AK/LexicalPath.h>
+#include <LibGfx/SystemTheme.h>
+#include <LibWeb/PixelUnits.h>
+#include <LibWebView/Utilities.h>
+#include <LibCore/System.h>
 
 std::mutex g_frame_mutex;
 uint8_t* g_latest_frame = nullptr;
@@ -29,6 +34,16 @@ public:
 
     virtual void initialize_client(CreateNewClient create_new_client = CreateNewClient::Yes) override {
         ViewImplementation::initialize_client(create_new_client);
+
+        auto theme_path = LexicalPath::join(WebView::s_ladybird_resource_root, "themes"sv, "Default.ini"sv);
+        auto theme = Gfx::load_system_theme(theme_path.string()).release_value_but_fixme_should_propagate_errors();
+
+        client().async_update_system_theme(m_client_state.page_index, theme);
+        client().async_set_viewport(m_client_state.page_index, viewport_size(), 1.0);
+        client().async_set_window_size(m_client_state.page_index, viewport_size());
+        
+        Web::DevicePixelRect screen_rect { 0, 0, 1920, 1080 }; // Dummy screen rect for now
+        client().async_update_screen_rects(m_client_state.page_index, { { screen_rect } }, 0);
         
         on_ready_to_paint = [this]() {
             if (m_client_state.has_usable_bitmap && m_client_state.front_bitmap.bitmap) {
@@ -46,6 +61,14 @@ public:
 
                 memcpy(g_latest_frame, bitmap->scanline(0), g_width * g_height * 4);
             }
+        };
+
+        on_web_content_process_change_for_cross_site_navigation = []() {
+            std::println("WebContent process changed for cross site navigation!");
+        };
+
+        on_web_content_crashed = []() {
+            std::println("WebContent process crashed!!!");
         };
     }
 
@@ -136,6 +159,14 @@ void init_ladybird() {
     }
     std::println("end options");
 
+    auto exe = Core::System::current_executable_path();
+    if (!exe.is_error()) {
+        std::println("Executable path: {}", exe.value().view());
+    } else {
+        std::println("Could not get executable path!");
+    }
+    std::println("Resource root: {}", WebView::s_ladybird_resource_root.view());
+
     g_web_view = FlutterViewImpl::create().release_value();
     g_web_view->initialize_client();
     g_web_view->load(URL::Parser::basic_parse(AK::StringView("https://ladybird.org", 20)).value());
@@ -149,7 +180,9 @@ uint8_t* get_latest_frame(int* out_width, int* out_height) {
     }
 
     std::lock_guard<std::mutex> lock(g_frame_mutex);
-    if (!g_latest_frame) return nullptr;
+    if (!g_latest_frame) {
+        return nullptr;
+    }
 
     *out_width = g_width;
     *out_height = g_height;
