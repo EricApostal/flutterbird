@@ -98,6 +98,7 @@ static AK::OwnPtr<FlutterApplication> s_app;
 static AK::OwnPtr<WebView::BrowserProcess> s_browser_process;
 
 void init_ladybird() {
+    std::println("YOOO we out here");
     static bool initialized = false;
     if (initialized)
         return;

@@ -58,8 +58,11 @@ class _LadybirdCanvasState extends State<LadybirdCanvas>
       _widthPtr,
       _heightPtr,
     );
-    print("got latest");
-    print(rawPixels != ffi.nullptr);
+    if (rawPixels == ffi.nullptr) {
+      print("null frame");
+    } else {
+      print("got valid frame!");
+    }
 
     if (rawPixels != ffi.nullptr) {
       _isDecoding = true;
