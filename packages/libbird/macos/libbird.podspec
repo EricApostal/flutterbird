@@ -39,6 +39,7 @@ system(<<-'CMD')
 CMD
 
 found_library_paths = ['$(inherited)']
+found_library_paths << '"${PODS_TARGET_SRCROOT}/Bundled"'
 if Dir.exist?(ladybird_build_dir)
   Dir.glob("#{ladybird_build_dir}/**/*.{a,dylib}").each do |file|
     dir_path = File.dirname(file)
