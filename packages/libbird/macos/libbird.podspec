@@ -5,17 +5,28 @@
 plugin_root = File.expand_path('..', __dir__)
 ladybird_build_dir = File.join(plugin_root, 'third_party', 'ladybird', 'Build')
 
-puts "Preparing libbird resources and generated C++ files..."
+puts "Preparing libbird resources and building C++ engine..."
 system(<<-'CMD')
   cd "${PODS_TARGET_SRCROOT:-.}"
   
+  # Remove the old Classes/cpp_generated if it exists
   rm -rf Classes/cpp_generated
-  mkdir -p Classes/cpp_generated
-  cp -R ../cpp/* Classes/cpp_generated/ 2>/dev/null || true
+  
+  # Build engine.dylib
+  cd ../cpp
+  mkdir -p build
+  cd build
+  cmake -DCMAKE_BUILD_TYPE=Release ..
+  make -j$(sysctl -n hw.ncpu)
+  cd ../../macos
 
   mkdir -p Bundled
   
-  find ../third_party/ladybird/Build -name "*.dylib" -exec cp {} Bundled/ \; 2>/dev/null || true
+  # Copy ladybird generated dylibs
+  find ../third_party/ladybird/Build/release -name "*.dylib" -exec cp {} Bundled/ \; 2>/dev/null || true
+  
+  # Copy our engine dylib
+  cp ../cpp/build/libengine.dylib Bundled/ || true
   
   # Protect the loop in case the directory is empty
   for f in Bundled/*.dylib; do
@@ -83,12 +94,13 @@ Pod::Spec.new do |s|
       
       '-Wl,-rpath,@loader_path/../Resources',
       
+      '-lengine',
       '-llagom-webview', '-llagom-web', '-llagom-requests', 
       '-llagom-js', '-llagom-gfx', '-llagom-ipc', '-llagom-url', 
       '-llagom-filesystem', '-llagom-crypto', '-llagom-database',
       '-llagom-core', '-llagom-coreminimal', '-llagom-ak', 
       '-llagom-unicode', '-llagom-main',
-      '-lskia', '-lsqlite3', '-lssl', '-lcrypto', '-lz'
+      '-lskia', '-lz'
     ].join(' '),
 
     'HEADER_SEARCH_PATHS' => [

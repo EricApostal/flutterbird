@@ -6,8 +6,8 @@
 
 #include <LibCore/EventLoop.h>
 #include <LibGfx/Bitmap.h>
-#include <WebView/ViewImplementation.h>
-#include <AK/URL.h>
+#include <LibWebView/ViewImplementation.h>
+#include <LibURL/URL.h>
 
 // raaa
 
@@ -18,32 +18,37 @@ int g_height = 600;
 
 class FlutterViewImpl final : public WebView::ViewImplementation {
 public:
-    static AK::ErrorOr<AK::NonnullOwnPtr<FlutterViewImpl>> create() {
-        return AK::adopt_nonnull_own_or_enomem(new (std::nothrow) FlutterViewImpl());
+    static ErrorOr<NonnullOwnPtr<FlutterViewImpl>> create() {
+        return adopt_nonnull_own_or_enomem(new (std::nothrow) FlutterViewImpl());
     }
 
-    virtual void initialize_client(WebView::UseLagomNetworking use_networking) override {
-        ViewImplementation::initialize_client(use_networking);
-    }
+    virtual void initialize_client(CreateNewClient create_new_client = CreateNewClient::Yes) override {
+        ViewImplementation::initialize_client(create_new_client);
+        
+        on_ready_to_paint = [this]() {
+            if (m_client_state.has_usable_bitmap && m_client_state.front_bitmap.bitmap) {
+                auto const* bitmap = m_client_state.front_bitmap.bitmap.ptr();
+                auto size = m_client_state.front_bitmap.last_painted_size.to_type<int>();
+                
+                std::lock_guard<std::mutex> lock(g_frame_mutex);
+                
+                if (size.width() != g_width || size.height() != g_height || !g_latest_frame) {
+                    g_width = size.width();
+                    g_height = size.height();
+                    delete[] g_latest_frame;
+                    g_latest_frame = new uint8_t[g_width * g_height * 4];
+                }
 
-    virtual void notify_server_did_paint(AK::Badge<WebView::WebContentClient>, i32 bitmap_id, Gfx::IntSize size) override {
-        if (auto* bitmap = front_bitmap()) {
-            std::lock_guard<std::mutex> lock(g_frame_mutex);
-            
-            if (size.width() != g_width || size.height() != g_height || !g_latest_frame) {
-                g_width = size.width();
-                g_height = size.height();
-                delete[] g_latest_frame;
-                g_latest_frame = new uint8_t[g_width * g_height * 4];
+                memcpy(g_latest_frame, bitmap->scanline(0), g_width * g_height * 4);
             }
-
-            memcpy(g_latest_frame, bitmap->scanline(0), g_width * g_height * 4);
-        }
+        };
     }
+
+private:
+    FlutterViewImpl() {}
 
     virtual void update_zoom() override {}
-    virtual void set_viewport_rect(Gfx::IntRect const&) override {}
-    virtual Gfx::IntRect viewport_rect() const override { return { 0, 0, g_width, g_height }; }
+    virtual Web::DevicePixelSize viewport_size() const override { return { g_width, g_height }; }
     virtual Gfx::IntPoint to_content_position(Gfx::IntPoint widget_position) const override { return widget_position; }
     virtual Gfx::IntPoint to_widget_position(Gfx::IntPoint content_position) const override { return content_position; }
 };
@@ -57,9 +62,9 @@ extern "C" {
             Core::EventLoop loop;
             
             g_web_view = FlutterViewImpl::create().release_value_but_fixme_should_propagate_errors();
-            g_web_view->initialize_client(WebView::UseLagomNetworking::Yes);
+            g_web_view->initialize_client();
             
-            g_web_view->load(AK::URL::create_with_url_or_path("https://ladybird.dev"));
+            g_web_view->load(URL::create_with_url_or_path("https://ladybird.dev").value());
             
             loop.exec();
         });

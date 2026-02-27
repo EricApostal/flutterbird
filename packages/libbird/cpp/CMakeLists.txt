@@ -25,6 +25,7 @@ target_include_directories(engine PRIVATE
 
 target_link_directories(engine PRIVATE 
     ${LADYBIRD_DIR}/Build/release/lib
+    ${LADYBIRD_DIR}/Build/release/vcpkg_installed/arm64-osx-dynamic/lib
 )
 
 target_link_libraries(engine PRIVATE

@@ -35,3 +35,4 @@ migrate_working_dir/
 /macos/Bundled
 /macos/Classes/cpp_generated
 /cpp/build
+/cpp/.cache
