@@ -84,7 +84,7 @@ class _LadybirdCanvasState extends State<LadybirdCanvas>
         dartPixels,
         width,
         height,
-        ui.PixelFormat.rgba8888,
+        ui.PixelFormat.bgra8888,
         (ui.Image img) {
           if (mounted) {
             setState(() {
