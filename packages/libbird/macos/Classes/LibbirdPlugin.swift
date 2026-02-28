@@ -12,6 +12,9 @@ func set_frame_callback(
   _ callback: @convention(c) (UnsafeMutableRawPointer?) -> Void, _ context: UnsafeMutableRawPointer?
 )
 
+@_silgen_name("resize_window")
+func resize_window(_ width: Int32, _ height: Int32)
+
 class LadybirdTexture: NSObject, FlutterTexture {
   func copyPixelBuffer() -> Unmanaged<CVPixelBuffer>? {
     guard let ptr = get_latest_pixel_buffer() else {
@@ -85,6 +88,17 @@ public class LibbirdPlugin: NSObject, FlutterPlugin {
       print("set the frame callback")
 
       result(textureId)
+    case "resizeWindow":
+      guard let args = call.arguments as? [String: Any],
+        let width = args["width"] as? Int,
+        let height = args["height"] as? Int
+      else {
+        result(
+          FlutterError(code: "INVALID_ARGS", message: "Expected width and height", details: nil))
+        return
+      }
+      resize_window(Int32(width), Int32(height))
+      result(nil)
     default:
       result(FlutterMethodNotImplemented)
     }

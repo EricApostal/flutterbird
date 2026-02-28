@@ -19,6 +19,7 @@ class _LadybirdCanvasState extends State<LadybirdCanvas> {
   late ffi.DynamicLibrary _lib;
   late LibbirdBindings _bindings;
   int? _textureId;
+  Size? _lastSize;
   static const MethodChannel _channel = MethodChannel('libbird');
 
   @override
@@ -28,14 +29,16 @@ class _LadybirdCanvasState extends State<LadybirdCanvas> {
     _lib = ffi.DynamicLibrary.process();
     _bindings = LibbirdBindings(_lib);
 
+    print("doing init");
     _bindings.init_ladybird();
+    print("did init");
 
     _createTexture();
   }
 
   Future<void> _createTexture() async {
     final int textureId = await _channel.invokeMethod('createTexture');
-
+    print("got id = $textureId");
     if (mounted) {
       setState(() {
         _textureId = textureId;
@@ -48,7 +51,18 @@ class _LadybirdCanvasState extends State<LadybirdCanvas> {
     final pixelWidth = (size.width * dpr).round();
     final pixelHeight = (size.height * dpr).round();
     final pixelSize = Size(pixelWidth.toDouble(), pixelHeight.toDouble());
-    _bindings.resize_window(pixelWidth, pixelHeight);
+    if (pixelSize == _lastSize) return;
+    _lastSize = pixelSize;
+    print("resizing to: $pixelSize");
+    _channel.invokeMethod('resizeWindow', {
+      'width': pixelWidth,
+      'height': pixelHeight,
+    });
+  }
+
+  @override
+  void dispose() {
+    super.dispose();
   }
 
   @override
@@ -56,19 +70,15 @@ class _LadybirdCanvasState extends State<LadybirdCanvas> {
     if (_textureId == null) {
       return const Center(child: CircularProgressIndicator());
     }
-    return SizedBox.expand(
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final density = MediaQuery.devicePixelRatioOf(context);
-          final size = Size(
-            constraints.maxWidth * density,
-            constraints.maxHeight * density,
-          );
-          _onSizeChanged(size);
-
-          return Texture(textureId: _textureId!);
-        },
-      ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final size = Size(constraints.maxWidth, constraints.maxHeight);
+        // Schedule after frame so context is valid for devicePixelRatio lookup
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _onSizeChanged(size);
+        });
+        return SizedBox.expand(child: Texture(textureId: _textureId!));
+      },
     );
   }
 }
