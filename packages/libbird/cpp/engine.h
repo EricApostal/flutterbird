@@ -1,23 +1,23 @@
 #ifndef ENGINE_H
 #define ENGINE_H
 
+#if defined(_WIN32)
+    #define LADYBIRD_API __declspec(dllexport)
+#else
+    #define LADYBIRD_API __attribute__((visibility("default"))) __attribute__((used))
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 typedef void (*FrameCallback)(void*);
 
-__attribute__((visibility("default"))) __attribute__((used))
-void init_ladybird();
+LADYBIRD_API void init_ladybird();
 
-__attribute__((visibility("default"))) __attribute__((used))
-void* get_latest_pixel_buffer();
+LADYBIRD_API void* get_latest_pixel_buffer();
 
-__attribute__((visibility("default"))) __attribute__((used))
-void set_frame_callback(FrameCallback callback, void* context);
-
-__attribute__((visibility("default"))) __attribute__((used))
-void resize_ladybird(int width, int height);
+LADYBIRD_API void set_frame_callback(FrameCallback callback, void* context);
 
 #ifdef __cplusplus
 }

@@ -38,6 +38,7 @@ public:
     }
 
     virtual void initialize_client(CreateNewClient create_new_client = CreateNewClient::Yes) override {
+        std::println("Start init client");
         ViewImplementation::initialize_client(create_new_client);
 
         auto theme_path = LexicalPath::join(WebView::s_ladybird_resource_root, "themes"sv, "Default.ini"sv);
@@ -53,6 +54,7 @@ public:
         set_system_visibility_state(Web::HTML::VisibilityState::Visible);
 
         on_ready_to_paint = [this]() {
+            std::println("On Paint");
             if (m_client_state.has_usable_bitmap && m_client_state.front_bitmap.bitmap) {
                 auto const* bitmap = m_client_state.front_bitmap.bitmap.ptr();
                 auto size = m_client_state.front_bitmap.last_painted_size.to_type<int>();
@@ -123,12 +125,6 @@ public:
         };
     }
 
-    void resize(int width, int height) {
-        auto size = Web::DevicePixelSize { width, height };
-        client().async_set_viewport(m_client_state.page_index, size, 1.0);
-        client().async_set_window_size(m_client_state.page_index, size);
-    }
-
 private:
     FlutterViewImpl() {}
 
@@ -178,6 +174,7 @@ static AK::OwnPtr<FlutterApplication> s_app;
 static AK::OwnPtr<WebView::BrowserProcess> s_browser_process;
 
 void init_ladybird() {
+    std::println("YOOO we out here");
     static bool initialized = false;
     if (initialized)
         return;
@@ -200,6 +197,7 @@ void init_ladybird() {
 
     s_browser_process = make<WebView::BrowserProcess>();
     
+    std::println("doing options");
     if (auto const& browser_options = WebView::Application::browser_options();
         !browser_options.headless_mode.has_value()) {
         if (browser_options.force_new_process == WebView::ForceNewProcess::No) {
@@ -213,6 +211,7 @@ void init_ladybird() {
             }
         }
     }
+    std::println("end options");
 
     auto exe = Core::System::current_executable_path();
     if (!exe.is_error()) {
@@ -225,7 +224,7 @@ void init_ladybird() {
     g_web_view = FlutterViewImpl::create().release_value();
     g_web_view->initialize_client();
     g_web_view->load(URL::Parser::basic_parse(AK::StringView("https://ladybird.org", 20)).value());
-
+    std::println("loaded webview!");
     initialized = true;
 }
 
@@ -249,17 +248,4 @@ void set_frame_callback(FrameCallback callback, void* context) {
     std::lock_guard<std::mutex> lock(g_frame_mutex);
     g_frame_callback = callback;
     g_frame_callback_context = context;
-}
-
-void resize_ladybird(int width, int height) {
-    if (width <= 0 || height <= 0)
-        return;
-    {
-        std::lock_guard<std::mutex> lock(g_frame_mutex);
-        g_width = width;
-        g_height = height;
-    }
-    if (g_web_view) {
-        g_web_view->resize(width, height);
-    }
 }

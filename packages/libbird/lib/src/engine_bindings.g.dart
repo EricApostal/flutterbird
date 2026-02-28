@@ -53,17 +53,6 @@ class LibbirdBindings {
       >('set_frame_callback');
   late final _set_frame_callback = _set_frame_callbackPtr
       .asFunction<void Function(FrameCallback, ffi.Pointer<ffi.Void>)>();
-
-  void resize_ladybird(int width, int height) {
-    return _resize_ladybird(width, height);
-  }
-
-  late final _resize_ladybirdPtr =
-      _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Int, ffi.Int)>>(
-        'resize_ladybird',
-      );
-  late final _resize_ladybird = _resize_ladybirdPtr
-      .asFunction<void Function(int, int)>();
 }
 
 typedef FrameCallback = ffi.Pointer<ffi.NativeFunction<FrameCallbackFunction>>;
