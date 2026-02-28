@@ -44,11 +44,8 @@ class _LadybirdCanvasState extends State<LadybirdCanvas> {
   }
 
   void _onSizeChanged(Size size) {
-    final dpr = MediaQuery.devicePixelRatioOf(context);
-    final pixelWidth = (size.width * dpr).round();
-    final pixelHeight = (size.height * dpr).round();
-    // final pixelSize = Size(pixelWidth.toDouble(), pixelHeight.toDouble());
-    _bindings.resize_window(pixelWidth, pixelHeight);
+    print("resizing to ${size.width.toInt()}, ${size.height.toInt()})");
+    _bindings.resize_window(size.width.toInt(), size.height.toInt());
   }
 
   @override

@@ -46,9 +46,11 @@ public class LibbirdPlugin: NSObject, FlutterPlugin {
   }
 
   private func startLadybirdLoop() {
-    timer = Timer.scheduledTimer(withTimeInterval: 1.0 / 60.0, repeats: true) { _ in
+    let t = Timer(timeInterval: 1.0 / 60.0, repeats: true) { _ in
       tick_ladybird()
     }
+    RunLoop.main.add(t, forMode: .common)
+    timer = t
   }
 
   public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {

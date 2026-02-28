@@ -224,7 +224,7 @@ void init_ladybird() {
 
     g_web_view = FlutterViewImpl::create().release_value();
     g_web_view->initialize_client();
-    g_web_view->load(URL::Parser::basic_parse(AK::StringView("https://ladybird.org", 20)).value());
+    g_web_view->load(URL::Parser::basic_parse(AK::StringView("https://giphy.com", 17)).value());
 
     initialized = true;
 }
