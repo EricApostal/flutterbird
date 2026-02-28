@@ -19,6 +19,7 @@ class _LadybirdCanvasState extends State<LadybirdCanvas> {
   late ffi.DynamicLibrary _lib;
   late LibbirdBindings _bindings;
   int? _textureId;
+  Size? _lastSize;
   static const MethodChannel _channel = MethodChannel('libbird');
 
   @override
@@ -43,9 +44,22 @@ class _LadybirdCanvasState extends State<LadybirdCanvas> {
     }
   }
 
+  Future<void> _recreateTexture() async {
+    final int textureId = await _channel.invokeMethod('createTexture');
+    if (mounted) {
+      setState(() {
+        _textureId = textureId;
+      });
+    }
+  }
+
   void _onSizeChanged(Size size) {
-    print("resizing to ${size.width.toInt()}, ${size.height.toInt()})");
+    if (_lastSize == size) return;
+    _lastSize = size;
+    print("resizing to ${size.width.toInt()}, ${size.height.toInt()}");
     _bindings.resize_window(size.width.toInt(), size.height.toInt());
+
+    _recreateTexture();
   }
 
   @override
@@ -63,7 +77,7 @@ class _LadybirdCanvasState extends State<LadybirdCanvas> {
           );
           _onSizeChanged(size);
 
-          return Texture(textureId: _textureId!);
+          return Texture(key: ValueKey(_textureId), textureId: _textureId!);
         },
       ),
     );
