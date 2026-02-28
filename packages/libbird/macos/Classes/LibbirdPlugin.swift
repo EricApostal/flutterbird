@@ -4,6 +4,9 @@ import FlutterMacOS
 @_silgen_name("get_latest_pixel_buffer")
 func get_latest_pixel_buffer() -> UnsafeMutableRawPointer?
 
+@_silgen_name("tick_ladybird")
+func tick_ladybird()
+
 @_silgen_name("set_frame_callback")
 func set_frame_callback(
   _ callback: @convention(c) (UnsafeMutableRawPointer?) -> Void, _ context: UnsafeMutableRawPointer?
@@ -31,12 +34,21 @@ class TextureContext {
 
 public class LibbirdPlugin: NSObject, FlutterPlugin {
   var textureRegistry: FlutterTextureRegistry?
+  var timer: Timer?
 
   public static func register(with registrar: FlutterPluginRegistrar) {
     let channel = FlutterMethodChannel(name: "libbird", binaryMessenger: registrar.messenger)
     let instance = LibbirdPlugin()
     instance.textureRegistry = registrar.textures
     registrar.addMethodCallDelegate(instance, channel: channel)
+
+    instance.startLadybirdLoop()
+  }
+
+  private func startLadybirdLoop() {
+    timer = Timer.scheduledTimer(withTimeInterval: 1.0 / 60.0, repeats: true) { _ in
+      tick_ladybird()
+    }
   }
 
   public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {

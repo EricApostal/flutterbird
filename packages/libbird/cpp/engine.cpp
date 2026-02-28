@@ -70,13 +70,17 @@ public:
                     }
 
                     CFMutableDictionaryRef pixelBufferAttributes = CFDictionaryCreateMutable(
-                        kCFAllocatorDefault, 1,
+                        // IOSurfaceProperties and MetalCompatibility
+                        kCFAllocatorDefault, 2,
                         &kCFTypeDictionaryKeyCallBacks,
                         &kCFTypeDictionaryValueCallBacks);
                     
                     CFDictionaryRef emptyDict = CFDictionaryCreate(kCFAllocatorDefault, nullptr, nullptr, 0, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
                     CFDictionarySetValue(pixelBufferAttributes, kCVPixelBufferIOSurfacePropertiesKey, emptyDict);
                     CFRelease(emptyDict);
+                    
+        
+                    CFDictionarySetValue(pixelBufferAttributes, kCVPixelBufferMetalCompatibilityKey, kCFBooleanTrue);
                     
                     CVReturn result = CVPixelBufferCreate(
                         kCFAllocatorDefault,
@@ -224,11 +228,13 @@ void init_ladybird() {
     initialized = true;
 }
 
-void* get_latest_pixel_buffer() {
+extern "C" void tick_ladybird() {
     if (Core::EventLoop::is_running()) {
         Core::EventLoop::current().pump(Core::EventLoop::WaitMode::PollForEvents);
     }
+}
 
+void* get_latest_pixel_buffer() {
     std::lock_guard<std::mutex> lock(g_frame_mutex);
     if (!g_pixel_buffer) {
         return nullptr;
