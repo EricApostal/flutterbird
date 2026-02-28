@@ -224,7 +224,8 @@ void init_ladybird() {
 
     g_web_view = FlutterViewImpl::create().release_value();
     g_web_view->initialize_client();
-    g_web_view->load(URL::Parser::basic_parse(AK::StringView("https://giphy.com", 17)).value());
+    // g_web_view->load(URL::Parser::basic_parse(AK::StringView("https://giphy.com", 17)).value());
+    g_web_view->load(URL::Parser::basic_parse(AK::StringView("https://github.com/EricApostal/flutterbird", 42)).value());
 
     initialized = true;
 }
@@ -255,6 +256,6 @@ void resize_window(int width, int height) {
     if (width <= 0 || height <= 0) {
         return;
     }
-    
+
     g_web_view->resize(width, height);
 }
