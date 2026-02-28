@@ -124,6 +124,12 @@ public:
             std::println("WebContent process crashed!!!");
         };
     }
+    
+    void resize(int width, int height) {
+        auto size = Web::DevicePixelSize { width, height };
+        client().async_set_viewport(m_client_state.page_index, size, 1.0);
+        client().async_set_window_size(m_client_state.page_index, size);
+}
 
 private:
     FlutterViewImpl() {}
@@ -249,3 +255,17 @@ void set_frame_callback(FrameCallback callback, void* context) {
     g_frame_callback = callback;
     g_frame_callback_context = context;
 }
+
+void resize_ladybird(int width, int height) {
+    if (width <= 0 || height <= 0)
+        return;
+    {
+        std::lock_guard<std::mutex> lock(g_frame_mutex);
+        g_width = width;
+        g_height = height;
+    }
+    if (g_web_view) {
+        g_web_view->resize(width, height);
+    }
+}
+

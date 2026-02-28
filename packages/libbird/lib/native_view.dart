@@ -43,9 +43,12 @@ class _LadybirdCanvasState extends State<LadybirdCanvas> {
     }
   }
 
-  @override
-  void dispose() {
-    super.dispose();
+  void _onSizeChanged(Size size) {
+    final dpr = MediaQuery.devicePixelRatioOf(context);
+    final pixelWidth = (size.width * dpr).round();
+    final pixelHeight = (size.height * dpr).round();
+    final pixelSize = Size(pixelWidth.toDouble(), pixelHeight.toDouble());
+    _bindings.resize_window(pixelWidth, pixelHeight);
   }
 
   @override
@@ -53,6 +56,19 @@ class _LadybirdCanvasState extends State<LadybirdCanvas> {
     if (_textureId == null) {
       return const Center(child: CircularProgressIndicator());
     }
-    return SizedBox.expand(child: Texture(textureId: _textureId!));
+    return SizedBox.expand(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final density = MediaQuery.devicePixelRatioOf(context);
+          final size = Size(
+            constraints.maxWidth * density,
+            constraints.maxHeight * density,
+          );
+          _onSizeChanged(size);
+
+          return Texture(textureId: _textureId!);
+        },
+      ),
+    );
   }
 }

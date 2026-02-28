@@ -19,6 +19,8 @@ LADYBIRD_API void* get_latest_pixel_buffer();
 
 LADYBIRD_API void set_frame_callback(FrameCallback callback, void* context);
 
+LADYBIRD_API void resize_window(int width, int height);
+
 #ifdef __cplusplus
 }
 #endif

@@ -53,6 +53,17 @@ class LibbirdBindings {
       >('set_frame_callback');
   late final _set_frame_callback = _set_frame_callbackPtr
       .asFunction<void Function(FrameCallback, ffi.Pointer<ffi.Void>)>();
+
+  void resize_window(int width, int height) {
+    return _resize_window(width, height);
+  }
+
+  late final _resize_windowPtr =
+      _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Int, ffi.Int)>>(
+        'resize_window',
+      );
+  late final _resize_window = _resize_windowPtr
+      .asFunction<void Function(int, int)>();
 }
 
 typedef FrameCallback = ffi.Pointer<ffi.NativeFunction<FrameCallbackFunction>>;
