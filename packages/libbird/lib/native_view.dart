@@ -45,7 +45,11 @@ class _LadybirdCanvasState extends State<LadybirdCanvas> {
   }
 
   Future<void> _recreateTexture() async {
+    final int? oldId = _textureId;
     final int textureId = await _channel.invokeMethod('createTexture');
+    if (oldId != null) {
+      // await _channel.invokeMethod('unregisterTexture', oldId);
+    }
     if (mounted) {
       setState(() {
         _textureId = textureId;

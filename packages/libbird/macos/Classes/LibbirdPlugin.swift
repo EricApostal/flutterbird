@@ -86,6 +86,17 @@ public class LibbirdPlugin: NSObject, FlutterPlugin {
       set_frame_callback(callback, ctxPtr)
 
       result(textureId)
+    case "unregisterTexture":
+      guard let registry = textureRegistry else {
+        result(FlutterError(code: "UNAVAILABLE", message: "Texture registry is null", details: nil))
+        return
+      }
+      guard let textureId = call.arguments as? Int64 else {
+        result(FlutterError(code: "INVALID_ARGS", message: "Expected texture ID", details: nil))
+        return
+      }
+      registry.unregisterTexture(textureId)
+      result(nil)
     default:
       result(FlutterMethodNotImplemented)
     }
