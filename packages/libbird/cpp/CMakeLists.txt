@@ -49,6 +49,9 @@ target_link_libraries(engine PRIVATE
     ssl
     crypto
     z
+    "-framework CoreFoundation"
+    "-framework CoreVideo"
+    "-framework IOSurface"
 )
 
 set_target_properties(engine PROPERTIES

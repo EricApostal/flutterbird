@@ -1,20 +1,20 @@
 #ifndef ENGINE_H
 #define ENGINE_H
 
-#include <stdint.h>
-
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+typedef void (*FrameCallback)(void*);
 
 __attribute__((visibility("default"))) __attribute__((used))
 void init_ladybird();
 
 __attribute__((visibility("default"))) __attribute__((used))
-uint8_t* get_latest_frame(int* out_width, int* out_height);
+void* get_latest_pixel_buffer();
 
 __attribute__((visibility("default"))) __attribute__((used))
-void free_frame(uint8_t* buffer);
+void set_frame_callback(FrameCallback callback, void* context);
 
 #ifdef __cplusplus
 }

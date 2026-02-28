@@ -1,10 +1,12 @@
 #include "LibWebView/Application.h"
+#include "engine.h"
 #include <print>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
-#include <thread>
 #include <mutex>
+#include <CoreVideo/CoreVideo.h>
+#include <CoreFoundation/CoreFoundation.h>
 
 #include <AK/OwnPtr.h>
 #include <AK/StringView.h>
@@ -22,9 +24,12 @@
 #include <LibCore/System.h>
 
 std::mutex g_frame_mutex;
-uint8_t* g_latest_frame = nullptr;
+CVPixelBufferRef g_pixel_buffer = nullptr;
 int g_width = 800;
 int g_height = 600;
+
+FrameCallback g_frame_callback = nullptr;
+void* g_frame_callback_context = nullptr;
 
 class FlutterViewImpl final : public WebView::ViewImplementation {
 public:
@@ -33,6 +38,7 @@ public:
     }
 
     virtual void initialize_client(CreateNewClient create_new_client = CreateNewClient::Yes) override {
+        std::println("Start init client");
         ViewImplementation::initialize_client(create_new_client);
 
         auto theme_path = LexicalPath::join(WebView::s_ladybird_resource_root, "themes"sv, "Default.ini"sv);
@@ -42,29 +48,66 @@ public:
         client().async_set_viewport(m_client_state.page_index, viewport_size(), 1.0);
         client().async_set_window_size(m_client_state.page_index, viewport_size());
         
-        Web::DevicePixelRect screen_rect { 0, 0, 1920, 1080 }; // Dummy screen rect for now
+        Web::DevicePixelRect screen_rect { 0, 0, 1920, 1080 };
         client().async_update_screen_rects(m_client_state.page_index, { { screen_rect } }, 0);
         
         set_system_visibility_state(Web::HTML::VisibilityState::Visible);
 
         on_ready_to_paint = [this]() {
+            std::println("On Paint");
             if (m_client_state.has_usable_bitmap && m_client_state.front_bitmap.bitmap) {
                 auto const* bitmap = m_client_state.front_bitmap.bitmap.ptr();
                 auto size = m_client_state.front_bitmap.last_painted_size.to_type<int>();
                 
                 std::lock_guard<std::mutex> lock(g_frame_mutex);
                 
-                if (size.width() != g_width || size.height() != g_height || !g_latest_frame) {
+                if (size.width() != g_width || size.height() != g_height || !g_pixel_buffer) {
                     g_width = size.width();
                     g_height = size.height();
-                    delete[] g_latest_frame;
-                    g_latest_frame = new uint8_t[g_width * g_height * 4];
+                    if (g_pixel_buffer) {
+                        CVPixelBufferRelease(g_pixel_buffer);
+                        g_pixel_buffer = nullptr;
+                    }
+
+                    CFMutableDictionaryRef pixelBufferAttributes = CFDictionaryCreateMutable(
+                        kCFAllocatorDefault, 1,
+                        &kCFTypeDictionaryKeyCallBacks,
+                        &kCFTypeDictionaryValueCallBacks);
+                    
+                    CFDictionaryRef emptyDict = CFDictionaryCreate(kCFAllocatorDefault, nullptr, nullptr, 0, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+                    CFDictionarySetValue(pixelBufferAttributes, kCVPixelBufferIOSurfacePropertiesKey, emptyDict);
+                    CFRelease(emptyDict);
+                    
+                    CVReturn result = CVPixelBufferCreate(
+                        kCFAllocatorDefault,
+                        g_width,
+                        g_height,
+                        kCVPixelFormatType_32BGRA,
+                        pixelBufferAttributes,
+                        &g_pixel_buffer
+                    );
+                    
+                    CFRelease(pixelBufferAttributes);
+                    
+                    if (result != kCVReturnSuccess) {
+                        std::println("Failed to create CVPixelBuffer!");
+                        return;
+                    }
                 }
 
-                auto pitch = bitmap->pitch();
+                CVPixelBufferLockBaseAddress(g_pixel_buffer, 0);
+                uint8_t* dest = (uint8_t*)CVPixelBufferGetBaseAddress(g_pixel_buffer);
+                size_t dest_stride = CVPixelBufferGetBytesPerRow(g_pixel_buffer);
+                
                 auto width_bytes = g_width * 4;
                 for (int y = 0; y < g_height; ++y) {
-                    memcpy(g_latest_frame + (y * width_bytes), bitmap->scanline_u8(y), width_bytes);
+                    memcpy(dest + (y * dest_stride), bitmap->scanline_u8(y), width_bytes);
+                }
+                
+                CVPixelBufferUnlockBaseAddress(g_pixel_buffer, 0);
+                
+                if (g_frame_callback) {
+                    g_frame_callback(g_frame_callback_context);
                 }
             }
         };
@@ -100,7 +143,7 @@ public:
     virtual void create_platform_arguments(Core::ArgsParser&) override {}
     virtual void create_platform_options(WebView::BrowserOptions&, WebView::RequestServerOptions&, WebView::WebContentOptions&) override {}
     
-    virtual bool should_capture_web_content_output() const override { return true; }
+    virtual bool should_capture_web_content_output() const override { return false; }
 
     virtual NonnullOwnPtr<Core::EventLoop> create_platform_event_loop() override {
         return WebView::Application::create_platform_event_loop();
@@ -122,8 +165,6 @@ public:
         WebView::Application::insert_clipboard_entry(std::move(entry));
     }
 };
-
-#include "engine.h"
 
 static AK::OwnPtr<FlutterApplication> s_app;
 static AK::OwnPtr<WebView::BrowserProcess> s_browser_process;
@@ -170,11 +211,11 @@ void init_ladybird() {
 
     auto exe = Core::System::current_executable_path();
     if (!exe.is_error()) {
-        std::println("Executable path: {}", exe.value().view());
+        // std::println("Executable path: {}", exe.value().view());
     } else {
         std::println("Could not get executable path!");
     }
-    std::println("Resource root: {}", WebView::s_ladybird_resource_root.view());
+    // std::println("Resource root: {}", WebView::s_ladybird_resource_root.view());
 
     g_web_view = FlutterViewImpl::create().release_value();
     g_web_view->initialize_client();
@@ -183,26 +224,22 @@ void init_ladybird() {
     initialized = true;
 }
 
-uint8_t* get_latest_frame(int* out_width, int* out_height) {
+void* get_latest_pixel_buffer() {
     if (Core::EventLoop::is_running()) {
         Core::EventLoop::current().pump(Core::EventLoop::WaitMode::PollForEvents);
     }
 
     std::lock_guard<std::mutex> lock(g_frame_mutex);
-    if (!g_latest_frame) {
+    if (!g_pixel_buffer) {
         return nullptr;
     }
 
-    *out_width = g_width;
-    *out_height = g_height;
-    
-    int size = g_width * g_height * 4;
-    uint8_t* buffer_copy = (uint8_t*)malloc(size);
-    memcpy(buffer_copy, g_latest_frame, size);
-    
-    return buffer_copy;
+    CVPixelBufferRetain(g_pixel_buffer);
+    return g_pixel_buffer;
 }
 
-void free_frame(uint8_t* buffer) {
-    free(buffer);
+void set_frame_callback(FrameCallback callback, void* context) {
+    std::lock_guard<std::mutex> lock(g_frame_mutex);
+    g_frame_callback = callback;
+    g_frame_callback_context = context;
 }
