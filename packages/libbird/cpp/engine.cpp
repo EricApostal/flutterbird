@@ -252,14 +252,9 @@ void set_frame_callback(FrameCallback callback, void* context) {
 }
 
 void resize_window(int width, int height) {
-    if (width <= 0 || height <= 0)
+    if (width <= 0 || height <= 0) {
         return;
-    {
-        std::lock_guard<std::mutex> lock(g_frame_mutex);
-        g_width = width;
-        g_height = height;
     }
-    if (g_web_view) {
-        g_web_view->resize(width, height);
-    }
+    
+    g_web_view->resize(width, height);
 }
