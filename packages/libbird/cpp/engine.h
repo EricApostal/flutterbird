@@ -16,6 +16,9 @@ void* get_latest_pixel_buffer();
 __attribute__((visibility("default"))) __attribute__((used))
 void set_frame_callback(FrameCallback callback, void* context);
 
+__attribute__((visibility("default"))) __attribute__((used))
+void resize_ladybird(int width, int height);
+
 #ifdef __cplusplus
 }
 #endif

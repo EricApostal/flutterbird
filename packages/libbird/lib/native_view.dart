@@ -19,6 +19,7 @@ class _LadybirdCanvasState extends State<LadybirdCanvas> {
   late ffi.DynamicLibrary _lib;
   late LibbirdBindings _bindings;
   int? _textureId;
+  Size? _lastSize;
   static const MethodChannel _channel = MethodChannel('libbird');
 
   @override
@@ -45,6 +46,16 @@ class _LadybirdCanvasState extends State<LadybirdCanvas> {
     }
   }
 
+  void _onSizeChanged(Size size) {
+    final dpr = MediaQuery.devicePixelRatioOf(context);
+    final pixelWidth = (size.width * dpr).round();
+    final pixelHeight = (size.height * dpr).round();
+    final pixelSize = Size(pixelWidth.toDouble(), pixelHeight.toDouble());
+    if (pixelSize == _lastSize) return;
+    _lastSize = pixelSize;
+    _bindings.resize_ladybird(pixelWidth, pixelHeight);
+  }
+
   @override
   void dispose() {
     super.dispose();
@@ -55,8 +66,14 @@ class _LadybirdCanvasState extends State<LadybirdCanvas> {
     if (_textureId == null) {
       return const Center(child: CircularProgressIndicator());
     }
-    // TODO: The size should probably be determined by the container, and
-    // passed down to engine to resize the viewport
-    return SizedBox.expand(child: Texture(textureId: _textureId!));
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final size = Size(constraints.maxWidth, constraints.maxHeight);
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _onSizeChanged(size);
+        });
+        return SizedBox.expand(child: Texture(textureId: _textureId!));
+      },
+    );
   }
 }

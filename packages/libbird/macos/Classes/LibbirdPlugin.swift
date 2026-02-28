@@ -62,7 +62,7 @@ public class LibbirdPlugin: NSObject, FlutterPlugin {
         result(FlutterError(code: "UNAVAILABLE", message: "Texture registry is null", details: nil))
         return
       }
-      print("start texture")
+
       let texture = LadybirdTexture()
       let textureId = registry.register(texture)
 
