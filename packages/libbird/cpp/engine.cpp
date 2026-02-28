@@ -256,7 +256,7 @@ void set_frame_callback(FrameCallback callback, void* context) {
     g_frame_callback_context = context;
 }
 
-void resize_ladybird(int width, int height) {
+void resize_window(int width, int height) {
     if (width <= 0 || height <= 0)
         return;
     {
