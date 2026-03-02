@@ -33,10 +33,12 @@ let package = Package(
         .define("DEFINES_MODULE", to: "YES"),
       ],
       linkerSettings: [
-        .linkedFramework("Cocoa"),
+        .linkedFramework("AppKit"),
+        .linkedFramework("CoreAudio"),
         .linkedFramework("Metal"),
         .linkedFramework("QuartzCore"),
         .linkedFramework("UniformTypeIdentifiers"),
+        .unsafeFlags(["-Xlinker", "-w"]),
       ]
     ),
   ],

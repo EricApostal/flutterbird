@@ -18,7 +18,7 @@ Pod::Spec.new do |s|
   s.swift_version = '5.0'
   s.dependency 'FlutterMacOS'
 
-  s.frameworks = 'Cocoa', 'Metal', 'QuartzCore', 'UniformTypeIdentifiers'
+  s.frameworks = 'AppKit', 'CoreAudio', 'Metal', 'QuartzCore', 'UniformTypeIdentifiers'
 
   s.vendored_frameworks = 'Frameworks/LadybirdEngine.xcframework'
   s.resources = ['Sources/libbird/LadybirdBundle/*']
@@ -28,6 +28,7 @@ Pod::Spec.new do |s|
     'CLANG_CXX_LANGUAGE_STANDARD' => 'c++2b',
     'CLANG_CXX_LIBRARY' => 'libc++',
     'OTHER_CPLUSPLUSFLAGS' => '-fobjc-arc -Wno-deprecated-anon-enum-enum-conversion',
+    'OTHER_LDFLAGS' => '-w',
     
     'VALID_ARCHS' => 'arm64',
     'EXCLUDED_ARCHS[sdk=macosx*]' => 'x86_64',

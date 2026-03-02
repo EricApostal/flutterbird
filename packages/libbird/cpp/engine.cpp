@@ -233,13 +233,13 @@ void init_ladybird() {
 
 extern "C" {
 
-void tick_ladybird() {
+LADYBIRD_API void tick_ladybird() {
     if (Core::EventLoop::is_running()) {
         Core::EventLoop::current().pump(Core::EventLoop::WaitMode::PollForEvents);
     }
 }
 
-void* get_latest_pixel_buffer() {
+LADYBIRD_API void* get_latest_pixel_buffer() {
     std::lock_guard<std::mutex> lock(g_frame_mutex);
     if (!g_pixel_buffer) {
         return nullptr;
@@ -249,13 +249,13 @@ void* get_latest_pixel_buffer() {
     return g_pixel_buffer;
 }
 
-void set_frame_callback(FrameCallback callback, void* context) {
+LADYBIRD_API void set_frame_callback(FrameCallback callback, void* context) {
     std::lock_guard<std::mutex> lock(g_frame_mutex);
     g_frame_callback = callback;
     g_frame_callback_context = context;
 }
 
-void resize_window(int width, int height) {
+LADYBIRD_API void resize_window(int width, int height) {
     if (width <= 0 || height <= 0) {
         return;
     }
@@ -263,7 +263,7 @@ void resize_window(int width, int height) {
     g_web_view->resize(width, height);
 }
 
-void navigate_to(const char* url) {
+LADYBIRD_API void navigate_to(const char* url) {
     if (!g_web_view || !url) return;
     auto parsed = URL::Parser::basic_parse(AK::StringView(url, strlen(url)));
     if (parsed.has_value()) {
@@ -271,7 +271,7 @@ void navigate_to(const char* url) {
     }
 }
 
-void set_zoom(double zoom) {
+LADYBIRD_API void set_zoom(double zoom) {
     if (zoom <= 0.0) return;
     g_zoom = zoom;
     if (g_web_view) {

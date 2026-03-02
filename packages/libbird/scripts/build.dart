@@ -46,16 +46,16 @@ void main(List<String> args) async {
   ], workingDirectory: buildDir);
   if (makeRes.exitCode != 0) throw Exception('Make failed: ${makeRes.stderr}');
 
-  print('Staging engine framework...');
+  print('Staging LadybirdEngine framework...');
   final engineFrameworkSource = Directory(
-    path.join(buildDir, 'engine.framework'),
+    path.join(buildDir, 'LadybirdEngine.framework'),
   );
   final engineFrameworkStaged = Directory(
-    path.join(stagingDylibDir, 'engine.framework'),
+    path.join(stagingDylibDir, 'LadybirdEngine.framework'),
   );
 
   if (!await engineFrameworkSource.exists()) {
-    throw Exception('engine.framework not found! Did CMake build it?');
+    throw Exception('LadybirdEngine.framework not found! Did CMake build it?');
   }
   await Process.run('cp', [
     '-a',
@@ -69,7 +69,7 @@ void main(List<String> args) async {
     engineFrameworkStaged.path,
     'Versions',
     'Current',
-    'engine',
+    'LadybirdEngine',
   );
   await Process.run('install_name_tool', [
     '-add_rpath',
@@ -101,6 +101,45 @@ void main(List<String> args) async {
     throw Exception(
       'XCFramework creation failed: ${xcbuildRes.stderr}\n${xcbuildRes.stdout}',
     );
+
+  print('Injecting Headers and Modules into LadybirdEngine.framework...');
+  // Without Headers/ and Modules/ CocoaPods cannot generate a module map.
+  final xcFwVersionsPath = path.join(
+    xcframeworkPath,
+    'macos-arm64',
+    'LadybirdEngine.framework',
+    'Versions',
+    'A',
+  );
+  final engineHeaderSrc = path.join(pluginRoot, 'macos', 'Classes', 'engine.h');
+  final headersDir = Directory(path.join(xcFwVersionsPath, 'Headers'));
+  final modulesDir = Directory(path.join(xcFwVersionsPath, 'Modules'));
+  await headersDir.create(recursive: true);
+  await modulesDir.create(recursive: true);
+  await File(engineHeaderSrc).copy(path.join(headersDir.path, 'engine.h'));
+  await File(path.join(modulesDir.path, 'module.modulemap')).writeAsString(
+    'framework module LadybirdEngine {\n'
+    '  umbrella header "engine.h"\n'
+    '  export *\n'
+    '  module * { export * }\n'
+    '}\n',
+  );
+  // Top-level symlinks so Xcode / CocoaPods can find the dirs directly
+  final fwTopLevel = path.join(
+    xcframeworkPath,
+    'macos-arm64',
+    'LadybirdEngine.framework',
+  );
+  await Process.run('ln', [
+    '-sfn',
+    'Versions/A/Headers',
+    path.join(fwTopLevel, 'Headers'),
+  ]);
+  await Process.run('ln', [
+    '-sfn',
+    'Versions/A/Modules',
+    path.join(fwTopLevel, 'Modules'),
+  ]);
 
   print('Bundling Ladybird resources and dependencies...');
   final releaseDirObj = Directory(releaseDir);

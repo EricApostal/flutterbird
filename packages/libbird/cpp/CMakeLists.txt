@@ -6,11 +6,11 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-add_library(engine SHARED engine.cpp)
+add_library(LadybirdEngine SHARED engine.cpp)
 
 set(LADYBIRD_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../third_party/ladybird")
 
-target_include_directories(engine PRIVATE
+target_include_directories(LadybirdEngine PRIVATE
     ${LADYBIRD_DIR}/UI/AppKit
     ${LADYBIRD_DIR}
     ${LADYBIRD_DIR}/Libraries
@@ -23,12 +23,12 @@ target_include_directories(engine PRIVATE
     ${LADYBIRD_DIR}/Build/release/vcpkg_installed/arm64-osx-dynamic/include
 )
 
-target_link_directories(engine PRIVATE 
+target_link_directories(LadybirdEngine PRIVATE 
     ${LADYBIRD_DIR}/Build/release/lib
     ${LADYBIRD_DIR}/Build/release/vcpkg_installed/arm64-osx-dynamic/lib
 )
 
-target_link_libraries(engine PRIVATE
+target_link_libraries(LadybirdEngine PRIVATE
     "-Wl,-force_load,${LADYBIRD_DIR}/Build/release/lib/libladybird_impl.a"
     lagom-webview
     lagom-web
@@ -60,9 +60,10 @@ target_link_libraries(engine PRIVATE
     "-framework UniformTypeIdentifiers"
 )
 
-set_target_properties(engine PROPERTIES
+set_target_properties(LadybirdEngine PROPERTIES
     FRAMEWORK TRUE
-    MACOSX_FRAMEWORK_IDENTIFIER org.ladybird.engine
+    MACOSX_FRAMEWORK_IDENTIFIER org.ladybird.LadybirdEngine
+    OUTPUT_NAME LadybirdEngine
     BUILD_WITH_INSTALL_RPATH TRUE
     INSTALL_NAME_DIR "@rpath"
 )

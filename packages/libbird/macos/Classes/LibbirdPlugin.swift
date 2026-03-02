@@ -1,16 +1,30 @@
 import Cocoa
+import CoreVideo
 import FlutterMacOS
+
+// C symbols from LadybirdEngine.xcframework — declared via @_silgen_name so Swift
+// can call them without a module import (CocoaPods doesn't expose vendored xcframework
+// modules to the same pod's Swift sources).
+@_silgen_name("tick_ladybird")
+func tick_ladybird()
 
 @_silgen_name("get_latest_pixel_buffer")
 func get_latest_pixel_buffer() -> UnsafeMutableRawPointer?
 
-@_silgen_name("tick_ladybird")
-func tick_ladybird()
-
 @_silgen_name("set_frame_callback")
 func set_frame_callback(
-  _ callback: @convention(c) (UnsafeMutableRawPointer?) -> Void, _ context: UnsafeMutableRawPointer?
+  _ callback: @convention(c) (UnsafeMutableRawPointer?) -> Void,
+  _ context: UnsafeMutableRawPointer?
 )
+
+@_silgen_name("resize_window")
+func resize_window(_ width: Int32, _ height: Int32)
+
+@_silgen_name("navigate_to")
+func navigate_to(_ url: UnsafePointer<CChar>?)
+
+@_silgen_name("set_zoom")
+func set_zoom(_ zoom: Double)
 
 class LadybirdTexture: NSObject, FlutterTexture {
   func copyPixelBuffer() -> Unmanaged<CVPixelBuffer>? {
