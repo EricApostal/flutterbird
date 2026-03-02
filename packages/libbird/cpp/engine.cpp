@@ -69,7 +69,6 @@ public:
                     }
 
                     CFMutableDictionaryRef pixelBufferAttributes = CFDictionaryCreateMutable(
-                        // IOSurfaceProperties and MetalCompatibility
                         kCFAllocatorDefault, 2,
                         &kCFTypeDictionaryKeyCallBacks,
                         &kCFTypeDictionaryValueCallBacks);
@@ -192,7 +191,6 @@ void init_ladybird() {
 
     static char const* argv[] = {"Ladybird", nullptr};
 
-    // TODO: I don't really know what this means?
     static AK::StringView string_views[] = {AK::StringView("Ladybird", 8)};
     Main::Arguments arguments = {1, (char**)argv, {string_views, 1}};
 
@@ -222,21 +220,20 @@ void init_ladybird() {
 
     auto exe = Core::System::current_executable_path();
     if (!exe.is_error()) {
-        // std::println("Executable path: {}", exe.value().view());
     } else {
         std::println("Could not get executable path!");
     }
-    // std::println("Resource root: {}", WebView::s_ladybird_resource_root.view());
 
     g_web_view = FlutterViewImpl::create().release_value();
     g_web_view->initialize_client();
-    // g_web_view->load(URL::Parser::basic_parse(AK::StringView("https://giphy.com", 17)).value());
     g_web_view->load(URL::Parser::basic_parse(AK::StringView("https://github.com/EricApostal/flutterbird", 42)).value());
 
     initialized = true;
 }
 
-extern "C" void tick_ladybird() {
+extern "C" {
+
+void tick_ladybird() {
     if (Core::EventLoop::is_running()) {
         Core::EventLoop::current().pump(Core::EventLoop::WaitMode::PollForEvents);
     }
@@ -281,3 +278,5 @@ void set_zoom(double zoom) {
         g_web_view->update_zoom_scale();
     }
 }
+
+} // extern "C"

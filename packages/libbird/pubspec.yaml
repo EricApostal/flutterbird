@@ -14,6 +14,7 @@ dependencies:
     sdk: flutter
   hooks: ^1.0.1
   native_toolchain_c: ^0.17.4
+  path: ^1.9.1
   plugin_platform_interface: ^2.0.2
 
 dev_dependencies:
@@ -24,8 +25,7 @@ dev_dependencies:
 
 flutter:
   config:
-    # Ideally we have this but I'm not sure how possible it is to package
-    enable-swift-package-manager: false
+    enable-swift-package-manager: true
   plugin:
     platforms:
       linux:
