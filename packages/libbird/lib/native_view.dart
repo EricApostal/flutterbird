@@ -56,7 +56,7 @@ class _LadybirdViewState extends State<LadybirdView> {
   void _onSizeChanged(Size size) {
     if (_lastSize == size) return;
     _lastSize = size;
-    print("resizing to ${size.width.toInt()}, ${size.height.toInt()}");
+
     _bindings.resize_window(size.width.toInt(), size.height.toInt());
 
     _recreateTexture();

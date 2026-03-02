@@ -55,10 +55,7 @@ public class LibbirdPlugin: NSObject, FlutterPlugin {
 
   public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
     switch call.method {
-    case "getPlatformVersion":
-      result("macOS " + ProcessInfo.processInfo.operatingSystemVersionString)
     case "createTexture":
-      print("creating texture in swift")
 
       guard let registry = textureRegistry else {
         result(FlutterError(code: "UNAVAILABLE", message: "Texture registry is null", details: nil))

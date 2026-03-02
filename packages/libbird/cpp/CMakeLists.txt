@@ -29,6 +29,7 @@ target_link_directories(engine PRIVATE
 )
 
 target_link_libraries(engine PRIVATE
+    "-Wl,-force_load,${LADYBIRD_DIR}/Build/release/lib/libladybird_impl.a"
     lagom-webview
     lagom-web
     lagom-requests
@@ -57,4 +58,13 @@ target_link_libraries(engine PRIVATE
 set_target_properties(engine PROPERTIES
     PREFIX "lib"
     SUFFIX ".dylib"
+    BUILD_WITH_INSTALL_RPATH TRUE
+    INSTALL_NAME_DIR "@rpath"
+)
+
+add_custom_command(TARGET engine POST_BUILD
+    COMMAND mkdir -p "${CMAKE_CURRENT_SOURCE_DIR}/../macos/Bundled"
+    COMMAND bash -c "find '${LADYBIRD_DIR}/Build/release' -name '*.dylib' -exec cp {} '${CMAKE_CURRENT_SOURCE_DIR}/../macos/Bundled/' \\;"
+    COMMAND cp "$<TARGET_FILE:engine>" "${CMAKE_CURRENT_SOURCE_DIR}/../macos/Bundled/"
+    COMMAND bash -c "for f in '${CMAKE_CURRENT_SOURCE_DIR}/../macos/Bundled/'*.dylib; do if [ -f \"$$f\" ]; then bn=$$(basename \"$$f\"); chmod +w \"$$f\"; install_name_tool -id \"@rpath/$$bn\" \"$$f\" || true; fi; done"
 )
