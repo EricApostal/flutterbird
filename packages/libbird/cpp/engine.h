@@ -21,6 +21,10 @@ LADYBIRD_API void set_frame_callback(FrameCallback callback, void* context);
 
 LADYBIRD_API void resize_window(int width, int height);
 
+LADYBIRD_API void navigate_to(const char* url);
+
+LADYBIRD_API void set_zoom(double zoom);
+
 #ifdef __cplusplus
 }
 #endif

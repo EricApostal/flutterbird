@@ -64,6 +64,25 @@ class LibbirdBindings {
       );
   late final _resize_window = _resize_windowPtr
       .asFunction<void Function(int, int)>();
+
+  void navigate_to(ffi.Pointer<ffi.Char> url) {
+    return _navigate_to(url);
+  }
+
+  late final _navigate_toPtr =
+      _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Pointer<ffi.Char>)>>(
+        'navigate_to',
+      );
+  late final _navigate_to = _navigate_toPtr
+      .asFunction<void Function(ffi.Pointer<ffi.Char>)>();
+
+  void set_zoom(double zoom) {
+    return _set_zoom(zoom);
+  }
+
+  late final _set_zoomPtr =
+      _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Double)>>('set_zoom');
+  late final _set_zoom = _set_zoomPtr.asFunction<void Function(double)>();
 }
 
 typedef FrameCallback = ffi.Pointer<ffi.NativeFunction<FrameCallbackFunction>>;

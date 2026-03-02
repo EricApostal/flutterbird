@@ -27,6 +27,7 @@ std::mutex g_frame_mutex;
 CVPixelBufferRef g_pixel_buffer = nullptr;
 int g_width = 800;
 int g_height = 600;
+double g_zoom = 1.5;
 
 FrameCallback g_frame_callback = nullptr;
 void* g_frame_callback_context = nullptr;
@@ -44,7 +45,7 @@ public:
         auto theme = Gfx::load_system_theme(theme_path.string()).release_value_but_fixme_should_propagate_errors();
 
         client().async_update_system_theme(m_client_state.page_index, theme);
-        client().async_set_viewport(m_client_state.page_index, viewport_size(), 1.0);
+        client().async_set_viewport(m_client_state.page_index, viewport_size(), g_zoom);
         client().async_set_window_size(m_client_state.page_index, viewport_size());
         
         Web::DevicePixelRect screen_rect { 0, 0, 1920, 1080 };
@@ -125,8 +126,13 @@ public:
 
     void resize(int width, int height) {
         auto size = Web::DevicePixelSize { width, height };
-        client().async_set_viewport(m_client_state.page_index, size, 1.0);
+        client().async_set_viewport(m_client_state.page_index, size, g_zoom);
         client().async_set_window_size(m_client_state.page_index, size);
+    }
+
+    void update_zoom_scale() {
+        auto size = Web::DevicePixelSize { g_width, g_height };
+        client().async_set_viewport(m_client_state.page_index, size, g_zoom);
     }
 
 private:
@@ -258,4 +264,20 @@ void resize_window(int width, int height) {
     }
 
     g_web_view->resize(width, height);
+}
+
+void navigate_to(const char* url) {
+    if (!g_web_view || !url) return;
+    auto parsed = URL::Parser::basic_parse(AK::StringView(url, strlen(url)));
+    if (parsed.has_value()) {
+        g_web_view->load(parsed.value());
+    }
+}
+
+void set_zoom(double zoom) {
+    if (zoom <= 0.0) return;
+    g_zoom = zoom;
+    if (g_web_view) {
+        g_web_view->update_zoom_scale();
+    }
 }

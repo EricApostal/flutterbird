@@ -4,18 +4,14 @@ import 'package:flutter/services.dart';
 
 import 'src/engine_bindings.g.dart';
 
-void main() {
-  runApp(const MaterialApp(home: Scaffold(body: LadybirdCanvas())));
-}
-
-class LadybirdCanvas extends StatefulWidget {
-  const LadybirdCanvas({super.key});
+class LadybirdView extends StatefulWidget {
+  const LadybirdView({super.key});
 
   @override
-  State<LadybirdCanvas> createState() => _LadybirdCanvasState();
+  State<LadybirdView> createState() => _LadybirdViewState();
 }
 
-class _LadybirdCanvasState extends State<LadybirdCanvas> {
+class _LadybirdViewState extends State<LadybirdView> {
   late ffi.DynamicLibrary _lib;
   late LibbirdBindings _bindings;
   int? _textureId;
