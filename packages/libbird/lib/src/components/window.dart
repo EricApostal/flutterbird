@@ -1,11 +1,12 @@
 import 'dart:ffi' as ffi;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-
-import 'src/engine_bindings.g.dart';
+import 'package:libbird/src/controller.dart';
+import 'package:libbird/src/generated/engine_bindings.g.dart';
 
 class LadybirdView extends StatefulWidget {
-  const LadybirdView({super.key});
+  final LadybirdController controller;
+  const LadybirdView({super.key, required this.controller});
 
   @override
   State<LadybirdView> createState() => _LadybirdViewState();

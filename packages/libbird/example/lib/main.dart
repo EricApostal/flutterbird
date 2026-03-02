@@ -1,18 +1,30 @@
 import 'package:flutter/material.dart';
-import 'package:libbird/native_view.dart';
+import 'package:libbird/libbird.dart';
 
 void main() {
   runApp(const MainApp());
 }
 
-class MainApp extends StatelessWidget {
+class MainApp extends StatefulWidget {
   const MainApp({super.key});
 
   @override
+  State<MainApp> createState() => _MainAppState();
+}
+
+class _MainAppState extends State<MainApp> {
+  final _controller = LadybirdController();
+  @override
   Widget build(BuildContext context) {
-    return const MaterialApp(
-      debugShowCheckedModeBanner: false,
-      home: Scaffold(body: LadybirdView()),
+    return MaterialApp(
+      home: Scaffold(
+        body: LadybirdView(controller: _controller),
+        floatingActionButton: FloatingActionButton(
+          onPressed: () {
+            _controller.navigate("https://www.google.com");
+          },
+        ),
+      ),
     );
   }
 }

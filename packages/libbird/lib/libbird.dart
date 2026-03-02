@@ -1,4 +1,6 @@
-export 'native_view.dart';
+export 'src/controller.dart';
+
+export 'src/components/window.dart';
 
 // class Libbird {
 //   Future<String?> getPlatformVersion() {
