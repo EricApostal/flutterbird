@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:code_assets/code_assets.dart';
 import 'package:hooks/hooks.dart';
 
 void _checkShellResponse(ProcessResult result) {
@@ -16,6 +17,8 @@ void main(List<String> args) async {
     final ladybirdRoot = "${packageRoot}third_party/ladybird";
     final cppRoot = "${packageRoot}cpp";
     final cppBuildRoot = "$cppRoot/build";
+    final binariesRoot = "$cppBuildRoot/LadybirdBundle/binaries";
+    final macosResourcesRoot = "${packageRoot}macos/LadybirdResources";
 
     _checkShellResponse(
       await Process.run(
@@ -45,5 +48,14 @@ void main(List<String> args) async {
         runInShell: true,
       ),
     );
+
+    final binaries = Directory(binariesRoot);
+    await Directory(macosResourcesRoot).create();
+    final binariesList = binaries.listSync();
+    for (FileSystemEntity binary in binariesList) {
+      await File(
+        binary.path,
+      ).copy("$macosResourcesRoot/${binary.path.split("/").last}");
+    }
   });
 }

@@ -31,9 +31,7 @@ migrate_working_dir/
 .flutter-plugins-dependencies
 /build/
 /coverage/
-/macos/.ladybird_build_libs
-/macos/Bundled
-/macos/Classes/cpp_generated
+/macos/LadybirdResources
 /cpp/build
 /cpp/.cache
 /.vscode
