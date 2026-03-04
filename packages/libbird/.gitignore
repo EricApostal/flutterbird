@@ -32,6 +32,7 @@ migrate_working_dir/
 /build/
 /coverage/
 /macos/LadybirdResources
+/macos/Bundled
 /cpp/build
 /cpp/.cache
 /.vscode

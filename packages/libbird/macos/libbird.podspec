@@ -2,6 +2,53 @@
 # libbird.podspec
 #
 
+plugin_root = File.expand_path('..', __dir__)
+ladybird_build_dir = File.join(plugin_root, 'third_party', 'ladybird', 'Build')
+
+puts "Preparing libbird resources and building C++ engine..."
+system(<<-'CMD')
+  cd "${PODS_TARGET_SRCROOT:-.}"
+  
+  # Remove the old Classes/cpp_generated if it exists
+  rm -rf Classes/cpp_generated
+  
+  # Build engine.dylib
+  cd ../cpp
+  mkdir -p build
+  cd build
+  cmake -DCMAKE_BUILD_TYPE=Release ..
+  make -j$(sysctl -n hw.ncpu)
+  cd ../../macos
+
+  mkdir -p Bundled
+  
+  # Copy ladybird generated dylibs
+  find ../third_party/ladybird/Build/release -name "*.dylib" -exec cp {} Bundled/ \; 2>/dev/null || true
+  
+  # Copy our engine dylib
+  cp ../cpp/build/libengine.dylib Bundled/ || true
+  
+  # Protect the loop in case the directory is empty
+  for f in Bundled/*.dylib; do
+    if [ -f "$f" ]; then
+      bn=$(basename "$f")
+      chmod +w "$f"
+      install_name_tool -id "@rpath/$bn" "$f" || true
+    fi
+  done
+CMD
+
+found_library_paths = ['$(inherited)']
+found_library_paths << '"${PODS_TARGET_SRCROOT}/Bundled"'
+if Dir.exist?(ladybird_build_dir)
+  Dir.glob("#{ladybird_build_dir}/**/*.{a,dylib}").each do |file|
+    dir_path = File.dirname(file)
+    rel_dir = dir_path.sub(plugin_root, '${PODS_TARGET_SRCROOT}/..')
+    found_library_paths << "\"#{rel_dir}\""
+  end
+end
+found_library_paths.uniq!
+
 Pod::Spec.new do |s|
   s.name             = 'libbird'
   s.version          = '0.0.1'
@@ -20,9 +67,56 @@ Pod::Spec.new do |s|
 
   s.frameworks = 'Cocoa', 'Metal', 'QuartzCore', 'UniformTypeIdentifiers'
 
+
   s.resources = ['Bundled/*']
-  
-  s.preserve_paths = 'LadybirdResources/*'
+
+  s.pod_target_xcconfig = {
+    'DEFINES_MODULE' => 'YES',
+    'CLANG_CXX_LANGUAGE_STANDARD' => 'c++2b',
+    'CLANG_CXX_LIBRARY' => 'libc++',
+    'OTHER_CPLUSPLUSFLAGS' => '-fobjc-arc -Wno-deprecated-anon-enum-enum-conversion',
+    
+    'VALID_ARCHS' => 'arm64',
+    'EXCLUDED_ARCHS[sdk=macosx*]' => 'x86_64',
+
+    'LIBRARY_SEARCH_PATHS' => found_library_paths.join(' '),
+    
+    'LD_RUNPATH_SEARCH_PATHS' => [
+      '$(inherited)',
+      '@executable_path/../Resources', 
+      '@loader_path/../../Resources' 
+    ].join(' '),
+    
+    'OTHER_LDFLAGS' => [
+      '$(inherited)',
+      '-framework Cocoa -framework Metal -framework QuartzCore -framework UniformTypeIdentifiers',
+      
+      '-Wl,-force_load,"${PODS_TARGET_SRCROOT}/../third_party/ladybird/Build/release/lib/libladybird_impl.a"',
+      
+      '-Wl,-rpath,@loader_path/../Resources',
+      
+      '-lengine',
+      '-llagom-webview', '-llagom-web', '-llagom-requests', 
+      '-llagom-js', '-llagom-gfx', '-llagom-ipc', '-llagom-url', 
+      '-llagom-filesystem', '-llagom-crypto', '-llagom-database',
+      '-llagom-core','-llagom-ak', 
+      '-llagom-unicode', '-llagom-main',
+      '-lskia', '-lz'
+    ].join(' '),
+
+    'HEADER_SEARCH_PATHS' => [
+      '$(inherited)',
+      '"${PODS_TARGET_SRCROOT}/../third_party/ladybird/UI/AppKit"',
+      '"${PODS_TARGET_SRCROOT}/../third_party/ladybird"',
+      '"${PODS_TARGET_SRCROOT}/../third_party/ladybird/Libraries"',
+      '"${PODS_TARGET_SRCROOT}/../third_party/ladybird/Services"',
+      '"${PODS_TARGET_SRCROOT}/../third_party/ladybird/Build/release"',
+      '"${PODS_TARGET_SRCROOT}/../third_party/ladybird/Build/release/Lagom"',
+      '"${PODS_TARGET_SRCROOT}/../third_party/ladybird/Build/release/Lagom/Libraries"',
+      '"${PODS_TARGET_SRCROOT}/../third_party/ladybird/Build/release/Lagom/Services"',
+      '"${PODS_TARGET_SRCROOT}/../third_party/ladybird/Build/release/vcpkg_installed/arm64-osx-dynamic/include"'
+    ].join(' ')
+  }
 
   s.script_phases = [
     {
@@ -32,17 +126,12 @@ Pod::Spec.new do |s|
         APP_BUILD_DIR=$(dirname "${BUILT_PRODUCTS_DIR}")
         APP_NAME_FILE="${PODS_ROOT}/../Flutter/ephemeral/.app_filename"
         
-        if [ -f "$APP_NAME_FILE" ]; then
-          APP_NAME=$(cat "$APP_NAME_FILE")
-        else
-          EXISTING_APP=$(ls -1d "${APP_BUILD_DIR}"/*.app 2>/dev/null | head -n 1)
-          if [ -n "$EXISTING_APP" ]; then
-            APP_NAME=$(basename "$EXISTING_APP")
-          else
-            APP_NAME="Runner.app"
-          fi
+        if [ ! -f "$APP_NAME_FILE" ]; then
+          echo "Warning: Flutter ephemeral app_filename not found. Skipping executable copy."
+          exit 0
         fi
         
+        APP_NAME=$(cat "$APP_NAME_FILE")
         APP_PATH="${APP_BUILD_DIR}/${APP_NAME}"
         DEST_BIN_DIR="${APP_PATH}/Contents/MacOS"
         DEST_RES_DIR="${APP_PATH}/Contents/Resources"
@@ -64,18 +153,4 @@ Pod::Spec.new do |s|
       CMD
     }
   ]
-
-  s.pod_target_xcconfig = {
-    'DEFINES_MODULE' => 'YES',
-    'CLANG_CXX_LANGUAGE_STANDARD' => 'c++2b',
-    'CLANG_CXX_LIBRARY' => 'libc++',
-    'OTHER_CPLUSPLUSFLAGS' => '-fobjc-arc -Wno-deprecated-anon-enum-enum-conversion',
-    
-    'VALID_ARCHS' => 'arm64',
-    'EXCLUDED_ARCHS[sdk=macosx*]' => 'x86_64',
-
-    'LIBRARY_SEARCH_PATHS' => [
-      '$(inherited)',
-    ].join(' '),
-  }
 end
