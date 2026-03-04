@@ -41,18 +41,18 @@ class _LadybirdViewState extends State<LadybirdView> {
     }
   }
 
-  Future<void> _recreateTexture() async {
-    final int? oldId = _textureId;
-    final int textureId = await _channel.invokeMethod('createTexture');
-    if (oldId != null) {
-      // await _channel.invokeMethod('unregisterTexture', oldId);
-    }
-    if (mounted) {
-      setState(() {
-        _textureId = textureId;
-      });
-    }
-  }
+  // Future<void> _recreateTexture() async {
+  //   final int? oldId = _textureId;
+  //   final int textureId = await _channel.invokeMethod('createTexture');
+  //   if (oldId != null) {
+  //     // await _channel.invokeMethod('unregisterTexture', oldId);
+  //   }
+  //   if (mounted) {
+  //     setState(() {
+  //       _textureId = textureId;
+  //     });
+  //   }
+  // }
 
   void _onSizeChanged(Size size) {
     if (_lastSize == size) return;
@@ -60,7 +60,7 @@ class _LadybirdViewState extends State<LadybirdView> {
 
     _bindings.resize_window(size.width.toInt(), size.height.toInt());
 
-    _recreateTexture();
+    // _recreateTexture();
   }
 
   @override
