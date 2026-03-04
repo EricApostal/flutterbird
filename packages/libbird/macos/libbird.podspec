@@ -32,12 +32,17 @@ Pod::Spec.new do |s|
         APP_BUILD_DIR=$(dirname "${BUILT_PRODUCTS_DIR}")
         APP_NAME_FILE="${PODS_ROOT}/../Flutter/ephemeral/.app_filename"
         
-        if [ ! -f "$APP_NAME_FILE" ]; then
-          echo "Warning: Flutter ephemeral app_filename not found. Skipping executable copy."
-          exit 0
+        if [ -f "$APP_NAME_FILE" ]; then
+          APP_NAME=$(cat "$APP_NAME_FILE")
+        else
+          EXISTING_APP=$(ls -1d "${APP_BUILD_DIR}"/*.app 2>/dev/null | head -n 1)
+          if [ -n "$EXISTING_APP" ]; then
+            APP_NAME=$(basename "$EXISTING_APP")
+          else
+            APP_NAME="Runner.app"
+          fi
         fi
         
-        APP_NAME=$(cat "$APP_NAME_FILE")
         APP_PATH="${APP_BUILD_DIR}/${APP_NAME}"
         DEST_BIN_DIR="${APP_PATH}/Contents/MacOS"
         DEST_RES_DIR="${APP_PATH}/Contents/Resources"
