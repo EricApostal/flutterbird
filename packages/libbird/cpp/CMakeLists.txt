@@ -29,17 +29,13 @@ target_link_directories(engine PRIVATE
 
 target_link_libraries(engine PRIVATE
     lagom-webview
-    
     lagom-web
     lagom-js
     lagom-requests
-    
     lagom-url
     lagom-ipc
     lagom-core
-    lagom-ak
-    lagom-coreminimal
-    
+    lagom-ak  
     lagom-gfx
     skia
 
@@ -54,12 +50,25 @@ set_target_properties(engine PROPERTIES
     PREFIX "lib"
     SUFFIX ".dylib"
     BUILD_WITH_INSTALL_RPATH TRUE
+    INSTALL_RPATH "@loader_path/ladybird_libs"
     INSTALL_NAME_DIR "@rpath"
 )
 
+set(BUNDLE_DIR "${CMAKE_BINARY_DIR}/LadybirdBundle")
+
 add_custom_command(TARGET engine POST_BUILD
-    COMMAND mkdir -p "${CMAKE_CURRENT_SOURCE_DIR}/../macos/Bundled"
-    COMMAND bash -c "find '${LADYBIRD_DIR}/Build/release' -name '*.dylib' -exec cp {} '${CMAKE_CURRENT_SOURCE_DIR}/../macos/Bundled/' \\;"
-    COMMAND cp "$<TARGET_FILE:engine>" "${CMAKE_CURRENT_SOURCE_DIR}/../macos/Bundled/"
-    COMMAND bash -c "for f in '${CMAKE_CURRENT_SOURCE_DIR}/../macos/Bundled/'*.dylib; do if [ -f \"$$f\" ]; then bn=$$(basename \"$$f\"); chmod +w \"$$f\"; install_name_tool -id \"@rpath/$$bn\" \"$$f\" || true; fi; done"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${BUNDLE_DIR}/libraries"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${BUNDLE_DIR}/binaries"
+    
+    COMMAND ${CMAKE_COMMAND} -E copy "$<TARGET_FILE:engine>" "${BUNDLE_DIR}/"
+
+    COMMAND ${CMAKE_COMMAND} -E copy_directory "${LADYBIRD_DIR}/Build/release/lib" "${BUNDLE_DIR}/libraries"
+
+    COMMAND ${CMAKE_COMMAND} -E copy "${LADYBIRD_DIR}/Build/release/bin/Ladybird.app/Contents/MacOS/WebContent" "${BUNDLE_DIR}/binaries/"
+    COMMAND ${CMAKE_COMMAND} -E copy "${LADYBIRD_DIR}/Build/release/bin/Ladybird.app/Contents/MacOS/RequestServer" "${BUNDLE_DIR}/binaries/"
+    COMMAND ${CMAKE_COMMAND} -E copy "${LADYBIRD_DIR}/Build/release/bin/Ladybird.app/Contents/MacOS/ImageDecoder" "${BUNDLE_DIR}/binaries/"
+    COMMAND ${CMAKE_COMMAND} -E copy "${LADYBIRD_DIR}/Build/release/bin/Ladybird.app/Contents/MacOS/WebWorker" "${BUNDLE_DIR}/binaries/"
+    COMMAND ${CMAKE_COMMAND} -E copy "${LADYBIRD_DIR}/Build/release/bin/Ladybird.app/Contents/MacOS/Ladybird" "${BUNDLE_DIR}/binaries/"
+
+    COMMAND ${CMAKE_COMMAND} -E copy_directory "${LADYBIRD_DIR}/Base/res" "${BUNDLE_DIR}/res"
 )

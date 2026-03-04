@@ -1,7 +1,9 @@
 name: libbird
 description: "A new Flutter plugin project."
 version: 0.0.1
-homepage:
+homepage: 0.0.1
+
+native_assets: true
 
 environment:
   sdk: ^3.11.0

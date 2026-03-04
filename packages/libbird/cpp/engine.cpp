@@ -99,6 +99,7 @@ public:
         on_web_content_crashed = []() {
             std::println("WebContent process crashed!!!");
         };
+        
     }
 
     void resize(int width, int height) {
