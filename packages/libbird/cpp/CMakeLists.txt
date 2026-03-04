@@ -11,7 +11,6 @@ add_library(engine SHARED engine.cpp)
 set(LADYBIRD_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../third_party/ladybird")
 
 target_include_directories(engine PRIVATE
-    ${LADYBIRD_DIR}/UI/AppKit
     ${LADYBIRD_DIR}
     ${LADYBIRD_DIR}/Libraries
     ${LADYBIRD_DIR}/Userland/Libraries
@@ -29,30 +28,26 @@ target_link_directories(engine PRIVATE
 )
 
 target_link_libraries(engine PRIVATE
-    "-Wl,-force_load,${LADYBIRD_DIR}/Build/release/lib/libladybird_impl.a"
     lagom-webview
+    
     lagom-web
-    lagom-requests
     lagom-js
-    lagom-gfx
-    lagom-ipc
+    lagom-requests
+    
     lagom-url
-    lagom-filesystem
-    lagom-crypto
-    lagom-database
+    lagom-ipc
     lagom-core
-    lagom-coreminimal
     lagom-ak
-    lagom-unicode
-    lagom-main
+    lagom-coreminimal
+    
+    lagom-gfx
     skia
-    sqlite3
-    ssl
-    crypto
-    z
+
     "-framework CoreFoundation"
     "-framework CoreVideo"
     "-framework IOSurface"
+    "-framework Metal"
+    "-framework Foundation"
 )
 
 set_target_properties(engine PROPERTIES

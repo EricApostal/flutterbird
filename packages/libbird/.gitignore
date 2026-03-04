@@ -36,3 +36,5 @@ migrate_working_dir/
 /macos/Classes/cpp_generated
 /cpp/build
 /cpp/.cache
+/.vscode
+compile_commands.json

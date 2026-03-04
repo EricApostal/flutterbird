@@ -54,67 +54,44 @@ public:
         set_system_visibility_state(Web::HTML::VisibilityState::Visible);
 
         on_ready_to_paint = [this]() {
-            if (m_client_state.has_usable_bitmap && m_client_state.front_bitmap.bitmap) {
-                auto const* bitmap = m_client_state.front_bitmap.bitmap.ptr();
+            // Ensure we have a valid front bitmap and an IOSurface reference
+            if (m_client_state.has_usable_bitmap && m_client_state.front_bitmap.iosurface_ref) {
                 auto size = m_client_state.front_bitmap.last_painted_size.to_type<int>();
                 
+                // Cast the void* from Ladybird back to an Apple IOSurfaceRef
+                IOSurfaceRef iosurface = (IOSurfaceRef)m_client_state.front_bitmap.iosurface_ref;
+
                 std::lock_guard<std::mutex> lock(g_frame_mutex);
                 
+                // If the size changed or we don't have a buffer yet, we need to wrap the new IOSurface
                 if (size.width() != g_width || size.height() != g_height || !g_pixel_buffer) {
                     g_width = size.width();
                     g_height = size.height();
+                    
                     if (g_pixel_buffer) {
                         CVPixelBufferRelease(g_pixel_buffer);
                         g_pixel_buffer = nullptr;
                     }
 
-                    CFMutableDictionaryRef pixelBufferAttributes = CFDictionaryCreateMutable(
-                        // IOSurfaceProperties and MetalCompatibility
-                        kCFAllocatorDefault, 2,
-                        &kCFTypeDictionaryKeyCallBacks,
-                        &kCFTypeDictionaryValueCallBacks);
-                    
-                    CFDictionaryRef emptyDict = CFDictionaryCreate(kCFAllocatorDefault, nullptr, nullptr, 0, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
-                    CFDictionarySetValue(pixelBufferAttributes, kCVPixelBufferIOSurfacePropertiesKey, emptyDict);
-                    CFRelease(emptyDict);
-                    
-        
-                    CFDictionarySetValue(pixelBufferAttributes, kCVPixelBufferMetalCompatibilityKey, kCFBooleanTrue);
-                    
-                    CVReturn result = CVPixelBufferCreate(
+                    // Just wrap the ladybird buffer directly
+                    CVReturn result = CVPixelBufferCreateWithIOSurface(
                         kCFAllocatorDefault,
-                        g_width,
-                        g_height,
-                        kCVPixelFormatType_32BGRA,
-                        pixelBufferAttributes,
+                        iosurface,
+                        nullptr, // IOSurface already dictates format/size
                         &g_pixel_buffer
                     );
                     
-                    CFRelease(pixelBufferAttributes);
-                    
                     if (result != kCVReturnSuccess) {
-                        std::println("Failed to create CVPixelBuffer!");
+                        std::println("Failed to wrap IOSurface in CVPixelBuffer! Error: {}", result);
                         return;
                     }
                 }
 
-                CVPixelBufferLockBaseAddress(g_pixel_buffer, 0);
-                uint8_t* dest = (uint8_t*)CVPixelBufferGetBaseAddress(g_pixel_buffer);
-                size_t dest_stride = CVPixelBufferGetBytesPerRow(g_pixel_buffer);
-                
-                auto width_bytes = g_width * 4;
-                for (int y = 0; y < g_height; ++y) {
-                    memcpy(dest + (y * dest_stride), bitmap->scanline_u8(y), width_bytes);
-                }
-                
-                CVPixelBufferUnlockBaseAddress(g_pixel_buffer, 0);
-                
                 if (g_frame_callback) {
                     g_frame_callback(g_frame_callback_context);
                 }
             }
         };
-
         on_web_content_process_change_for_cross_site_navigation = []() {
             std::println("WebContent process changed for cross site navigation!");
         };
