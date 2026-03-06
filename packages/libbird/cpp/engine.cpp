@@ -61,14 +61,12 @@ public:
                 // Cast the void* from Ladybird back to an Apple IOSurfaceRef
                 IOSurfaceRef iosurface = (IOSurfaceRef)m_client_state.front_bitmap.iosurface_ref;
 
-                size_t surf_width = IOSurfaceGetWidth(iosurface);
-                size_t surf_height = IOSurfaceGetHeight(iosurface);
-                std::println("on_ready_to_paint: last_painted_size={}x{} iosurface={}x{}", size.width(), size.height(), surf_width, surf_height);
+                IOSurfaceRef current_iosurface = g_pixel_buffer ? CVPixelBufferGetIOSurface(g_pixel_buffer) : nullptr;
 
                 std::lock_guard<std::mutex> lock(g_frame_mutex);
                 
-                // If the size changed or we don't have a buffer yet, we need to wrap the new IOSurface
-                if (size.width() != g_width || size.height() != g_height || !g_pixel_buffer) {
+                // If the size changed or iosurface changed, we need to wrap the new IOSurface
+                if (current_iosurface != iosurface || size.width() != g_width || size.height() != g_height || !g_pixel_buffer) {
                     g_width = size.width();
                     g_height = size.height();
                     
@@ -77,13 +75,48 @@ public:
                         g_pixel_buffer = nullptr;
                     }
 
-                    // Just wrap the ladybird buffer directly
+                    int width = g_width;
+                    int height = g_height;
+                    size_t surf_width = IOSurfaceGetWidth(iosurface);
+                    size_t surf_height = IOSurfaceGetHeight(iosurface);
+
+                    int right_pad = (surf_width > static_cast<size_t>(width)) ? (surf_width - width) : 0;
+                    int bottom_pad = (surf_height > static_cast<size_t>(height)) ? (surf_height - height) : 0;
+                    int32_t format = IOSurfaceGetPixelFormat(iosurface);
+
+                    CFNumberRef widthRef = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &width);
+                    CFNumberRef heightRef = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &height);
+                    CFNumberRef rightPadRef = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &right_pad);
+                    CFNumberRef bottomPadRef = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &bottom_pad);
+                    CFNumberRef formatRef = CFNumberCreate(kCFAllocatorDefault, kCFNumberSInt32Type, &format);
+
+                    const void* keys[] = { 
+                        kCVPixelBufferWidthKey, 
+                        kCVPixelBufferHeightKey, 
+                        kCVPixelBufferExtendedPixelsRightKey, 
+                        kCVPixelBufferExtendedPixelsBottomKey,
+                        kCVPixelBufferPixelFormatTypeKey 
+                    };
+                    const void* values[] = { widthRef, heightRef, rightPadRef, bottomPadRef, formatRef };
+
+                    CFDictionaryRef attributes = CFDictionaryCreate(kCFAllocatorDefault, keys, values, 5, 
+                                                                    &kCFTypeDictionaryKeyCallBacks, 
+                                                                    &kCFTypeDictionaryValueCallBacks);
+
+                    // Map the IOSurface using exact properties and padded borders
                     CVReturn result = CVPixelBufferCreateWithIOSurface(
                         kCFAllocatorDefault,
                         iosurface,
-                        nullptr, // IOSurface already dictates format/size
+                        attributes,
                         &g_pixel_buffer
                     );
+
+                    CFRelease(attributes);
+                    CFRelease(widthRef);
+                    CFRelease(heightRef);
+                    CFRelease(rightPadRef);
+                    CFRelease(bottomPadRef);
+                    CFRelease(formatRef);
                     
                     if (result != kCVReturnSuccess) {
                         std::println("Failed to wrap IOSurface in CVPixelBuffer! Error: {}", result);
