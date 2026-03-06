@@ -75,49 +75,14 @@ public:
                         g_pixel_buffer = nullptr;
                     }
 
-                    int width = g_width;
-                    int height = g_height;
-                    size_t surf_width = IOSurfaceGetWidth(iosurface);
-                    size_t surf_height = IOSurfaceGetHeight(iosurface);
-
-                    int right_pad = (surf_width > static_cast<size_t>(width)) ? (surf_width - width) : 0;
-                    int bottom_pad = (surf_height > static_cast<size_t>(height)) ? (surf_height - height) : 0;
-                    int32_t format = IOSurfaceGetPixelFormat(iosurface);
-
-                    CFNumberRef widthRef = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &width);
-                    CFNumberRef heightRef = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &height);
-                    CFNumberRef rightPadRef = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &right_pad);
-                    CFNumberRef bottomPadRef = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &bottom_pad);
-                    CFNumberRef formatRef = CFNumberCreate(kCFAllocatorDefault, kCFNumberSInt32Type, &format);
-
-                    const void* keys[] = { 
-                        kCVPixelBufferWidthKey, 
-                        kCVPixelBufferHeightKey, 
-                        kCVPixelBufferExtendedPixelsRightKey, 
-                        kCVPixelBufferExtendedPixelsBottomKey,
-                        kCVPixelBufferPixelFormatTypeKey 
-                    };
-                    const void* values[] = { widthRef, heightRef, rightPadRef, bottomPadRef, formatRef };
-
-                    CFDictionaryRef attributes = CFDictionaryCreate(kCFAllocatorDefault, keys, values, 5, 
-                                                                    &kCFTypeDictionaryKeyCallBacks, 
-                                                                    &kCFTypeDictionaryValueCallBacks);
-
-                    // Map the IOSurface using exact properties and padded borders
+                    // Map the IOSurface natively without properties to avoid metal texture cache corruption on resize
                     CVReturn result = CVPixelBufferCreateWithIOSurface(
                         kCFAllocatorDefault,
                         iosurface,
-                        attributes,
+                        nullptr,
                         &g_pixel_buffer
                     );
 
-                    CFRelease(attributes);
-                    CFRelease(widthRef);
-                    CFRelease(heightRef);
-                    CFRelease(rightPadRef);
-                    CFRelease(bottomPadRef);
-                    CFRelease(formatRef);
-                    
                     if (result != kCVReturnSuccess) {
                         std::println("Failed to wrap IOSurface in CVPixelBuffer! Error: {}", result);
                         return;
@@ -296,4 +261,20 @@ void set_zoom(double zoom) {
     if (g_web_view) {
         g_web_view->update_zoom_scale();
     }
+}
+
+int get_iosurface_width() {
+    std::lock_guard<std::mutex> lock(g_frame_mutex);
+    if (!g_pixel_buffer) return g_width;
+    IOSurfaceRef iosurface = CVPixelBufferGetIOSurface(g_pixel_buffer);
+    if (!iosurface) return g_width;
+    return IOSurfaceGetWidth(iosurface);
+}
+
+int get_iosurface_height() {
+    std::lock_guard<std::mutex> lock(g_frame_mutex);
+    if (!g_pixel_buffer) return g_height;
+    IOSurfaceRef iosurface = CVPixelBufferGetIOSurface(g_pixel_buffer);
+    if (!iosurface) return g_height;
+    return IOSurfaceGetHeight(iosurface);
 }

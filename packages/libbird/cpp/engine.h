@@ -25,6 +25,10 @@ LADYBIRD_API void navigate_to(const char* url);
 
 LADYBIRD_API void set_zoom(double zoom);
 
+LADYBIRD_API int get_iosurface_width();
+
+LADYBIRD_API int get_iosurface_height();
+
 #ifdef __cplusplus
 }
 #endif

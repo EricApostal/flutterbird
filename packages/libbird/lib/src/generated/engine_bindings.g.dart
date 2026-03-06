@@ -83,6 +83,24 @@ class LibbirdBindings {
   late final _set_zoomPtr =
       _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Double)>>('set_zoom');
   late final _set_zoom = _set_zoomPtr.asFunction<void Function(double)>();
+
+  int get_iosurface_width() {
+    return _get_iosurface_width();
+  }
+
+  late final _get_iosurface_widthPtr =
+      _lookup<ffi.NativeFunction<ffi.Int Function()>>('get_iosurface_width');
+  late final _get_iosurface_width = _get_iosurface_widthPtr
+      .asFunction<int Function()>();
+
+  int get_iosurface_height() {
+    return _get_iosurface_height();
+  }
+
+  late final _get_iosurface_heightPtr =
+      _lookup<ffi.NativeFunction<ffi.Int Function()>>('get_iosurface_height');
+  late final _get_iosurface_height = _get_iosurface_heightPtr
+      .asFunction<int Function()>();
 }
 
 typedef FrameCallback = ffi.Pointer<ffi.NativeFunction<FrameCallbackFunction>>;

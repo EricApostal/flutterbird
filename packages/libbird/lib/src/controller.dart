@@ -12,12 +12,27 @@ class LadybirdController {
   // int? _textureId;
   Size? _lastSize;
 
+  late final int Function() _getIosurfaceWidth;
+  late final int Function() _getIosurfaceHeight;
+
   LadybirdController() {
     _lib = ffi.DynamicLibrary.process();
     _bindings = LibbirdBindings(_lib);
 
+    _getIosurfaceWidth = _lib
+        .lookup<ffi.NativeFunction<ffi.Int32 Function()>>('get_iosurface_width')
+        .asFunction();
+    _getIosurfaceHeight = _lib
+        .lookup<ffi.NativeFunction<ffi.Int32 Function()>>(
+          'get_iosurface_height',
+        )
+        .asFunction();
+
     _bindings.init_ladybird();
   }
+
+  int getIosurfaceWidth() => _getIosurfaceWidth();
+  int getIosurfaceHeight() => _getIosurfaceHeight();
 
   void navigate(String url) {
     final ffi.Pointer<Utf8> charPointer = url.toNativeUtf8();

@@ -38,7 +38,9 @@ class _LadybirdViewState extends State<LadybirdView> {
         _textureId = textureId;
       });
       if (oldId != null) {
-        widget.controller.unregisterTexture(oldId);
+        Future.delayed(const Duration(milliseconds: 500), () {
+          widget.controller.unregisterTexture(oldId);
+        });
       }
     } else {
       widget.controller.unregisterTexture(textureId);
@@ -77,7 +79,27 @@ class _LadybirdViewState extends State<LadybirdView> {
           );
           _onSizeChanged(size);
 
-          return Texture(textureId: _textureId!);
+          final paddedWidth = widget.controller.getIosurfaceWidth() / density;
+          final paddedHeight = widget.controller.getIosurfaceHeight() / density;
+
+          return ClipRect(
+            child: OverflowBox(
+              alignment: Alignment.topLeft,
+              minWidth: constraints.maxWidth,
+              minHeight: constraints.maxHeight,
+              maxWidth: paddedWidth > constraints.maxWidth
+                  ? paddedWidth
+                  : constraints.maxWidth,
+              maxHeight: paddedHeight > constraints.maxHeight
+                  ? paddedHeight
+                  : constraints.maxHeight,
+              child: SizedBox(
+                width: paddedWidth,
+                height: paddedHeight,
+                child: Texture(textureId: _textureId!),
+              ),
+            ),
+          );
         },
       ),
     );
