@@ -77,8 +77,8 @@ class _LadybirdViewState extends State<LadybirdView> {
           );
           _onSizeChanged(size);
 
-          final paddedWidth = widget.controller.getIosurfaceWidth() / density;
-          final paddedHeight = widget.controller.getIosurfaceHeight() / density;
+          final paddedWidth = widget.controller.getSurfaceWidth() / density;
+          final paddedHeight = widget.controller.getSurfaceHeight() / density;
 
           return ClipRect(
             child: OverflowBox(
