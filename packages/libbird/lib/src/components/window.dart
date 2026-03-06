@@ -1,8 +1,5 @@
-import 'dart:ffi' as ffi;
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:libbird/src/controller.dart';
-import 'package:libbird/src/generated/engine_bindings.g.dart';
 
 class LadybirdView extends StatefulWidget {
   final LadybirdController controller;
@@ -13,26 +10,15 @@ class LadybirdView extends StatefulWidget {
 }
 
 class _LadybirdViewState extends State<LadybirdView> {
-  late ffi.DynamicLibrary _lib;
-  late LibbirdBindings _bindings;
   int? _textureId;
-  Size? _lastSize;
-  static const MethodChannel _channel = MethodChannel('libbird');
-
   @override
   void initState() {
     super.initState();
-
-    _lib = ffi.DynamicLibrary.process();
-    _bindings = LibbirdBindings(_lib);
-
-    _bindings.init_ladybird();
-
     _createTexture();
   }
 
   Future<void> _createTexture() async {
-    final int textureId = await _channel.invokeMethod('createTexture');
+    final int textureId = await widget.controller.createTexture();
 
     if (mounted) {
       setState(() {
@@ -41,26 +27,21 @@ class _LadybirdViewState extends State<LadybirdView> {
     }
   }
 
-  // Future<void> _recreateTexture() async {
-  //   final int? oldId = _textureId;
-  //   final int textureId = await _channel.invokeMethod('createTexture');
-  //   if (oldId != null) {
-  //     // await _channel.invokeMethod('unregisterTexture', oldId);
-  //   }
-  //   if (mounted) {
-  //     setState(() {
-  //       _textureId = textureId;
-  //     });
-  //   }
-  // }
+  Future<void> _recreateTexture() async {
+    final int textureId = await widget.controller.createTexture();
+
+    if (mounted) {
+      setState(() {
+        _textureId = textureId;
+      });
+    }
+  }
 
   void _onSizeChanged(Size size) {
-    if (_lastSize == size) return;
-    _lastSize = size;
-
-    _bindings.resize_window(size.width.toInt(), size.height.toInt());
-
-    // _recreateTexture();
+    final didResize = widget.controller.resizeWindow(size);
+    if (didResize) {
+      _recreateTexture();
+    }
   }
 
   @override
@@ -78,7 +59,7 @@ class _LadybirdViewState extends State<LadybirdView> {
           );
           _onSizeChanged(size);
 
-          return Texture(key: ValueKey(_textureId), textureId: _textureId!);
+          return Texture(textureId: _textureId!);
         },
       ),
     );
