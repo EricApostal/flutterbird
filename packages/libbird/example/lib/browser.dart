@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:libbird/libbird.dart';
+import 'package:libbird/ladybird.dart';
 
 class BrowserWindow extends StatefulWidget {
   const BrowserWindow({super.key});
