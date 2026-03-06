@@ -37,11 +37,3 @@ migrate_working_dir/
 /cpp/.cache
 /.vscode
 compile_commands.json
-
-!third_party/ladybird/Tests/LibJS/AST/output/.gitignore
-!third_party/ladybird/Tests/LibJS/Bytecode/output/.gitignore
-!third_party/ladybird/Tests/LibWeb/Text/expected/html/csp-frame-ancestors-opaque-origin.txt
-!third_party/ladybird/Tests/LibWeb/Text/expected/html/timer-nesting-level-clamping.txt
-!third_party/ladybird/Tests/LibWeb/Text/input/html/csp-frame-ancestors-opaque-origin.html
-!third_party/ladybird/Tests/LibWeb/Text/input/html/timer-nesting-level-clamping.html
-!third_party/ladybird/UI/Android/src/main/assets/.gitkeep
