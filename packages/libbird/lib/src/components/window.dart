@@ -37,11 +37,14 @@ class _LadybirdViewState extends State<LadybirdView> {
       setState(() {
         _textureId = textureId;
       });
-      if (oldId != null) {
-        // widget.controller.unregisterTexture(oldId);
-      }
+      // if (oldId != null) {
+      //   widget.controller.unregisterTexture(oldId);
+      // }
     } else {
-      widget.controller.unregisterTexture(textureId);
+      await widget.controller.unregisterTexture(textureId);
+      if (mounted) {
+        setState(() {});
+      }
     }
   }
 
@@ -94,7 +97,10 @@ class _LadybirdViewState extends State<LadybirdView> {
               child: SizedBox(
                 width: paddedWidth,
                 height: paddedHeight,
-                child: Texture(textureId: _textureId!),
+                child: Texture(
+                  key: ValueKey(_textureId),
+                  textureId: _textureId!,
+                ),
               ),
             ),
           );
