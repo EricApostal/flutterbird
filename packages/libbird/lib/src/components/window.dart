@@ -33,13 +33,9 @@ class _LadybirdViewState extends State<LadybirdView> {
     final int textureId = await widget.controller.createTexture();
 
     if (mounted) {
-      final oldId = _textureId;
       setState(() {
         _textureId = textureId;
       });
-      // if (oldId != null) {
-      //   widget.controller.unregisterTexture(oldId);
-      // }
     } else {
       await widget.controller.unregisterTexture(textureId);
       if (mounted) {

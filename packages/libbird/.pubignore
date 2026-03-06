@@ -1,5 +1,4 @@
-/third_party/
-/macos/Bundled/
-/macos/Bundled/
-/cpp/build/
-/cpp/.cache/
+third_party/
+macos/Bundled/
+cpp/build/
+cpp/.cache/
