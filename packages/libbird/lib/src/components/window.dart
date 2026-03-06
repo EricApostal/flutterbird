@@ -38,9 +38,7 @@ class _LadybirdViewState extends State<LadybirdView> {
         _textureId = textureId;
       });
       if (oldId != null) {
-        Future.delayed(const Duration(milliseconds: 500), () {
-          widget.controller.unregisterTexture(oldId);
-        });
+        // widget.controller.unregisterTexture(oldId);
       }
     } else {
       widget.controller.unregisterTexture(textureId);
