@@ -1,3 +1,3 @@
 ## 0.0.1
 
-* TODO: Describe initial release.
+* Implement very basic foundation spawning instances and interfacing with Ladybird on MacOS
