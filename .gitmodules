@@ -1,3 +1,0 @@
-[submodule "packages/libbird/third_party/ladybird"]
-	path = packages/libbird/third_party/ladybird
-	url = https://github.com/LadybirdBrowser/ladybird

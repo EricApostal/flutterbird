@@ -6,11 +6,15 @@ We currently only support **MacOS**. Linux support will begin shortly as we get 
 
 ## Status
 This project is ***very*** early. 
-### What is supported
+
+## How to use
+Right now, you'll need to do a bit of work yourself.
+
+## What is supported
 - Launching a browser window on MacOS
 - Basic navigation
 
-### What needs to be supported
+## What needs to be supported
 - Linux
 - Many window fixes
 - Interfacing with the web content (typing, scrolling, etc)
@@ -18,5 +22,5 @@ This project is ***very*** early.
 
 It should also be noted that ladybird itself is very early, so you'll encounter a mix of issues introduced by both this library and Ladybird.
 
-### Why?
+## Why?
 Mostly because it's fun. I want to learn more low level Flutter stuff with Textures and such. Also, Ladybird is cool to work with and I am looking to implement [FlutterBird](github.com/EricApostal/flutterbird), a *creatively named* Flutter-based frontend for Ladybird.
