@@ -21,65 +21,65 @@ execute_process(
 
 add_library(engine SHARED engine.cpp)
 
-# target_include_directories(engine PRIVATE
-#     ${LADYBIRD_DIR}
-#     ${LADYBIRD_DIR}/Libraries
-#     ${LADYBIRD_DIR}/Userland/Libraries
-#     ${LADYBIRD_DIR}/Services
-#     ${LADYBIRD_DIR}/Build/release
-#     ${LADYBIRD_DIR}/Build/release/Lagom
-#     ${LADYBIRD_DIR}/Build/release/Lagom/Libraries
-#     ${LADYBIRD_DIR}/Build/release/Lagom/Services
-#     ${LADYBIRD_DIR}/Build/release/vcpkg_installed/arm64-osx-dynamic/include
-# )
+target_include_directories(engine PRIVATE
+    ${LADYBIRD_DIR}
+    ${LADYBIRD_DIR}/Libraries
+    ${LADYBIRD_DIR}/Userland/Libraries
+    ${LADYBIRD_DIR}/Services
+    ${LADYBIRD_DIR}/Build/release
+    ${LADYBIRD_DIR}/Build/release/Lagom
+    ${LADYBIRD_DIR}/Build/release/Lagom/Libraries
+    ${LADYBIRD_DIR}/Build/release/Lagom/Services
+    ${LADYBIRD_DIR}/Build/release/vcpkg_installed/arm64-osx-dynamic/include
+)
 
-# target_link_directories(engine PRIVATE 
-#     ${LADYBIRD_DIR}/Build/release/lib
-#     ${LADYBIRD_DIR}/Build/release/vcpkg_installed/arm64-osx-dynamic/lib
-# )
+target_link_directories(engine PRIVATE 
+    ${LADYBIRD_DIR}/Build/release/lib
+    ${LADYBIRD_DIR}/Build/release/vcpkg_installed/arm64-osx-dynamic/lib
+)
 
-# target_link_libraries(engine PRIVATE
-#     lagom-webview
-#     lagom-web
-#     lagom-js
-#     lagom-requests
-#     lagom-url
-#     lagom-ipc
-#     lagom-core
-#     lagom-ak  
-#     lagom-gfx
-#     skia
+target_link_libraries(engine PRIVATE
+    lagom-webview
+    lagom-web
+    lagom-js
+    lagom-requests
+    lagom-url
+    lagom-ipc
+    lagom-core
+    lagom-ak  
+    lagom-gfx
+    skia
 
-#     "-framework CoreFoundation"
-#     "-framework CoreVideo"
-#     "-framework IOSurface"
-#     "-framework Metal"
-#     "-framework Foundation"
-# )
+    "-framework CoreFoundation"
+    "-framework CoreVideo"
+    "-framework IOSurface"
+    "-framework Metal"
+    "-framework Foundation"
+)
 
-# set_target_properties(engine PROPERTIES
-#     PREFIX "lib"
-#     SUFFIX ".dylib"
-#     BUILD_WITH_INSTALL_RPATH TRUE
-#     INSTALL_RPATH "@loader_path/ladybird_libs"
-#     INSTALL_NAME_DIR "@rpath"
-# )
+set_target_properties(engine PROPERTIES
+    PREFIX "lib"
+    SUFFIX ".dylib"
+    BUILD_WITH_INSTALL_RPATH TRUE
+    INSTALL_RPATH "@loader_path/ladybird_libs"
+    INSTALL_NAME_DIR "@rpath"
+)
 
-# set(BUNDLE_DIR "${CMAKE_BINARY_DIR}/LadybirdBundle")
+set(BUNDLE_DIR "${CMAKE_BINARY_DIR}/LadybirdBundle")
 
-# add_custom_command(TARGET engine POST_BUILD
-#     COMMAND ${CMAKE_COMMAND} -E make_directory "${BUNDLE_DIR}/libraries"
-#     COMMAND ${CMAKE_COMMAND} -E make_directory "${BUNDLE_DIR}/binaries"
+add_custom_command(TARGET engine POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${BUNDLE_DIR}/libraries"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${BUNDLE_DIR}/binaries"
     
-#     COMMAND ${CMAKE_COMMAND} -E copy "$<TARGET_FILE:engine>" "${BUNDLE_DIR}/"
+    COMMAND ${CMAKE_COMMAND} -E copy "$<TARGET_FILE:engine>" "${BUNDLE_DIR}/"
 
-#     COMMAND ${CMAKE_COMMAND} -E copy_directory "${LADYBIRD_DIR}/Build/release/lib" "${BUNDLE_DIR}/libraries"
+    COMMAND ${CMAKE_COMMAND} -E copy_directory "${LADYBIRD_DIR}/Build/release/lib" "${BUNDLE_DIR}/libraries"
 
-#     COMMAND ${CMAKE_COMMAND} -E copy "${LADYBIRD_DIR}/Build/release/bin/Ladybird.app/Contents/MacOS/WebContent" "${BUNDLE_DIR}/binaries/"
-#     COMMAND ${CMAKE_COMMAND} -E copy "${LADYBIRD_DIR}/Build/release/bin/Ladybird.app/Contents/MacOS/RequestServer" "${BUNDLE_DIR}/binaries/"
-#     COMMAND ${CMAKE_COMMAND} -E copy "${LADYBIRD_DIR}/Build/release/bin/Ladybird.app/Contents/MacOS/ImageDecoder" "${BUNDLE_DIR}/binaries/"
-#     COMMAND ${CMAKE_COMMAND} -E copy "${LADYBIRD_DIR}/Build/release/bin/Ladybird.app/Contents/MacOS/WebWorker" "${BUNDLE_DIR}/binaries/"
-#     COMMAND ${CMAKE_COMMAND} -E copy "${LADYBIRD_DIR}/Build/release/bin/Ladybird.app/Contents/MacOS/Ladybird" "${BUNDLE_DIR}/binaries/"
+    COMMAND ${CMAKE_COMMAND} -E copy "${LADYBIRD_DIR}/Build/release/bin/Ladybird.app/Contents/MacOS/WebContent" "${BUNDLE_DIR}/binaries/"
+    COMMAND ${CMAKE_COMMAND} -E copy "${LADYBIRD_DIR}/Build/release/bin/Ladybird.app/Contents/MacOS/RequestServer" "${BUNDLE_DIR}/binaries/"
+    COMMAND ${CMAKE_COMMAND} -E copy "${LADYBIRD_DIR}/Build/release/bin/Ladybird.app/Contents/MacOS/ImageDecoder" "${BUNDLE_DIR}/binaries/"
+    COMMAND ${CMAKE_COMMAND} -E copy "${LADYBIRD_DIR}/Build/release/bin/Ladybird.app/Contents/MacOS/WebWorker" "${BUNDLE_DIR}/binaries/"
+    COMMAND ${CMAKE_COMMAND} -E copy "${LADYBIRD_DIR}/Build/release/bin/Ladybird.app/Contents/MacOS/Ladybird" "${BUNDLE_DIR}/binaries/"
 
-#     COMMAND ${CMAKE_COMMAND} -E copy_directory "${LADYBIRD_DIR}/Base/res" "${BUNDLE_DIR}/res"
-# )
+    COMMAND ${CMAKE_COMMAND} -E copy_directory "${LADYBIRD_DIR}/Base/res" "${BUNDLE_DIR}/res"
+)
