@@ -2,7 +2,7 @@ import 'dart:ffi' as ffi;
 import 'package:ffi/ffi.dart';
 
 import 'package:flutter/services.dart';
-import 'package:libbird/src/generated/engine_bindings.g.dart';
+import 'package:ladybird/src/generated/engine_bindings.g.dart';
 
 class LadybirdController {
   final MethodChannel _channel = MethodChannel('libbird');

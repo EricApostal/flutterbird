@@ -1,5 +1,5 @@
-name: libbird
-description: "A new Flutter plugin project."
+name: ladybird
+description: "An unofficial embedding library for Ladybird"
 version: 0.0.1
 homepage: 0.0.1
 

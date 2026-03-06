@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:libbird/src/controller.dart';
+import 'package:ladybird/libbird.dart';
 
 class LadybirdView extends StatefulWidget {
   final LadybirdController controller;
