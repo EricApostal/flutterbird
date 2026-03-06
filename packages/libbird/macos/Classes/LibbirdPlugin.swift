@@ -35,6 +35,7 @@ class TextureContext {
 public class LibbirdPlugin: NSObject, FlutterPlugin {
   var textureRegistry: FlutterTextureRegistry?
   var timer: Timer?
+  var currentContextPtr: UnsafeMutableRawPointer?
 
   public static func register(with registrar: FlutterPluginRegistrar) {
     let channel = FlutterMethodChannel(name: "libbird", binaryMessenger: registrar.messenger)
@@ -66,7 +67,12 @@ public class LibbirdPlugin: NSObject, FlutterPlugin {
       let textureId = registry.register(texture)
 
       let ctx = TextureContext(registry: registry, textureId: textureId)
+
+      if let oldPtr = currentContextPtr {
+        Unmanaged<TextureContext>.fromOpaque(oldPtr).release()
+      }
       let ctxPtr = Unmanaged.passRetained(ctx).toOpaque()
+      currentContextPtr = ctxPtr
 
       let callback: @convention(c) (UnsafeMutableRawPointer?) -> Void = { contextPtr in
         guard let contextPtr = contextPtr else { return }
@@ -88,11 +94,11 @@ public class LibbirdPlugin: NSObject, FlutterPlugin {
         result(FlutterError(code: "UNAVAILABLE", message: "Texture registry is null", details: nil))
         return
       }
-      guard let textureId = call.arguments as? Int64 else {
+      guard let num = call.arguments as? NSNumber else {
         result(FlutterError(code: "INVALID_ARGS", message: "Expected texture ID", details: nil))
         return
       }
-      registry.unregisterTexture(textureId)
+      registry.unregisterTexture(num.int64Value)
       result(nil)
     default:
       result(FlutterMethodNotImplemented)

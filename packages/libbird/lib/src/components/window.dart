@@ -24,6 +24,8 @@ class _LadybirdViewState extends State<LadybirdView> {
       setState(() {
         _textureId = textureId;
       });
+    } else {
+      widget.controller.unregisterTexture(textureId);
     }
   }
 
@@ -31,17 +33,33 @@ class _LadybirdViewState extends State<LadybirdView> {
     final int textureId = await widget.controller.createTexture();
 
     if (mounted) {
+      final oldId = _textureId;
       setState(() {
         _textureId = textureId;
       });
+      if (oldId != null) {
+        widget.controller.unregisterTexture(oldId);
+      }
+    } else {
+      widget.controller.unregisterTexture(textureId);
     }
   }
 
   void _onSizeChanged(Size size) {
+    if (size.width <= 0 || size.height <= 0) return;
+
     final didResize = widget.controller.resizeWindow(size);
     if (didResize) {
       _recreateTexture();
     }
+  }
+
+  @override
+  void dispose() {
+    if (_textureId != null) {
+      widget.controller.unregisterTexture(_textureId!);
+    }
+    super.dispose();
   }
 
   @override

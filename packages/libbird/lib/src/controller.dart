@@ -29,9 +29,13 @@ class LadybirdController {
     return await _channel.invokeMethod('createTexture');
   }
 
+  Future<void> unregisterTexture(int textureId) async {
+    await _channel.invokeMethod('unregisterTexture', textureId);
+  }
+
   bool resizeWindow(Size size) {
     if (size == _lastSize) return false;
-
+    _lastSize = size;
     _bindings.resize_window(size.width.toInt(), size.height.toInt());
     return true;
   }

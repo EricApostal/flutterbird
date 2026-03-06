@@ -61,6 +61,10 @@ public:
                 // Cast the void* from Ladybird back to an Apple IOSurfaceRef
                 IOSurfaceRef iosurface = (IOSurfaceRef)m_client_state.front_bitmap.iosurface_ref;
 
+                size_t surf_width = IOSurfaceGetWidth(iosurface);
+                size_t surf_height = IOSurfaceGetHeight(iosurface);
+                std::println("on_ready_to_paint: last_painted_size={}x{} iosurface={}x{}", size.width(), size.height(), surf_width, surf_height);
+
                 std::lock_guard<std::mutex> lock(g_frame_mutex);
                 
                 // If the size changed or we don't have a buffer yet, we need to wrap the new IOSurface
@@ -238,7 +242,7 @@ void set_frame_callback(FrameCallback callback, void* context) {
 }
 
 void resize_window(int width, int height) {
-    if (width <= 0 || height <= 0) {
+    if (!g_web_view || width <= 0 || height <= 0) {
         return;
     }
 
