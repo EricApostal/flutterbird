@@ -15,6 +15,8 @@ class LadybirdView extends StatefulWidget {
 
 class _LadybirdViewState extends State<LadybirdView> {
   int? _textureId;
+  final FocusNode _focusNode = FocusNode();
+
   @override
   void initState() {
     super.initState();
@@ -138,6 +140,23 @@ class _LadybirdViewState extends State<LadybirdView> {
     );
   }
 
+  void _onPointerPanZoomUpdate(PointerPanZoomUpdateEvent event) {
+    int type = 4;
+    final density = MediaQuery.devicePixelRatioOf(context);
+    widget.controller.dispatchMouseEvent(
+      type: type,
+      x: (event.localPosition.dx * density).toInt(),
+      y: (event.localPosition.dy * density).toInt(),
+      button: 0,
+      buttons: 0,
+      modifiers: getModifiersForEvent(
+        HardwareKeyboard.instance.logicalKeysPressed,
+      ),
+      wheelDeltaX: (event.panDelta.dx * density).toInt(),
+      wheelDeltaY: (event.panDelta.dy * density).toInt(),
+    );
+  }
+
   KeyEventResult _onKeyEvent(FocusNode node, KeyEvent event) {
     int type = event is KeyDownEvent ? 0 : 1;
     if (event is KeyRepeatEvent) type = 0;
@@ -160,6 +179,7 @@ class _LadybirdViewState extends State<LadybirdView> {
   @override
   void dispose() {
     widget.controller.onResize = null;
+    _focusNode.dispose();
     if (_textureId != null) {
       widget.controller.unregisterTexture(_textureId!);
     }
@@ -199,13 +219,18 @@ class _LadybirdViewState extends State<LadybirdView> {
                 width: paddedWidth,
                 height: paddedHeight,
                 child: Focus(
+                  focusNode: _focusNode,
                   autofocus: true,
                   onKeyEvent: _onKeyEvent,
                   child: Listener(
-                    onPointerDown: (e) => _onPointerEvent(e, 0),
+                    onPointerDown: (e) {
+                      _focusNode.requestFocus();
+                      _onPointerEvent(e, 0);
+                    },
                     onPointerUp: (e) => _onPointerEvent(e, 1),
                     onPointerMove: (e) => _onPointerEvent(e, 2),
                     onPointerHover: (e) => _onPointerEvent(e, 2),
+                    onPointerPanZoomUpdate: _onPointerPanZoomUpdate,
                     onPointerSignal: (e) {
                       if (e is PointerScrollEvent) {
                         _onPointerScroll(e);

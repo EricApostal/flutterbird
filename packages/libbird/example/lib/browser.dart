@@ -35,6 +35,7 @@ class _BrowserWindowState extends State<BrowserWindow>
           Expanded(
             child: TabBarView(
               controller: _tabController,
+              physics: NeverScrollableScrollPhysics(),
               children: [
                 _BrowserTab(controller: _controllers[0]),
                 _BrowserTab(controller: _controllers[1]),
