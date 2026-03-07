@@ -34,13 +34,13 @@ flutter:
   plugin:
     platforms:
       linux:
-        pluginClass: LibbirdPlugin
+        pluginClass: LadybirdPlugin
       macos:
-        pluginClass: LibbirdPlugin
+        pluginClass: LadybirdPlugin
   
 ffigen:
-  name: LibbirdBindings
-  description: Bindings to libbird C++ engine
+  name: LadybirdBindings
+  description: Bindings to ladybird C++ engine
   output: 'lib/src/generated/engine_bindings.g.dart'
   headers:
     entry-points:

@@ -5,16 +5,16 @@ import 'package:flutter/services.dart';
 import 'package:ladybird/src/generated/engine_bindings.g.dart';
 
 class LadybirdController {
-  final MethodChannel _channel = MethodChannel('libbird');
+  final MethodChannel _channel = MethodChannel('ladybird');
   late final ffi.DynamicLibrary _lib;
-  late final LibbirdBindings _bindings;
+  late final LadybirdBindings _bindings;
   // I'm not entirely sure where I should set the texture id
   // int? _textureId;
   Size? _lastSize;
 
   LadybirdController() {
     _lib = ffi.DynamicLibrary.process();
-    _bindings = LibbirdBindings(_lib);
+    _bindings = LadybirdBindings(_lib);
 
     _bindings.init_ladybird();
   }

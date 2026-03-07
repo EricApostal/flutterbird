@@ -3,7 +3,7 @@
 #
 
 list(APPEND FLUTTER_PLUGIN_LIST
-  libbird
+  ladybird
 )
 
 list(APPEND FLUTTER_FFI_PLUGIN_LIST

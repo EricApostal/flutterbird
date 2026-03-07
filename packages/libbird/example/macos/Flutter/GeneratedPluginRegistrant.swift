@@ -5,8 +5,8 @@
 import FlutterMacOS
 import Foundation
 
-import libbird
+import ladybird
 
 func RegisterGeneratedPlugins(registry: FlutterPluginRegistry) {
-  LibbirdPlugin.register(with: registry.registrar(forPlugin: "LibbirdPlugin"))
+  LadybirdPlugin.register(with: registry.registrar(forPlugin: "LadybirdPlugin"))
 }

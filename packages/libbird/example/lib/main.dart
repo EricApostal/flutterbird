@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:libbird_example/browser.dart';
+import 'package:ladybird_example/browser.dart';
 
 void main() {
   runApp(const MainApp());

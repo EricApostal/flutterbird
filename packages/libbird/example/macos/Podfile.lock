@@ -1,21 +1,21 @@
 PODS:
   - FlutterMacOS (1.0.0)
-  - libbird (0.0.1):
+  - ladybird (0.0.1):
     - FlutterMacOS
 
 DEPENDENCIES:
   - FlutterMacOS (from `Flutter/ephemeral`)
-  - libbird (from `Flutter/ephemeral/.symlinks/plugins/libbird/macos`)
+  - ladybird (from `Flutter/ephemeral/.symlinks/plugins/ladybird/macos`)
 
 EXTERNAL SOURCES:
   FlutterMacOS:
     :path: Flutter/ephemeral
-  libbird:
-    :path: Flutter/ephemeral/.symlinks/plugins/libbird/macos
+  ladybird:
+    :path: Flutter/ephemeral/.symlinks/plugins/ladybird/macos
 
 SPEC CHECKSUMS:
   FlutterMacOS: d0db08ddef1a9af05a5ec4b724367152bb0500b1
-  libbird: 1c7ea9a9f102dc54301acdbbfd71c9eea6c4f2b2
+  ladybird: 5ab5686893067da268bee10abfa78a86f661e6f5
 
 PODFILE CHECKSUM: c3dfa49fe1718ff539b25a86b1e83753ef88ae4d
 

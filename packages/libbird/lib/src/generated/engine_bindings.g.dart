@@ -4,18 +4,18 @@
 // ignore_for_file: type=lint
 import 'dart:ffi' as ffi;
 
-/// Bindings to libbird C++ engine
-class LibbirdBindings {
+/// Bindings to ladybird C++ engine
+class LadybirdBindings {
   /// Holds the symbol lookup function.
   final ffi.Pointer<T> Function<T extends ffi.NativeType>(String symbolName)
   _lookup;
 
   /// The symbols are looked up in [dynamicLibrary].
-  LibbirdBindings(ffi.DynamicLibrary dynamicLibrary)
+  LadybirdBindings(ffi.DynamicLibrary dynamicLibrary)
     : _lookup = dynamicLibrary.lookup;
 
   /// The symbols are looked up with [lookup].
-  LibbirdBindings.fromLookup(
+  LadybirdBindings.fromLookup(
     ffi.Pointer<T> Function<T extends ffi.NativeType>(String symbolName) lookup,
   ) : _lookup = lookup;
 

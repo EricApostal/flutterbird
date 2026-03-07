@@ -32,14 +32,14 @@ class TextureContext {
   }
 }
 
-public class LibbirdPlugin: NSObject, FlutterPlugin {
+public class LadybirdPlugin: NSObject, FlutterPlugin {
   var textureRegistry: FlutterTextureRegistry?
   var timer: Timer?
   var currentContextPtr: UnsafeMutableRawPointer?
 
   public static func register(with registrar: FlutterPluginRegistrar) {
-    let channel = FlutterMethodChannel(name: "libbird", binaryMessenger: registrar.messenger)
-    let instance = LibbirdPlugin()
+    let channel = FlutterMethodChannel(name: "ladybird", binaryMessenger: registrar.messenger)
+    let instance = LadybirdPlugin()
     instance.textureRegistry = registrar.textures
     registrar.addMethodCallDelegate(instance, channel: channel)
 

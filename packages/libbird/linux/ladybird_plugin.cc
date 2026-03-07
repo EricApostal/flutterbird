@@ -1,4 +1,4 @@
-#include "include/libbird/libbird_plugin.h"
+#include "include/ladybird/ladybird_plugin.h"
 
 #include <flutter_linux/flutter_linux.h>
 #include <gtk/gtk.h>
@@ -6,21 +6,21 @@
 
 #include <cstring>
 
-#include "libbird_plugin_private.h"
+#include "ladybird_plugin_private.h"
 
-#define LIBBIRD_PLUGIN(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj), libbird_plugin_get_type(), \
-                              LibbirdPlugin))
+#define LADYBIRD_PLUGIN(obj) \
+  (G_TYPE_CHECK_INSTANCE_CAST((obj), ladybird_plugin_get_type(), \
+                              LadybirdPlugin))
 
-struct _LibbirdPlugin {
+struct _LadybirdPlugin {
   GObject parent_instance;
 };
 
-G_DEFINE_TYPE(LibbirdPlugin, libbird_plugin, g_object_get_type())
+G_DEFINE_TYPE(LadybirdPlugin, ladybird_plugin, g_object_get_type())
 
 // Called when a method call is received from Flutter.
-static void libbird_plugin_handle_method_call(
-    LibbirdPlugin* self,
+static void ladybird_plugin_handle_method_call(
+    LadybirdPlugin* self,
     FlMethodCall* method_call) {
   g_autoptr(FlMethodResponse) response = nullptr;
 
@@ -43,30 +43,30 @@ FlMethodResponse* get_platform_version() {
   return FL_METHOD_RESPONSE(fl_method_success_response_new(result));
 }
 
-static void libbird_plugin_dispose(GObject* object) {
-  G_OBJECT_CLASS(libbird_plugin_parent_class)->dispose(object);
+static void ladybird_plugin_dispose(GObject* object) {
+  G_OBJECT_CLASS(ladybird_plugin_parent_class)->dispose(object);
 }
 
-static void libbird_plugin_class_init(LibbirdPluginClass* klass) {
-  G_OBJECT_CLASS(klass)->dispose = libbird_plugin_dispose;
+static void ladybird_plugin_class_init(LadybirdPluginClass* klass) {
+  G_OBJECT_CLASS(klass)->dispose = ladybird_plugin_dispose;
 }
 
-static void libbird_plugin_init(LibbirdPlugin* self) {}
+static void ladybird_plugin_init(LadybirdPlugin* self) {}
 
 static void method_call_cb(FlMethodChannel* channel, FlMethodCall* method_call,
                            gpointer user_data) {
-  LibbirdPlugin* plugin = LIBBIRD_PLUGIN(user_data);
-  libbird_plugin_handle_method_call(plugin, method_call);
+  LadybirdPlugin* plugin = LADYBIRD_PLUGIN(user_data);
+  ladybird_plugin_handle_method_call(plugin, method_call);
 }
 
-void libbird_plugin_register_with_registrar(FlPluginRegistrar* registrar) {
-  LibbirdPlugin* plugin = LIBBIRD_PLUGIN(
-      g_object_new(libbird_plugin_get_type(), nullptr));
+void ladybird_plugin_register_with_registrar(FlPluginRegistrar* registrar) {
+  LadybirdPlugin* plugin = LADYBIRD_PLUGIN(
+      g_object_new(ladybird_plugin_get_type(), nullptr));
 
   g_autoptr(FlStandardMethodCodec) codec = fl_standard_method_codec_new();
   g_autoptr(FlMethodChannel) channel =
       fl_method_channel_new(fl_plugin_registrar_get_messenger(registrar),
-                            "libbird",
+                            "ladybird",
                             FL_METHOD_CODEC(codec));
   fl_method_channel_set_method_call_handler(channel, method_call_cb,
                                             g_object_ref(plugin),

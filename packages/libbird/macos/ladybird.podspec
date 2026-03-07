@@ -1,11 +1,11 @@
 #
-# libbird.podspec
+# ladybird.podspec
 #
 
 plugin_root = File.expand_path('..', __dir__)
 ladybird_build_dir = File.join(plugin_root, 'third_party', 'ladybird', 'Build')
 
-puts "Preparing libbird resources and building C++ engine..."
+puts "Preparing ladybird resources and building C++ engine..."
 system(<<-'CMD')
   cd "${PODS_TARGET_SRCROOT:-.}"
   
@@ -50,12 +50,12 @@ end
 found_library_paths.uniq!
 
 Pod::Spec.new do |s|
-  s.name             = 'libbird'
+  s.name             = 'ladybird'
   s.version          = '0.0.1'
   s.summary          = 'Ladybird interface for Flutter.'
-  s.homepage         = 'https://ladybird.org'
+  s.homepage         = 'https://github.com/EricApostal/flutterbird'
   s.license          = { :type => 'BSD', :file => '../LICENSE' }
-  s.author           = { 'Ladybird Team' => 'contact@ladybird.org' }
+  s.author           = { 'Eric Apostal' => 'eric@rubiscoapp.com' }
   s.source           = { :git => 'https://github.com/LadybirdBrowser/ladybird.git', :tag => s.version.to_s }
 
   s.source_files     = 'Classes/**/*'
