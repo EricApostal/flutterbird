@@ -25,7 +25,7 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar> {
     return Column(
       children: [
         SizedBox(
-          height: 50,
+          height: 45,
           child: MoveWindow(
             child: Row(
               children: [
@@ -84,6 +84,9 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar> {
         Padding(
           padding: const EdgeInsets.only(left: 4, right: 4, bottom: 4),
           child: TextField(
+            onSubmitted: (value) {
+              currentTabController.navigate(value);
+            },
             controller: currentTabController!.textController,
             decoration: _buildInputDecoration(),
             style: theme.textTheme.labelMedium!.copyWith(

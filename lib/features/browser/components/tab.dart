@@ -23,7 +23,9 @@ class BrowserTab extends ConsumerWidget {
         child: Container(
           width: 200,
           decoration: BoxDecoration(
-            color: theme.colorScheme.surfaceContainer,
+            color: selected
+                ? theme.colorScheme.surfaceContainer
+                : Colors.transparent,
             borderRadius: const BorderRadius.vertical(
               top: Radius.circular(8),
               bottom: Radius.circular(8),
