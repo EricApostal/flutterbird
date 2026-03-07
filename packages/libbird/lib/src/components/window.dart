@@ -34,7 +34,9 @@ class _LadybirdViewState extends State<LadybirdView> {
     it needs to be resized. The onResize callback only seems to work with
     */
     SchedulerBinding.instance.scheduleFrameCallback((_) {
-      setState(() {});
+      if (mounted) {
+        setState(() {});
+      }
       _scheduleTick();
     });
   }
@@ -157,10 +159,10 @@ class _LadybirdViewState extends State<LadybirdView> {
 
   @override
   void dispose() {
-    widget.controller.onResize = null;
-    if (_textureId != null) {
-      widget.controller.unregisterTexture(_textureId!);
-    }
+    // widget.controller.onResize = null;
+    // if (_textureId != null) {
+    //   widget.controller.unregisterTexture(_textureId!);
+    // }
     super.dispose();
   }
 
