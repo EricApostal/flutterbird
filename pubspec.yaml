@@ -17,6 +17,7 @@ dependencies:
   bird_core:
     path: packages/bird_core
   riverpod_annotation: ^4.0.2
+  go_router: ^17.1.0
 
 dev_dependencies:
   flutter_test:

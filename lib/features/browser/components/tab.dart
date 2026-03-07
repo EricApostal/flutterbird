@@ -5,6 +5,17 @@ class BrowserTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Placeholder();
+    final theme = Theme.of(context);
+    return Container(
+      width: 200,
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainer,
+        borderRadius: .vertical(top: .circular(12), bottom: .circular(12)),
+      ),
+      child: Align(
+        alignment: .centerLeft,
+        child: Padding(padding: .only(left: 12), child: Text("ree")),
+      ),
+    );
   }
 }
