@@ -1,6 +1,6 @@
 name: ladybird
 description: "An unofficial embedding library for Ladybird"
-version: 0.0.3
+version: 0.0.4
 homepage: https://github.com/EricApostal/flutterbird
 
 native_assets: true
