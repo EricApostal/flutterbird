@@ -2,19 +2,26 @@ import Cocoa
 import FlutterMacOS
 
 @_silgen_name("get_latest_pixel_buffer")
-func get_latest_pixel_buffer() -> UnsafeMutableRawPointer?
+func get_latest_pixel_buffer(_ view_id: Int32) -> UnsafeMutableRawPointer?
 
 @_silgen_name("tick_ladybird")
 func tick_ladybird()
 
 @_silgen_name("set_frame_callback")
 func set_frame_callback(
-  _ callback: @convention(c) (UnsafeMutableRawPointer?) -> Void, _ context: UnsafeMutableRawPointer?
+  _ view_id: Int32, _ callback: @convention(c) (UnsafeMutableRawPointer?) -> Void,
+  _ context: UnsafeMutableRawPointer?
 )
 
 class LadybirdTexture: NSObject, FlutterTexture {
+  let viewId: Int32
+
+  init(viewId: Int32) {
+    self.viewId = viewId
+  }
+
   func copyPixelBuffer() -> Unmanaged<CVPixelBuffer>? {
-    guard let ptr = get_latest_pixel_buffer() else {
+    guard let ptr = get_latest_pixel_buffer(viewId) else {
       return nil
     }
     let buffer = Unmanaged<CVPixelBuffer>.fromOpaque(ptr).takeRetainedValue()
@@ -35,7 +42,7 @@ class TextureContext {
 public class LadybirdPlugin: NSObject, FlutterPlugin {
   var textureRegistry: FlutterTextureRegistry?
   var timer: Timer?
-  var currentContextPtr: UnsafeMutableRawPointer?
+  var contextPtrs: [Int64: UnsafeMutableRawPointer] = [:]
 
   public static func register(with registrar: FlutterPluginRegistrar) {
     let channel = FlutterMethodChannel(name: "ladybird", binaryMessenger: registrar.messenger)
@@ -63,16 +70,19 @@ public class LadybirdPlugin: NSObject, FlutterPlugin {
         return
       }
 
-      let texture = LadybirdTexture()
+      guard let num = call.arguments as? NSNumber else {
+        result(FlutterError(code: "INVALID_ARGS", message: "Expected view ID", details: nil))
+        return
+      }
+      let viewId = num.int32Value
+
+      let texture = LadybirdTexture(viewId: viewId)
       let textureId = registry.register(texture)
 
       let ctx = TextureContext(registry: registry, textureId: textureId)
 
-      if let oldPtr = currentContextPtr {
-        Unmanaged<TextureContext>.fromOpaque(oldPtr).release()
-      }
       let ctxPtr = Unmanaged.passRetained(ctx).toOpaque()
-      currentContextPtr = ctxPtr
+      contextPtrs[textureId] = ctxPtr
 
       let callback: @convention(c) (UnsafeMutableRawPointer?) -> Void = { contextPtr in
         guard let contextPtr = contextPtr else { return }
@@ -86,7 +96,7 @@ public class LadybirdPlugin: NSObject, FlutterPlugin {
         }
       }
 
-      set_frame_callback(callback, ctxPtr)
+      set_frame_callback(viewId, callback, ctxPtr)
 
       result(textureId)
     case "unregisterTexture":
@@ -98,7 +108,13 @@ public class LadybirdPlugin: NSObject, FlutterPlugin {
         result(FlutterError(code: "INVALID_ARGS", message: "Expected texture ID", details: nil))
         return
       }
-      registry.unregisterTexture(num.int64Value)
+      let textureId = num.int64Value
+      registry.unregisterTexture(textureId)
+
+      if let ptr = contextPtrs.removeValue(forKey: textureId) {
+        Unmanaged<TextureContext>.fromOpaque(ptr).release()
+      }
+
       result(nil)
     default:
       result(FlutterMethodNotImplemented)

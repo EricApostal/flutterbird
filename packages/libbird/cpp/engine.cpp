@@ -25,22 +25,29 @@
 #include <LibWeb/Page/InputEvent.h>
 #include <string>
 
-std::mutex g_frame_mutex;
-CVPixelBufferRef g_pixel_buffer = nullptr;
-int g_width = 800;
-int g_height = 600;
-double g_zoom = 1.5;
-
-FrameCallback g_frame_callback = nullptr;
-void* g_frame_callback_context = nullptr;
-
-ResizeCallback g_resize_callback = nullptr;
+std::mutex g_web_views_mutex;
+int g_next_view_id = 1;
+int g_active_view_id = -1;
 
 class FlutterViewImpl final : public WebView::ViewImplementation {
 public:
-    static ErrorOr<NonnullOwnPtr<FlutterViewImpl>> create() {
-        return adopt_nonnull_own_or_enomem(new (std::nothrow) FlutterViewImpl());
+    static ErrorOr<NonnullOwnPtr<FlutterViewImpl>> create(int view_id) {
+        return adopt_nonnull_own_or_enomem(new (std::nothrow) FlutterViewImpl(view_id));
     }
+
+    int m_view_id;
+
+    CVPixelBufferRef m_pixel_buffer = nullptr;
+    int m_width = 800;
+    int m_height = 600;
+    double m_zoom = 1.5;
+
+    FrameCallback m_frame_callback = nullptr;
+    void* m_frame_callback_context = nullptr;
+
+    ResizeCallback m_resize_callback = nullptr;
+    
+    std::mutex m_mutex;
 
     virtual void initialize_client(CreateNewClient create_new_client = CreateNewClient::Yes) override {
         ViewImplementation::initialize_client(create_new_client);
@@ -49,7 +56,7 @@ public:
         auto theme = Gfx::load_system_theme(theme_path.string()).release_value_but_fixme_should_propagate_errors();
 
         client().async_update_system_theme(m_client_state.page_index, theme);
-        client().async_set_viewport(m_client_state.page_index, viewport_size(), g_zoom);
+        client().async_set_viewport(m_client_state.page_index, viewport_size(), m_zoom);
         client().async_set_window_size(m_client_state.page_index, viewport_size());
         
         Web::DevicePixelRect screen_rect { 0, 0, 1920, 1080 };
@@ -65,20 +72,19 @@ public:
                 // Cast the void* from Ladybird back to an Apple IOSurfaceRef
                 IOSurfaceRef iosurface = (IOSurfaceRef)m_client_state.front_bitmap.iosurface_ref;
 
-                IOSurfaceRef current_iosurface = g_pixel_buffer ? CVPixelBufferGetIOSurface(g_pixel_buffer) : nullptr;
-
-                std::lock_guard<std::mutex> lock(g_frame_mutex);
+                std::lock_guard<std::mutex> lock(m_mutex);
+                IOSurfaceRef current_iosurface = m_pixel_buffer ? CVPixelBufferGetIOSurface(m_pixel_buffer) : nullptr;
                 
                 // If the size changed or iosurface changed, we need to wrap the new IOSurface
-                if (current_iosurface != iosurface || size.width() != g_width || size.height() != g_height || !g_pixel_buffer) {
-                    bool size_changed = (size.width() != g_width || size.height() != g_height);
+                if (current_iosurface != iosurface || size.width() != m_width || size.height() != m_height || !m_pixel_buffer) {
+                    bool size_changed = (size.width() != m_width || size.height() != m_height);
                     
-                    g_width = size.width();
-                    g_height = size.height();
+                    m_width = size.width();
+                    m_height = size.height();
                     
-                    if (g_pixel_buffer) {
-                        CVPixelBufferRelease(g_pixel_buffer);
-                        g_pixel_buffer = nullptr;
+                    if (m_pixel_buffer) {
+                        CVPixelBufferRelease(m_pixel_buffer);
+                        m_pixel_buffer = nullptr;
                     }
 
                     // Map the IOSurface natively without properties to avoid metal texture cache corruption on resize
@@ -86,7 +92,7 @@ public:
                         kCFAllocatorDefault,
                         iosurface,
                         nullptr,
-                        &g_pixel_buffer
+                        &m_pixel_buffer
                     );
 
                     if (result != kCVReturnSuccess) {
@@ -94,13 +100,13 @@ public:
                         return;
                     }
 
-                    if (size_changed && g_resize_callback) {
-                        g_resize_callback();
+                    if (size_changed && m_resize_callback) {
+                        m_resize_callback();
                     }
                 }
 
-                if (g_frame_callback) {
-                    g_frame_callback(g_frame_callback_context);
+                if (m_frame_callback) {
+                    m_frame_callback(m_frame_callback_context);
                 }
             }
         };
@@ -116,13 +122,13 @@ public:
 
     void resize(int width, int height) {
         auto size = Web::DevicePixelSize { width, height };
-        client().async_set_viewport(m_client_state.page_index, size, g_zoom);
+        client().async_set_viewport(m_client_state.page_index, size, m_zoom);
         client().async_set_window_size(m_client_state.page_index, size);
     }
 
     void update_zoom_scale() {
-        auto size = Web::DevicePixelSize { g_width, g_height };
-        client().async_set_viewport(m_client_state.page_index, size, g_zoom);
+        auto size = Web::DevicePixelSize { m_width, m_height };
+        client().async_set_viewport(m_client_state.page_index, size, m_zoom);
     }
 
     void dispatch_mouse_event(Web::MouseEvent::Type type, int x, int y, int button, int buttons, int modifiers, int wheel_delta_x, int wheel_delta_y) {
@@ -135,16 +141,23 @@ public:
         enqueue_input_event(Web::KeyEvent { type, static_cast<Web::UIEvents::KeyCode>(keycode), static_cast<Web::UIEvents::KeyModifier>(modifiers), code_point, repeat, nullptr });
     }
 
+    virtual ~FlutterViewImpl() {
+        if (m_pixel_buffer) {
+            CVPixelBufferRelease(m_pixel_buffer);
+        }
+    }
+
 private:
-    FlutterViewImpl() {}
+    FlutterViewImpl(int view_id) : m_view_id(view_id) {}
 
     virtual void update_zoom() override {}
-    virtual Web::DevicePixelSize viewport_size() const override { return { g_width, g_height }; }
+    virtual Web::DevicePixelSize viewport_size() const override { return { m_width, m_height }; }
     virtual Gfx::IntPoint to_content_position(Gfx::IntPoint widget_position) const override { return widget_position; }
     virtual Gfx::IntPoint to_widget_position(Gfx::IntPoint content_position) const override { return content_position; }
 };
 
-AK::OwnPtr<FlutterViewImpl> g_web_view;
+#include <map>
+std::map<int, AK::OwnPtr<FlutterViewImpl>> g_web_views;
 
 class FlutterApplication : public WebView::Application {
     WEB_VIEW_APPLICATION(FlutterApplication)
@@ -164,11 +177,20 @@ public:
     }
 
     virtual Optional<WebView::ViewImplementation&> active_web_view() const override { 
-        if (g_web_view) return *g_web_view;
+        std::lock_guard<std::mutex> lock(g_web_views_mutex);
+        if (g_active_view_id != -1) {
+            auto it = g_web_views.find(g_active_view_id);
+            if (it != g_web_views.end()) return *it->second;
+        }
+        if (!g_web_views.empty()) {
+            return *g_web_views.begin()->second;
+        }
         return {}; 
     }
     
-    virtual Optional<WebView::ViewImplementation&> open_blank_new_tab(Web::HTML::ActivateTab) const override { return {}; }
+    virtual Optional<WebView::ViewImplementation&> open_blank_new_tab(Web::HTML::ActivateTab) const override { 
+        return {}; 
+    }
     virtual Optional<ByteString> ask_user_for_download_path(StringView) const override { return {}; }
     virtual void display_download_confirmation_dialog(StringView, LexicalPath const&) const override {}
     virtual void display_error_dialog(StringView) const override {}
@@ -203,7 +225,6 @@ void init_ladybird() {
     }
     s_app = app.release_value();
     
-
     s_browser_process = make<WebView::BrowserProcess>();
     
     if (auto const& browser_options = WebView::Application::browser_options();
@@ -220,20 +241,6 @@ void init_ladybird() {
         }
     }
 
-    auto exe = Core::System::current_executable_path();
-    if (!exe.is_error()) {
-        // std::println("Executable path: {}", exe.value().view());
-    } else {
-        std::println("Could not get executable path!");
-    }
-    // std::println("Resource root: {}", WebView::s_ladybird_resource_root.view());
-
-    g_web_view = FlutterViewImpl::create().release_value();
-    g_web_view->initialize_client();
-
-    const char* url = "https://ladybird.org";
-    g_web_view->load(URL::Parser::basic_parse(AK::StringView(url, strlen(url))).value());
-
     initialized = true;
 }
 
@@ -243,80 +250,131 @@ extern "C" void tick_ladybird() {
     }
 }
 
-void* get_latest_pixel_buffer() {
-    std::lock_guard<std::mutex> lock(g_frame_mutex);
-    if (!g_pixel_buffer) {
-        return nullptr;
+int create_web_view() {
+    std::lock_guard<std::mutex> lock(g_web_views_mutex);
+    int id = g_next_view_id++;
+    auto view = FlutterViewImpl::create(id).release_value();
+    view->initialize_client();
+    g_web_views[id] = std::move(view);
+    
+    if (g_active_view_id == -1) {
+        g_active_view_id = id;
     }
-
-    CVPixelBufferRetain(g_pixel_buffer);
-    return g_pixel_buffer;
+    return id;
 }
 
-void set_frame_callback(FrameCallback callback, void* context) {
-    std::lock_guard<std::mutex> lock(g_frame_mutex);
-    g_frame_callback = callback;
-    g_frame_callback_context = context;
-}
-
-void set_resize_callback(ResizeCallback callback) {
-    std::lock_guard<std::mutex> lock(g_frame_mutex);
-    g_resize_callback = callback;
-}
-
-void resize_window(int width, int height) {
-    if (!g_web_view || width <= 0 || height <= 0) {
-        return;
+void destroy_web_view(int view_id) {
+    std::lock_guard<std::mutex> lock(g_web_views_mutex);
+    if (g_active_view_id == view_id) {
+        g_active_view_id = -1;
     }
-
-    g_web_view->resize(width, height);
+    g_web_views.erase(view_id);
 }
 
-void navigate_to(const char* url) {
-    if (!g_web_view || !url) return;
-    auto parsed = URL::Parser::basic_parse(AK::StringView(url, strlen(url)));
-    if (parsed.has_value()) {
-        g_web_view->load(parsed.value());
+void* get_latest_pixel_buffer(int view_id) {
+    std::lock_guard<std::mutex> lock(g_web_views_mutex);
+    auto it = g_web_views.find(view_id);
+    if (it == g_web_views.end()) return nullptr;
+
+    std::lock_guard<std::mutex> view_lock(it->second->m_mutex);
+    if (!it->second->m_pixel_buffer) return nullptr;
+
+    CVPixelBufferRetain(it->second->m_pixel_buffer);
+    return it->second->m_pixel_buffer;
+}
+
+void set_frame_callback(int view_id, FrameCallback callback, void* context) {
+    std::lock_guard<std::mutex> lock(g_web_views_mutex);
+    auto it = g_web_views.find(view_id);
+    if (it != g_web_views.end()) {
+        std::lock_guard<std::mutex> view_lock(it->second->m_mutex);
+        it->second->m_frame_callback = callback;
+        it->second->m_frame_callback_context = context;
     }
 }
 
-void set_zoom(double zoom) {
+void set_resize_callback(int view_id, ResizeCallback callback) {
+    std::lock_guard<std::mutex> lock(g_web_views_mutex);
+    auto it = g_web_views.find(view_id);
+    if (it != g_web_views.end()) {
+        std::lock_guard<std::mutex> view_lock(it->second->m_mutex);
+        it->second->m_resize_callback = callback;
+    }
+}
+
+void resize_window(int view_id, int width, int height) {
+    if (width <= 0 || height <= 0) return;
+    std::lock_guard<std::mutex> lock(g_web_views_mutex);
+    auto it = g_web_views.find(view_id);
+    if (it != g_web_views.end()) {
+        it->second->resize(width, height);
+    }
+}
+
+void navigate_to(int view_id, const char* url) {
+    if (!url) return;
+    std::lock_guard<std::mutex> lock(g_web_views_mutex);
+    auto it = g_web_views.find(view_id);
+    if (it != g_web_views.end()) {
+        auto parsed = URL::Parser::basic_parse(AK::StringView(url, strlen(url)));
+        if (parsed.has_value()) {
+            it->second->load(parsed.value());
+        }
+    }
+}
+
+void set_zoom(int view_id, double zoom) {
     if (zoom <= 0.0) return;
-    g_zoom = zoom;
-    if (g_web_view) {
-        g_web_view->update_zoom_scale();
+    std::lock_guard<std::mutex> lock(g_web_views_mutex);
+    auto it = g_web_views.find(view_id);
+    if (it != g_web_views.end()) {
+        it->second->m_zoom = zoom;
+        it->second->update_zoom_scale();
     }
 }
 
-int get_iosurface_width() {
-    std::lock_guard<std::mutex> lock(g_frame_mutex);
-    if (!g_pixel_buffer) return g_width;
-    IOSurfaceRef iosurface = CVPixelBufferGetIOSurface(g_pixel_buffer);
-    if (!iosurface) return g_width;
+int get_iosurface_width(int view_id) {
+    std::lock_guard<std::mutex> lock(g_web_views_mutex);
+    auto it = g_web_views.find(view_id);
+    if (it == g_web_views.end()) return 0;
+    
+    std::lock_guard<std::mutex> view_lock(it->second->m_mutex);
+    if (!it->second->m_pixel_buffer) return it->second->m_width;
+    IOSurfaceRef iosurface = CVPixelBufferGetIOSurface(it->second->m_pixel_buffer);
+    if (!iosurface) return it->second->m_width;
     return IOSurfaceGetWidth(iosurface);
 }
 
-int get_iosurface_height() {
-    std::lock_guard<std::mutex> lock(g_frame_mutex);
-    if (!g_pixel_buffer) return g_height;
-    IOSurfaceRef iosurface = CVPixelBufferGetIOSurface(g_pixel_buffer);
-    if (!iosurface) return g_height;
+int get_iosurface_height(int view_id) {
+    std::lock_guard<std::mutex> lock(g_web_views_mutex);
+    auto it = g_web_views.find(view_id);
+    if (it == g_web_views.end()) return 0;
+
+    std::lock_guard<std::mutex> view_lock(it->second->m_mutex);
+    if (!it->second->m_pixel_buffer) return it->second->m_height;
+    IOSurfaceRef iosurface = CVPixelBufferGetIOSurface(it->second->m_pixel_buffer);
+    if (!iosurface) return it->second->m_height;
     return IOSurfaceGetHeight(iosurface);
 }
 
 extern "C" {
 
-void dispatch_mouse_event(int type, int x, int y, int button, int buttons, int modifiers, int wheel_delta_x, int wheel_delta_y) {
-    if (g_web_view) {
-        g_web_view->dispatch_mouse_event(static_cast<Web::MouseEvent::Type>(type), x, y, button, buttons, modifiers, wheel_delta_x, wheel_delta_y);
+void dispatch_mouse_event(int view_id, int type, int x, int y, int button, int buttons, int modifiers, int wheel_delta_x, int wheel_delta_y) {
+    std::lock_guard<std::mutex> lock(g_web_views_mutex);
+    auto it = g_web_views.find(view_id);
+    if (it != g_web_views.end()) {
+        it->second->dispatch_mouse_event(static_cast<Web::MouseEvent::Type>(type), x, y, button, buttons, modifiers, wheel_delta_x, wheel_delta_y);
     }
 }
 
-void dispatch_key_event(int type, int keycode, int modifiers, uint32_t code_point, bool repeat) {
-    if (g_web_view) {
-        g_web_view->dispatch_key_event(static_cast<Web::KeyEvent::Type>(type), keycode, modifiers, code_point, repeat);
+void dispatch_key_event(int view_id, int type, int keycode, int modifiers, uint32_t code_point, bool repeat) {
+    std::lock_guard<std::mutex> lock(g_web_views_mutex);
+    auto it = g_web_views.find(view_id);
+    if (it != g_web_views.end()) {
+        it->second->dispatch_key_event(static_cast<Web::KeyEvent::Type>(type), keycode, modifiers, code_point, repeat);
     }
 }
 
 }
+
 

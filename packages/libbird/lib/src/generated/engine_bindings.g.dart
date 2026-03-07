@@ -27,93 +27,121 @@ class LadybirdBindings {
       _lookup<ffi.NativeFunction<ffi.Void Function()>>('init_ladybird');
   late final _init_ladybird = _init_ladybirdPtr.asFunction<void Function()>();
 
-  ffi.Pointer<ffi.Void> get_latest_pixel_buffer() {
-    return _get_latest_pixel_buffer();
+  int create_web_view() {
+    return _create_web_view();
+  }
+
+  late final _create_web_viewPtr =
+      _lookup<ffi.NativeFunction<ffi.Int Function()>>('create_web_view');
+  late final _create_web_view = _create_web_viewPtr
+      .asFunction<int Function()>();
+
+  void destroy_web_view(int view_id) {
+    return _destroy_web_view(view_id);
+  }
+
+  late final _destroy_web_viewPtr =
+      _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Int)>>(
+        'destroy_web_view',
+      );
+  late final _destroy_web_view = _destroy_web_viewPtr
+      .asFunction<void Function(int)>();
+
+  ffi.Pointer<ffi.Void> get_latest_pixel_buffer(int view_id) {
+    return _get_latest_pixel_buffer(view_id);
   }
 
   late final _get_latest_pixel_bufferPtr =
-      _lookup<ffi.NativeFunction<ffi.Pointer<ffi.Void> Function()>>(
+      _lookup<ffi.NativeFunction<ffi.Pointer<ffi.Void> Function(ffi.Int)>>(
         'get_latest_pixel_buffer',
       );
   late final _get_latest_pixel_buffer = _get_latest_pixel_bufferPtr
-      .asFunction<ffi.Pointer<ffi.Void> Function()>();
+      .asFunction<ffi.Pointer<ffi.Void> Function(int)>();
 
   void set_frame_callback(
+    int view_id,
     FrameCallback callback,
     ffi.Pointer<ffi.Void> context,
   ) {
-    return _set_frame_callback(callback, context);
+    return _set_frame_callback(view_id, callback, context);
   }
 
   late final _set_frame_callbackPtr =
       _lookup<
         ffi.NativeFunction<
-          ffi.Void Function(FrameCallback, ffi.Pointer<ffi.Void>)
+          ffi.Void Function(ffi.Int, FrameCallback, ffi.Pointer<ffi.Void>)
         >
       >('set_frame_callback');
   late final _set_frame_callback = _set_frame_callbackPtr
-      .asFunction<void Function(FrameCallback, ffi.Pointer<ffi.Void>)>();
+      .asFunction<void Function(int, FrameCallback, ffi.Pointer<ffi.Void>)>();
 
-  void set_resize_callback(ResizeCallback callback) {
-    return _set_resize_callback(callback);
+  void set_resize_callback(int view_id, ResizeCallback callback) {
+    return _set_resize_callback(view_id, callback);
   }
 
   late final _set_resize_callbackPtr =
-      _lookup<ffi.NativeFunction<ffi.Void Function(ResizeCallback)>>(
+      _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Int, ResizeCallback)>>(
         'set_resize_callback',
       );
   late final _set_resize_callback = _set_resize_callbackPtr
-      .asFunction<void Function(ResizeCallback)>();
+      .asFunction<void Function(int, ResizeCallback)>();
 
-  void resize_window(int width, int height) {
-    return _resize_window(width, height);
+  void resize_window(int view_id, int width, int height) {
+    return _resize_window(view_id, width, height);
   }
 
   late final _resize_windowPtr =
-      _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Int, ffi.Int)>>(
+      _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Int, ffi.Int, ffi.Int)>>(
         'resize_window',
       );
   late final _resize_window = _resize_windowPtr
-      .asFunction<void Function(int, int)>();
+      .asFunction<void Function(int, int, int)>();
 
-  void navigate_to(ffi.Pointer<ffi.Char> url) {
-    return _navigate_to(url);
+  void navigate_to(int view_id, ffi.Pointer<ffi.Char> url) {
+    return _navigate_to(view_id, url);
   }
 
   late final _navigate_toPtr =
-      _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Pointer<ffi.Char>)>>(
-        'navigate_to',
-      );
+      _lookup<
+        ffi.NativeFunction<ffi.Void Function(ffi.Int, ffi.Pointer<ffi.Char>)>
+      >('navigate_to');
   late final _navigate_to = _navigate_toPtr
-      .asFunction<void Function(ffi.Pointer<ffi.Char>)>();
+      .asFunction<void Function(int, ffi.Pointer<ffi.Char>)>();
 
-  void set_zoom(double zoom) {
-    return _set_zoom(zoom);
+  void set_zoom(int view_id, double zoom) {
+    return _set_zoom(view_id, zoom);
   }
 
   late final _set_zoomPtr =
-      _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Double)>>('set_zoom');
-  late final _set_zoom = _set_zoomPtr.asFunction<void Function(double)>();
+      _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Int, ffi.Double)>>(
+        'set_zoom',
+      );
+  late final _set_zoom = _set_zoomPtr.asFunction<void Function(int, double)>();
 
-  int get_iosurface_width() {
-    return _get_iosurface_width();
+  int get_iosurface_width(int view_id) {
+    return _get_iosurface_width(view_id);
   }
 
   late final _get_iosurface_widthPtr =
-      _lookup<ffi.NativeFunction<ffi.Int Function()>>('get_iosurface_width');
+      _lookup<ffi.NativeFunction<ffi.Int Function(ffi.Int)>>(
+        'get_iosurface_width',
+      );
   late final _get_iosurface_width = _get_iosurface_widthPtr
-      .asFunction<int Function()>();
+      .asFunction<int Function(int)>();
 
-  int get_iosurface_height() {
-    return _get_iosurface_height();
+  int get_iosurface_height(int view_id) {
+    return _get_iosurface_height(view_id);
   }
 
   late final _get_iosurface_heightPtr =
-      _lookup<ffi.NativeFunction<ffi.Int Function()>>('get_iosurface_height');
+      _lookup<ffi.NativeFunction<ffi.Int Function(ffi.Int)>>(
+        'get_iosurface_height',
+      );
   late final _get_iosurface_height = _get_iosurface_heightPtr
-      .asFunction<int Function()>();
+      .asFunction<int Function(int)>();
 
   void dispatch_mouse_event(
+    int view_id,
     int type,
     int x,
     int y,
@@ -124,6 +152,7 @@ class LadybirdBindings {
     int wheel_delta_y,
   ) {
     return _dispatch_mouse_event(
+      view_id,
       type,
       x,
       y,
@@ -147,30 +176,46 @@ class LadybirdBindings {
             ffi.Int,
             ffi.Int,
             ffi.Int,
+            ffi.Int,
           )
         >
       >('dispatch_mouse_event');
   late final _dispatch_mouse_event = _dispatch_mouse_eventPtr
-      .asFunction<void Function(int, int, int, int, int, int, int, int)>();
+      .asFunction<void Function(int, int, int, int, int, int, int, int, int)>();
 
   void dispatch_key_event(
+    int view_id,
     int type,
     int keycode,
     int modifiers,
     int code_point,
     bool repeat,
   ) {
-    return _dispatch_key_event(type, keycode, modifiers, code_point, repeat);
+    return _dispatch_key_event(
+      view_id,
+      type,
+      keycode,
+      modifiers,
+      code_point,
+      repeat,
+    );
   }
 
   late final _dispatch_key_eventPtr =
       _lookup<
         ffi.NativeFunction<
-          ffi.Void Function(ffi.Int, ffi.Int, ffi.Int, ffi.Uint32, ffi.Bool)
+          ffi.Void Function(
+            ffi.Int,
+            ffi.Int,
+            ffi.Int,
+            ffi.Int,
+            ffi.Uint32,
+            ffi.Bool,
+          )
         >
       >('dispatch_key_event');
   late final _dispatch_key_event = _dispatch_key_eventPtr
-      .asFunction<void Function(int, int, int, int, bool)>();
+      .asFunction<void Function(int, int, int, int, int, bool)>();
 }
 
 final class __mbstate_t extends ffi.Union {

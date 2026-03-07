@@ -19,25 +19,28 @@ typedef void (*ResizeCallback)();
 
 LADYBIRD_API void init_ladybird();
 
-LADYBIRD_API void* get_latest_pixel_buffer();
+LADYBIRD_API int create_web_view();
+LADYBIRD_API void destroy_web_view(int view_id);
 
-LADYBIRD_API void set_frame_callback(FrameCallback callback, void* context);
+LADYBIRD_API void* get_latest_pixel_buffer(int view_id);
 
-LADYBIRD_API void set_resize_callback(ResizeCallback callback);
+LADYBIRD_API void set_frame_callback(int view_id, FrameCallback callback, void* context);
 
-LADYBIRD_API void resize_window(int width, int height);
+LADYBIRD_API void set_resize_callback(int view_id, ResizeCallback callback);
 
-LADYBIRD_API void navigate_to(const char* url);
+LADYBIRD_API void resize_window(int view_id, int width, int height);
 
-LADYBIRD_API void set_zoom(double zoom);
+LADYBIRD_API void navigate_to(int view_id, const char* url);
 
-LADYBIRD_API int get_iosurface_width();
+LADYBIRD_API void set_zoom(int view_id, double zoom);
 
-LADYBIRD_API int get_iosurface_height();
+LADYBIRD_API int get_iosurface_width(int view_id);
 
-LADYBIRD_API void dispatch_mouse_event(int type, int x, int y, int button, int buttons, int modifiers, int wheel_delta_x, int wheel_delta_y);
+LADYBIRD_API int get_iosurface_height(int view_id);
 
-LADYBIRD_API void dispatch_key_event(int type, int keycode, int modifiers, uint32_t code_point, bool repeat);
+LADYBIRD_API void dispatch_mouse_event(int view_id, int type, int x, int y, int button, int buttons, int modifiers, int wheel_delta_x, int wheel_delta_y);
+
+LADYBIRD_API void dispatch_key_event(int view_id, int type, int keycode, int modifiers, uint32_t code_point, bool repeat);
 
 #ifdef __cplusplus
 }
