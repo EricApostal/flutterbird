@@ -45,6 +45,7 @@ public class LadybirdPlugin: NSObject, FlutterPlugin {
   var textureRegistry: FlutterTextureRegistry?
   var timer: Timer?
   var contextPtrs: [Int64: UnsafeMutableRawPointer] = [:]
+  var activeTexturesForView: [Int32: Int64] = [:]
 
   public static func register(with registrar: FlutterPluginRegistrar) {
     let channel = FlutterMethodChannel(name: "ladybird", binaryMessenger: registrar.messenger)
@@ -85,6 +86,7 @@ public class LadybirdPlugin: NSObject, FlutterPlugin {
 
       let ctxPtr = Unmanaged.passRetained(ctx).toOpaque()
       contextPtrs[textureId] = ctxPtr
+      activeTexturesForView[viewId] = textureId
 
       let callback: @convention(c) (UnsafeMutableRawPointer?) -> Void = { contextPtr in
         guard let contextPtr = contextPtr else { return }
@@ -115,7 +117,10 @@ public class LadybirdPlugin: NSObject, FlutterPlugin {
 
       if let ptr = contextPtrs.removeValue(forKey: textureId) {
         let ctx = Unmanaged<TextureContext>.fromOpaque(ptr).takeRetainedValue()
-        set_frame_callback(ctx.viewId, nil, nil)
+        if activeTexturesForView[ctx.viewId] == textureId {
+          set_frame_callback(ctx.viewId, nil, nil)
+          activeTexturesForView.removeValue(forKey: ctx.viewId)
+        }
       }
 
       result(nil)
