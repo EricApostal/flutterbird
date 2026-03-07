@@ -1,5 +1,6 @@
 import 'dart:ffi' as ffi;
 import 'package:ffi/ffi.dart';
+import 'package:flutter/material.dart';
 
 import 'package:flutter/services.dart';
 import 'package:ladybird/src/generated/engine_bindings.g.dart';
@@ -12,6 +13,7 @@ class LadybirdController {
   Size? _lastSize;
   late final int _viewId;
   final String initialUrl;
+  final TextEditingController textController = TextEditingController();
 
   late final ffi.NativeCallable<ffi.Void Function()> _resizeCallback;
   void Function()? onResize;

@@ -1,4 +1,3 @@
-import 'package:bitsdojo_window/bitsdojo_window.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutterbird/features/browser/components/browser_window.dart';
@@ -13,10 +12,7 @@ class BrowserWindowScreen extends ConsumerWidget {
     return Scaffold(
       body: Column(
         children: [
-          SizedBox(
-            height: 45,
-            child: MoveWindow(child: BrowserTabBar(currentViewId: viewId)),
-          ),
+          BrowserTabBar(currentViewId: viewId),
           Expanded(child: BrowserWindow(viewId: viewId)),
         ],
       ),
