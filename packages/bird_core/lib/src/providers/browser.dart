@@ -1,5 +1,6 @@
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:ladybird/ladybird.dart';
+import 'package:collection/collection.dart';
 
 part 'browser.g.dart';
 
@@ -24,4 +25,10 @@ class BrowserTabController extends _$BrowserTabController {
     newState.removeWhere((e) => e.viewId == viewId);
     state = newState;
   }
+}
+
+@Riverpod(keepAlive: true)
+LadybirdController? browserTab(Ref ref, int viewId) {
+  final tabs = ref.watch(browserTabControllerProvider);
+  return tabs.firstWhereOrNull((e) => e.viewId == viewId);
 }

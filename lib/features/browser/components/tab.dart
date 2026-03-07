@@ -10,11 +10,14 @@ class BrowserTab extends StatelessWidget {
       width: 200,
       decoration: BoxDecoration(
         color: theme.colorScheme.surfaceContainer,
-        borderRadius: .vertical(top: .circular(12), bottom: .circular(12)),
+        borderRadius: .vertical(top: .circular(8), bottom: .circular(8)),
       ),
       child: Align(
         alignment: .centerLeft,
-        child: Padding(padding: .only(left: 12), child: Text("ree")),
+        child: Padding(
+          padding: .only(left: 12),
+          child: Text("Tab", style: theme.textTheme.labelMedium),
+        ),
       ),
     );
   }

@@ -4,8 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutterbird/features/browser/components/tab.dart';
 
 class BrowserTabBar extends ConsumerStatefulWidget {
-  final int viewId;
-  const BrowserTabBar({super.key, required this.viewId});
+  final int currentViewId;
+  const BrowserTabBar({super.key, required this.currentViewId});
 
   @override
   ConsumerState<ConsumerStatefulWidget> createState() => _BrowserTabBarState();
@@ -17,7 +17,7 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar> {
     final tabs = ref.watch(browserTabControllerProvider);
     final theme = Theme.of(context);
     return ReorderableListView.builder(
-      padding: const EdgeInsets.only(top: 4.0, left: 80),
+      padding: const EdgeInsets.only(top: 4, left: 80, bottom: 4),
       scrollDirection: Axis.horizontal,
       buildDefaultDragHandles: false,
       itemBuilder: (context, index) {

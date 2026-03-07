@@ -15,7 +15,7 @@ class BrowserWindowScreen extends ConsumerWidget {
         children: [
           SizedBox(
             height: 45,
-            child: MoveWindow(child: BrowserTabBar(viewId: viewId)),
+            child: MoveWindow(child: BrowserTabBar(currentViewId: viewId)),
           ),
           Expanded(child: BrowserWindow(viewId: viewId)),
         ],

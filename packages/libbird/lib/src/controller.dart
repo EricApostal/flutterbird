@@ -11,13 +11,14 @@ class LadybirdController {
   // int? _textureId;
   Size? _lastSize;
   late final int _viewId;
+  final String initialUrl;
 
   late final ffi.NativeCallable<ffi.Void Function()> _resizeCallback;
   void Function()? onResize;
 
   int get viewId => _viewId;
 
-  LadybirdController() {
+  LadybirdController({this.initialUrl = "https://www.ladybird.org/"}) {
     _lib = ffi.DynamicLibrary.process();
     _bindings = LadybirdBindings(_lib);
 

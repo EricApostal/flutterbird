@@ -27,6 +27,7 @@ class _LadybirdViewState extends State<LadybirdView> {
     };
     _createTexture();
     _scheduleTick();
+    widget.controller.navigate(widget.controller.initialUrl);
   }
 
   void _scheduleTick() {
