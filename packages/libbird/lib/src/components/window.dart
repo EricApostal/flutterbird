@@ -159,10 +159,10 @@ class _LadybirdViewState extends State<LadybirdView> {
 
   @override
   void dispose() {
-    // widget.controller.onResize = null;
-    // if (_textureId != null) {
-    //   widget.controller.unregisterTexture(_textureId!);
-    // }
+    widget.controller.onResize = null;
+    if (_textureId != null) {
+      widget.controller.unregisterTexture(_textureId!);
+    }
     super.dispose();
   }
 
