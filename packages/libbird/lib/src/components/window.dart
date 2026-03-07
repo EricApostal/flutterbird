@@ -14,7 +14,25 @@ class _LadybirdViewState extends State<LadybirdView> {
   @override
   void initState() {
     super.initState();
+    widget.controller.onResize = () {
+      if (mounted) {
+        _recreateTexture();
+      }
+    };
     _createTexture();
+  }
+
+  @override
+  void didUpdateWidget(LadybirdView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller != widget.controller) {
+      oldWidget.controller.onResize = null;
+      widget.controller.onResize = () {
+        if (mounted) {
+          _recreateTexture();
+        }
+      };
+    }
   }
 
   Future<void> _createTexture() async {
@@ -47,14 +65,12 @@ class _LadybirdViewState extends State<LadybirdView> {
   void _onSizeChanged(Size size) {
     if (size.width <= 0 || size.height <= 0) return;
 
-    final didResize = widget.controller.resizeWindow(size);
-    if (didResize) {
-      _recreateTexture();
-    }
+    widget.controller.resizeWindow(size);
   }
 
   @override
   void dispose() {
+    widget.controller.onResize = null;
     if (_textureId != null) {
       widget.controller.unregisterTexture(_textureId!);
     }

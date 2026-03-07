@@ -101,6 +101,25 @@ class LadybirdBindings {
       _lookup<ffi.NativeFunction<ffi.Int Function()>>('get_iosurface_height');
   late final _get_iosurface_height = _get_iosurface_heightPtr
       .asFunction<int Function()>();
+
+  void set_resize_callback(
+    ffi.Pointer<ffi.NativeFunction<ffi.Void Function()>> callback,
+  ) {
+    return _set_resize_callback(callback);
+  }
+
+  late final _set_resize_callbackPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.Void Function(
+            ffi.Pointer<ffi.NativeFunction<ffi.Void Function()>>,
+          )
+        >
+      >('set_resize_callback');
+  late final _set_resize_callback = _set_resize_callbackPtr
+      .asFunction<
+        void Function(ffi.Pointer<ffi.NativeFunction<ffi.Void Function()>>)
+      >();
 }
 
 typedef FrameCallback = ffi.Pointer<ffi.NativeFunction<FrameCallbackFunction>>;

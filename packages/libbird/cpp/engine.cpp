@@ -32,6 +32,8 @@ double g_zoom = 1.5;
 FrameCallback g_frame_callback = nullptr;
 void* g_frame_callback_context = nullptr;
 
+ResizeCallback g_resize_callback = nullptr;
+
 class FlutterViewImpl final : public WebView::ViewImplementation {
 public:
     static ErrorOr<NonnullOwnPtr<FlutterViewImpl>> create() {
@@ -67,6 +69,8 @@ public:
                 
                 // If the size changed or iosurface changed, we need to wrap the new IOSurface
                 if (current_iosurface != iosurface || size.width() != g_width || size.height() != g_height || !g_pixel_buffer) {
+                    bool size_changed = (size.width() != g_width || size.height() != g_height);
+                    
                     g_width = size.width();
                     g_height = size.height();
                     
@@ -86,6 +90,10 @@ public:
                     if (result != kCVReturnSuccess) {
                         std::println("Failed to wrap IOSurface in CVPixelBuffer! Error: {}", result);
                         return;
+                    }
+
+                    if (size_changed && g_resize_callback) {
+                        g_resize_callback();
                     }
                 }
 
@@ -237,6 +245,11 @@ void set_frame_callback(FrameCallback callback, void* context) {
     std::lock_guard<std::mutex> lock(g_frame_mutex);
     g_frame_callback = callback;
     g_frame_callback_context = context;
+}
+
+void set_resize_callback(ResizeCallback callback) {
+    std::lock_guard<std::mutex> lock(g_frame_mutex);
+    g_resize_callback = callback;
 }
 
 void resize_window(int width, int height) {

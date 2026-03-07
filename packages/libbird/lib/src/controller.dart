@@ -8,15 +8,27 @@ class LadybirdController {
   final MethodChannel _channel = MethodChannel('ladybird');
   late final ffi.DynamicLibrary _lib;
   late final LadybirdBindings _bindings;
-  // I'm not entirely sure where I should set the texture id
   // int? _textureId;
   Size? _lastSize;
+
+  late final ffi.NativeCallable<ffi.Void Function()> _resizeCallback;
+  void Function()? onResize;
 
   LadybirdController() {
     _lib = ffi.DynamicLibrary.process();
     _bindings = LadybirdBindings(_lib);
 
     _bindings.init_ladybird();
+
+    _resizeCallback = ffi.NativeCallable<ffi.Void Function()>.listener(
+      _onResize,
+    );
+    _bindings.set_resize_callback(_resizeCallback.nativeFunction);
+  }
+
+  void _onResize() {
+    print("ON RESIZE CALLBACK");
+    onResize?.call();
   }
 
   void navigate(String url) {
@@ -46,5 +58,9 @@ class LadybirdController {
 
   int getSurfaceHeight() {
     return _bindings.get_iosurface_height();
+  }
+
+  void dispose() {
+    _resizeCallback.close();
   }
 }
