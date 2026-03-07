@@ -102,12 +102,20 @@ class LadybirdController {
     if (dataPointer != ffi.nullptr) {
       if (width > 0 && height > 0) {
         final length = width * height * 4;
-        final bytesCopy = Uint8List.fromList(dataPointer.asTypedList(length));
+        final bgraBytes = dataPointer.asTypedList(length);
+        final rgbaBytes = Uint8List(length);
+        for (int i = 0; i < length; i += 4) {
+          rgbaBytes[i] = bgraBytes[i + 2]; // R
+          rgbaBytes[i + 1] = bgraBytes[i + 1]; // G
+          rgbaBytes[i + 2] = bgraBytes[i]; // B
+          rgbaBytes[i + 3] = bgraBytes[i + 3]; // A
+        }
+
         ui.decodeImageFromPixels(
-          bytesCopy,
+          rgbaBytes,
           width,
           height,
-          ui.PixelFormat.bgra8888,
+          ui.PixelFormat.rgba8888,
           (image) {
             faviconNotifier.value = image;
           },

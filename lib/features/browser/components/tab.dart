@@ -40,16 +40,39 @@ class BrowserTab extends ConsumerWidget {
                   alignment: Alignment.centerLeft,
                   child: Padding(
                     padding: const EdgeInsets.only(left: 12),
-                    child: ValueListenableBuilder<String>(
-                      valueListenable: browserTab.titleNotifier,
-                      builder: (context, title, child) {
-                        return Text(
-                          title,
-                          style: theme.textTheme.labelMedium,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        );
-                      },
+                    child: Row(
+                      children: [
+                        ValueListenableBuilder<dynamic>(
+                          valueListenable: browserTab.faviconNotifier,
+                          builder: (context, image, child) {
+                            if (image != null) {
+                              return Padding(
+                                padding: const EdgeInsets.only(right: 8.0),
+                                child: RawImage(
+                                  image: image,
+                                  width: 16,
+                                  height: 16,
+                                  filterQuality: FilterQuality.high,
+                                ),
+                              );
+                            }
+                            return const SizedBox.shrink();
+                          },
+                        ),
+                        Expanded(
+                          child: ValueListenableBuilder<String>(
+                            valueListenable: browserTab.titleNotifier,
+                            builder: (context, title, child) {
+                              return Text(
+                                title,
+                                style: theme.textTheme.labelMedium,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              );
+                            },
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
