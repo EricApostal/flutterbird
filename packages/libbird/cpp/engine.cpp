@@ -238,6 +238,8 @@ void init_ladybird() {
     static bool initialized = false;
     if (initialized)
         return;
+        
+    initialized = true;
 
     AK::set_rich_debug_enabled(true);
 
@@ -269,8 +271,6 @@ void init_ladybird() {
             }
         }
     }
-
-    initialized = true;
 }
 
 extern "C" void tick_ladybird() {
