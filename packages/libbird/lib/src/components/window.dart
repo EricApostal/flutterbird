@@ -25,7 +25,7 @@ class _LadybirdViewState extends State<LadybirdView> {
         _recreateTexture();
       }
     };
-    _createTexture();
+    _recreateTexture();
     _scheduleTick();
     widget.controller.navigate(widget.controller.initialUrl);
   }
@@ -49,37 +49,37 @@ class _LadybirdViewState extends State<LadybirdView> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.controller != widget.controller) {
       oldWidget.controller.onResize = null;
+
+      if (_textureId != null) {
+        oldWidget.controller.unregisterTexture(_textureId!);
+        _textureId = null;
+      }
+
       widget.controller.onResize = () {
         if (mounted) {
           _recreateTexture();
         }
       };
-    }
-  }
 
-  Future<void> _createTexture() async {
-    final int textureId = await widget.controller.createTexture();
-
-    if (mounted) {
-      setState(() {
-        _textureId = textureId;
-      });
-    } else {
-      widget.controller.unregisterTexture(textureId);
+      _recreateTexture();
     }
   }
 
   Future<void> _recreateTexture() async {
+    final int? oldTextureId = _textureId;
     final int textureId = await widget.controller.createTexture();
 
     if (mounted) {
       setState(() {
         _textureId = textureId;
       });
+      if (oldTextureId != null && oldTextureId != textureId) {
+        widget.controller.unregisterTexture(oldTextureId);
+      }
     } else {
       await widget.controller.unregisterTexture(textureId);
-      if (mounted) {
-        setState(() {});
+      if (oldTextureId != null) {
+        await widget.controller.unregisterTexture(oldTextureId);
       }
     }
   }

@@ -9,7 +9,7 @@ func tick_ladybird()
 
 @_silgen_name("set_frame_callback")
 func set_frame_callback(
-  _ view_id: Int32, _ callback: @convention(c) (UnsafeMutableRawPointer?) -> Void,
+  _ view_id: Int32, _ callback: (@convention(c) (UnsafeMutableRawPointer?) -> Void)?,
   _ context: UnsafeMutableRawPointer?
 )
 
@@ -32,10 +32,12 @@ class LadybirdTexture: NSObject, FlutterTexture {
 class TextureContext {
   let registry: FlutterTextureRegistry
   let textureId: Int64
+  let viewId: Int32
 
-  init(registry: FlutterTextureRegistry, textureId: Int64) {
+  init(registry: FlutterTextureRegistry, textureId: Int64, viewId: Int32) {
     self.registry = registry
     self.textureId = textureId
+    self.viewId = viewId
   }
 }
 
@@ -79,7 +81,7 @@ public class LadybirdPlugin: NSObject, FlutterPlugin {
       let texture = LadybirdTexture(viewId: viewId)
       let textureId = registry.register(texture)
 
-      let ctx = TextureContext(registry: registry, textureId: textureId)
+      let ctx = TextureContext(registry: registry, textureId: textureId, viewId: viewId)
 
       let ctxPtr = Unmanaged.passRetained(ctx).toOpaque()
       contextPtrs[textureId] = ctxPtr
@@ -112,7 +114,8 @@ public class LadybirdPlugin: NSObject, FlutterPlugin {
       registry.unregisterTexture(textureId)
 
       if let ptr = contextPtrs.removeValue(forKey: textureId) {
-        Unmanaged<TextureContext>.fromOpaque(ptr).release()
+        let ctx = Unmanaged<TextureContext>.fromOpaque(ptr).takeRetainedValue()
+        set_frame_callback(ctx.viewId, nil, nil)
       }
 
       result(nil)
