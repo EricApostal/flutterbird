@@ -32,6 +32,7 @@ class LadybirdController {
       _onResize,
     );
     _bindings.set_resize_callback(_viewId, _resizeCallback.nativeFunction);
+    _bindings.set_zoom(_viewId, 2);
   }
 
   void _onResize() {
@@ -42,6 +43,7 @@ class LadybirdController {
     textController.text = url;
     final ffi.Pointer<Utf8> charPointer = url.toNativeUtf8();
     _bindings.navigate_to(_viewId, charPointer.cast<ffi.Char>());
+    _bindings.set_zoom(_viewId, 2);
     malloc.free(charPointer);
   }
 
