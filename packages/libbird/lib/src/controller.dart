@@ -15,6 +15,8 @@ class LadybirdController {
   late final ffi.NativeCallable<ffi.Void Function()> _resizeCallback;
   void Function()? onResize;
 
+  int get viewId => _viewId;
+
   LadybirdController() {
     _lib = ffi.DynamicLibrary.process();
     _bindings = LadybirdBindings(_lib);

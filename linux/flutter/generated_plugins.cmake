@@ -3,7 +3,8 @@
 #
 
 list(APPEND FLUTTER_PLUGIN_LIST
-  libbird
+  bitsdojo_window_linux
+  ladybird
 )
 
 list(APPEND FLUTTER_FFI_PLUGIN_LIST

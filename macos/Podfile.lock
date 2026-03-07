@@ -1,21 +1,27 @@
 PODS:
+  - bitsdojo_window_macos (0.0.1):
+    - FlutterMacOS
   - FlutterMacOS (1.0.0)
-  - libbird (0.0.1):
+  - ladybird (0.0.1):
     - FlutterMacOS
 
 DEPENDENCIES:
+  - bitsdojo_window_macos (from `Flutter/ephemeral/.symlinks/plugins/bitsdojo_window_macos/macos`)
   - FlutterMacOS (from `Flutter/ephemeral`)
-  - libbird (from `Flutter/ephemeral/.symlinks/plugins/libbird/macos`)
+  - ladybird (from `Flutter/ephemeral/.symlinks/plugins/ladybird/macos`)
 
 EXTERNAL SOURCES:
+  bitsdojo_window_macos:
+    :path: Flutter/ephemeral/.symlinks/plugins/bitsdojo_window_macos/macos
   FlutterMacOS:
     :path: Flutter/ephemeral
-  libbird:
-    :path: Flutter/ephemeral/.symlinks/plugins/libbird/macos
+  ladybird:
+    :path: Flutter/ephemeral/.symlinks/plugins/ladybird/macos
 
 SPEC CHECKSUMS:
+  bitsdojo_window_macos: 7959fb0ca65a3ccda30095c181ecb856fae48ea9
   FlutterMacOS: d0db08ddef1a9af05a5ec4b724367152bb0500b1
-  libbird: 530864a07f989c9891ce98fc7611fb7b5a73ebdb
+  ladybird: ae90462cd518ecedc2c8a840431920187fa1dfd9
 
 PODFILE CHECKSUM: c3dfa49fe1718ff539b25a86b1e83753ef88ae4d
 
