@@ -54,6 +54,17 @@ class LadybirdBindings {
   late final _set_frame_callback = _set_frame_callbackPtr
       .asFunction<void Function(FrameCallback, ffi.Pointer<ffi.Void>)>();
 
+  void set_resize_callback(ResizeCallback callback) {
+    return _set_resize_callback(callback);
+  }
+
+  late final _set_resize_callbackPtr =
+      _lookup<ffi.NativeFunction<ffi.Void Function(ResizeCallback)>>(
+        'set_resize_callback',
+      );
+  late final _set_resize_callback = _set_resize_callbackPtr
+      .asFunction<void Function(ResizeCallback)>();
+
   void resize_window(int width, int height) {
     return _resize_window(width, height);
   }
@@ -102,26 +113,337 @@ class LadybirdBindings {
   late final _get_iosurface_height = _get_iosurface_heightPtr
       .asFunction<int Function()>();
 
-  void set_resize_callback(
-    ffi.Pointer<ffi.NativeFunction<ffi.Void Function()>> callback,
+  void dispatch_mouse_event(
+    int type,
+    int x,
+    int y,
+    int button,
+    int buttons,
+    int modifiers,
+    int wheel_delta_x,
+    int wheel_delta_y,
   ) {
-    return _set_resize_callback(callback);
+    return _dispatch_mouse_event(
+      type,
+      x,
+      y,
+      button,
+      buttons,
+      modifiers,
+      wheel_delta_x,
+      wheel_delta_y,
+    );
   }
 
-  late final _set_resize_callbackPtr =
+  late final _dispatch_mouse_eventPtr =
       _lookup<
         ffi.NativeFunction<
           ffi.Void Function(
-            ffi.Pointer<ffi.NativeFunction<ffi.Void Function()>>,
+            ffi.Int,
+            ffi.Int,
+            ffi.Int,
+            ffi.Int,
+            ffi.Int,
+            ffi.Int,
+            ffi.Int,
+            ffi.Int,
           )
         >
-      >('set_resize_callback');
-  late final _set_resize_callback = _set_resize_callbackPtr
-      .asFunction<
-        void Function(ffi.Pointer<ffi.NativeFunction<ffi.Void Function()>>)
-      >();
+      >('dispatch_mouse_event');
+  late final _dispatch_mouse_event = _dispatch_mouse_eventPtr
+      .asFunction<void Function(int, int, int, int, int, int, int, int)>();
+
+  void dispatch_key_event(
+    int type,
+    int keycode,
+    int modifiers,
+    int code_point,
+    bool repeat,
+  ) {
+    return _dispatch_key_event(type, keycode, modifiers, code_point, repeat);
+  }
+
+  late final _dispatch_key_eventPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.Void Function(ffi.Int, ffi.Int, ffi.Int, ffi.Uint32, ffi.Bool)
+        >
+      >('dispatch_key_event');
+  late final _dispatch_key_event = _dispatch_key_eventPtr
+      .asFunction<void Function(int, int, int, int, bool)>();
+}
+
+final class __mbstate_t extends ffi.Union {
+  @ffi.Array.multi([128])
+  external ffi.Array<ffi.Char> __mbstate8;
+
+  @ffi.LongLong()
+  external int _mbstateL;
+}
+
+final class __darwin_pthread_handler_rec extends ffi.Struct {
+  external ffi.Pointer<
+    ffi.NativeFunction<ffi.Void Function(ffi.Pointer<ffi.Void>)>
+  >
+  __routine;
+
+  external ffi.Pointer<ffi.Void> __arg;
+
+  external ffi.Pointer<__darwin_pthread_handler_rec> __next;
+}
+
+final class _opaque_pthread_attr_t extends ffi.Struct {
+  @ffi.Long()
+  external int __sig;
+
+  @ffi.Array.multi([56])
+  external ffi.Array<ffi.Char> __opaque;
+}
+
+final class _opaque_pthread_cond_t extends ffi.Struct {
+  @ffi.Long()
+  external int __sig;
+
+  @ffi.Array.multi([40])
+  external ffi.Array<ffi.Char> __opaque;
+}
+
+final class _opaque_pthread_condattr_t extends ffi.Struct {
+  @ffi.Long()
+  external int __sig;
+
+  @ffi.Array.multi([8])
+  external ffi.Array<ffi.Char> __opaque;
+}
+
+final class _opaque_pthread_mutex_t extends ffi.Struct {
+  @ffi.Long()
+  external int __sig;
+
+  @ffi.Array.multi([56])
+  external ffi.Array<ffi.Char> __opaque;
+}
+
+final class _opaque_pthread_mutexattr_t extends ffi.Struct {
+  @ffi.Long()
+  external int __sig;
+
+  @ffi.Array.multi([8])
+  external ffi.Array<ffi.Char> __opaque;
+}
+
+final class _opaque_pthread_once_t extends ffi.Struct {
+  @ffi.Long()
+  external int __sig;
+
+  @ffi.Array.multi([8])
+  external ffi.Array<ffi.Char> __opaque;
+}
+
+final class _opaque_pthread_rwlock_t extends ffi.Struct {
+  @ffi.Long()
+  external int __sig;
+
+  @ffi.Array.multi([192])
+  external ffi.Array<ffi.Char> __opaque;
+}
+
+final class _opaque_pthread_rwlockattr_t extends ffi.Struct {
+  @ffi.Long()
+  external int __sig;
+
+  @ffi.Array.multi([16])
+  external ffi.Array<ffi.Char> __opaque;
+}
+
+final class _opaque_pthread_t extends ffi.Struct {
+  @ffi.Long()
+  external int __sig;
+
+  external ffi.Pointer<__darwin_pthread_handler_rec> __cleanup_stack;
+
+  @ffi.Array.multi([8176])
+  external ffi.Array<ffi.Char> __opaque;
 }
 
 typedef FrameCallback = ffi.Pointer<ffi.NativeFunction<FrameCallbackFunction>>;
 typedef FrameCallbackFunction = ffi.Void Function(ffi.Pointer<ffi.Void>);
 typedef DartFrameCallbackFunction = void Function(ffi.Pointer<ffi.Void>);
+typedef ResizeCallback =
+    ffi.Pointer<ffi.NativeFunction<ResizeCallbackFunction>>;
+typedef ResizeCallbackFunction = ffi.Void Function();
+typedef DartResizeCallbackFunction = void Function();
+
+const int __bool_true_false_are_defined = 1;
+
+const int true1 = 1;
+
+const int false1 = 0;
+
+const int __WORDSIZE = 64;
+
+const int __has_safe_buffers = 1;
+
+const int __DARWIN_ONLY_64_BIT_INO_T = 1;
+
+const int __DARWIN_ONLY_UNIX_CONFORMANCE = 1;
+
+const int __DARWIN_ONLY_VERS_1050 = 1;
+
+const int __DARWIN_UNIX03 = 1;
+
+const int __DARWIN_64_BIT_INO_T = 1;
+
+const int __DARWIN_VERS_1050 = 1;
+
+const int __DARWIN_NON_CANCELABLE = 0;
+
+const String __DARWIN_SUF_EXTSN = '\$DARWIN_EXTSN';
+
+const int __DARWIN_C_ANSI = 4096;
+
+const int __DARWIN_C_FULL = 900000;
+
+const int __DARWIN_C_LEVEL = 900000;
+
+const int __STDC_WANT_LIB_EXT1__ = 1;
+
+const int __DARWIN_NO_LONG_LONG = 0;
+
+const int _DARWIN_FEATURE_64_BIT_INODE = 1;
+
+const int _DARWIN_FEATURE_ONLY_64_BIT_INODE = 1;
+
+const int _DARWIN_FEATURE_ONLY_VERS_1050 = 1;
+
+const int _DARWIN_FEATURE_ONLY_UNIX_CONFORMANCE = 1;
+
+const int _DARWIN_FEATURE_UNIX_CONFORMANCE = 3;
+
+const int __has_ptrcheck = 0;
+
+const int __has_bounds_safety_attributes = 0;
+
+const int __DARWIN_NULL = 0;
+
+const int __PTHREAD_SIZE__ = 8176;
+
+const int __PTHREAD_ATTR_SIZE__ = 56;
+
+const int __PTHREAD_MUTEXATTR_SIZE__ = 8;
+
+const int __PTHREAD_MUTEX_SIZE__ = 56;
+
+const int __PTHREAD_CONDATTR_SIZE__ = 8;
+
+const int __PTHREAD_COND_SIZE__ = 40;
+
+const int __PTHREAD_ONCE_SIZE__ = 8;
+
+const int __PTHREAD_RWLOCK_SIZE__ = 192;
+
+const int __PTHREAD_RWLOCKATTR_SIZE__ = 16;
+
+const int INT8_MAX = 127;
+
+const int INT16_MAX = 32767;
+
+const int INT32_MAX = 2147483647;
+
+const int INT64_MAX = 9223372036854775807;
+
+const int INT8_MIN = -128;
+
+const int INT16_MIN = -32768;
+
+const int INT32_MIN = -2147483648;
+
+const int INT64_MIN = -9223372036854775808;
+
+const int UINT8_MAX = 255;
+
+const int UINT16_MAX = 65535;
+
+const int UINT32_MAX = 4294967295;
+
+const int UINT64_MAX = -1;
+
+const int INT_LEAST8_MIN = -128;
+
+const int INT_LEAST16_MIN = -32768;
+
+const int INT_LEAST32_MIN = -2147483648;
+
+const int INT_LEAST64_MIN = -9223372036854775808;
+
+const int INT_LEAST8_MAX = 127;
+
+const int INT_LEAST16_MAX = 32767;
+
+const int INT_LEAST32_MAX = 2147483647;
+
+const int INT_LEAST64_MAX = 9223372036854775807;
+
+const int UINT_LEAST8_MAX = 255;
+
+const int UINT_LEAST16_MAX = 65535;
+
+const int UINT_LEAST32_MAX = 4294967295;
+
+const int UINT_LEAST64_MAX = -1;
+
+const int INT_FAST8_MIN = -128;
+
+const int INT_FAST16_MIN = -32768;
+
+const int INT_FAST32_MIN = -2147483648;
+
+const int INT_FAST64_MIN = -9223372036854775808;
+
+const int INT_FAST8_MAX = 127;
+
+const int INT_FAST16_MAX = 32767;
+
+const int INT_FAST32_MAX = 2147483647;
+
+const int INT_FAST64_MAX = 9223372036854775807;
+
+const int UINT_FAST8_MAX = 255;
+
+const int UINT_FAST16_MAX = 65535;
+
+const int UINT_FAST32_MAX = 4294967295;
+
+const int UINT_FAST64_MAX = -1;
+
+const int INTPTR_MAX = 9223372036854775807;
+
+const int INTPTR_MIN = -9223372036854775808;
+
+const int UINTPTR_MAX = -1;
+
+const int INTMAX_MAX = 9223372036854775807;
+
+const int UINTMAX_MAX = -1;
+
+const int INTMAX_MIN = -9223372036854775808;
+
+const int PTRDIFF_MIN = -9223372036854775808;
+
+const int PTRDIFF_MAX = 9223372036854775807;
+
+const int SIZE_MAX = -1;
+
+const int RSIZE_MAX = 9223372036854775807;
+
+const int WCHAR_MAX = 2147483647;
+
+const int WCHAR_MIN = -2147483648;
+
+const int WINT_MIN = -2147483648;
+
+const int WINT_MAX = 2147483647;
+
+const int SIG_ATOMIC_MIN = -2147483648;
+
+const int SIG_ATOMIC_MAX = 2147483647;

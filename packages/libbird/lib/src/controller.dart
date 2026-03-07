@@ -59,6 +59,38 @@ class LadybirdController {
     return _bindings.get_iosurface_height();
   }
 
+  void dispatchMouseEvent({
+    required int type,
+    required int x,
+    required int y,
+    required int button,
+    required int buttons,
+    required int modifiers,
+    required int wheelDeltaX,
+    required int wheelDeltaY,
+  }) {
+    _bindings.dispatch_mouse_event(
+      type,
+      x,
+      y,
+      button,
+      buttons,
+      modifiers,
+      wheelDeltaX,
+      wheelDeltaY,
+    );
+  }
+
+  void dispatchKeyEvent({
+    required int type,
+    required int keycode,
+    required int modifiers,
+    required int codePoint,
+    required bool repeat,
+  }) {
+    _bindings.dispatch_key_event(type, keycode, modifiers, codePoint, repeat);
+  }
+
   void dispose() {
     _resizeCallback.close();
   }

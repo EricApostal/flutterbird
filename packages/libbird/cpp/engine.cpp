@@ -23,6 +23,7 @@
 #include <LibWebView/Utilities.h>
 #include <LibCore/System.h>
 #include <LibWeb/Page/InputEvent.h>
+#include <string>
 
 std::mutex g_frame_mutex;
 CVPixelBufferRef g_pixel_buffer = nullptr;

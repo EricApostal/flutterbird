@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter/gestures.dart';
 import 'package:ladybird/ladybird.dart';
+import 'keys.dart';
 
 class LadybirdView extends StatefulWidget {
   final LadybirdController controller;
@@ -82,6 +85,76 @@ class _LadybirdViewState extends State<LadybirdView> {
     widget.controller.resizeWindow(size);
   }
 
+  void _onPointerEvent(PointerEvent event, int type) {
+    // primary
+    int button = 1;
+    if (event.buttons & kPrimaryMouseButton != 0) {
+      button = 1;
+    } else if (event.buttons & kSecondaryMouseButton != 0) {
+      button = 2;
+    }
+
+    if (type == 0 || type == 1) {
+      if (event is PointerDownEvent) {
+        if (event.buttons == kPrimaryMouseButton) {
+          button = 1;
+        } else if (event.buttons == kSecondaryMouseButton) {
+          button = 2;
+        }
+      }
+    }
+
+    final density = MediaQuery.devicePixelRatioOf(context);
+    widget.controller.dispatchMouseEvent(
+      type: type,
+      x: (event.localPosition.dx * density).toInt(),
+      y: (event.localPosition.dy * density).toInt(),
+      button: button,
+      buttons: event.buttons,
+      modifiers: getModifiersForEvent(
+        HardwareKeyboard.instance.logicalKeysPressed,
+      ),
+      wheelDeltaX: 0,
+      wheelDeltaY: 0,
+    );
+  }
+
+  void _onPointerScroll(PointerScrollEvent event) {
+    int type = 4;
+    final density = MediaQuery.devicePixelRatioOf(context);
+    widget.controller.dispatchMouseEvent(
+      type: type,
+      x: (event.localPosition.dx * density).toInt(),
+      y: (event.localPosition.dy * density).toInt(),
+      button: 0,
+      buttons: 0,
+      modifiers: getModifiersForEvent(
+        HardwareKeyboard.instance.logicalKeysPressed,
+      ),
+      wheelDeltaX: -(event.scrollDelta.dx * density).toInt(),
+      wheelDeltaY: -(event.scrollDelta.dy * density).toInt(),
+    );
+  }
+
+  KeyEventResult _onKeyEvent(FocusNode node, KeyEvent event) {
+    int type = event is KeyDownEvent ? 0 : 1;
+    if (event is KeyRepeatEvent) type = 0;
+
+    int keycode = getLadybirdKeyCode(event.logicalKey);
+    int codePoint = event.character?.codeUnitAt(0) ?? 0;
+
+    widget.controller.dispatchKeyEvent(
+      type: type,
+      keycode: keycode,
+      modifiers: getModifiersForEvent(
+        HardwareKeyboard.instance.logicalKeysPressed,
+      ),
+      codePoint: codePoint,
+      repeat: event is KeyRepeatEvent,
+    );
+    return KeyEventResult.handled;
+  }
+
   @override
   void dispose() {
     widget.controller.onResize = null;
@@ -123,9 +196,24 @@ class _LadybirdViewState extends State<LadybirdView> {
               child: SizedBox(
                 width: paddedWidth,
                 height: paddedHeight,
-                child: Texture(
-                  key: ValueKey(_textureId),
-                  textureId: _textureId!,
+                child: Focus(
+                  autofocus: true,
+                  onKeyEvent: _onKeyEvent,
+                  child: Listener(
+                    onPointerDown: (e) => _onPointerEvent(e, 0),
+                    onPointerUp: (e) => _onPointerEvent(e, 1),
+                    onPointerMove: (e) => _onPointerEvent(e, 2),
+                    onPointerHover: (e) => _onPointerEvent(e, 2),
+                    onPointerSignal: (e) {
+                      if (e is PointerScrollEvent) {
+                        _onPointerScroll(e);
+                      }
+                    },
+                    child: Texture(
+                      key: ValueKey(_textureId),
+                      textureId: _textureId!,
+                    ),
+                  ),
                 ),
               ),
             ),
