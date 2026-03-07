@@ -1,7 +1,6 @@
 import 'package:bitsdojo_window/bitsdojo_window.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutterbird/features/browser/screens/browser.dart';
 import 'package:flutterbird/features/router/controller.dart';
 
 void main() {

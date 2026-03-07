@@ -1,19 +1,23 @@
-import 'package:flutterbird/features/browser/components/browser_window.dart';
-import 'package:flutterbird/features/router/components/navigation_scope.dart';
+import 'package:flutterbird/features/browser/screens/browser.dart';
+import 'package:flutterbird/features/browser/screens/loading.dart';
 import 'package:go_router/go_router.dart';
 
 final routerController = GoRouter(
   initialLocation: "/browser",
   routes: [
-    ShellRoute(
-      builder: (context, state, child) {
-        return NavigationScope(child: child);
+    GoRoute(
+      path: "/browser",
+      builder: (context, state) {
+        return BrowserLoadingScreen();
       },
       routes: [
         GoRoute(
-          path: "/browser",
+          // TODO: Some tabs will probably be flutter based to some extent,
+          // so at some point I should provide some sort of uuid abstraction
+          path: "tab/:viewId",
           builder: (context, state) {
-            return BrowserWindow();
+            final viewId = int.parse(state.pathParameters["viewId"] as String);
+            return BrowserWindowScreen(viewId: viewId);
           },
         ),
       ],

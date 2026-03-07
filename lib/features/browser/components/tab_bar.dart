@@ -4,7 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutterbird/features/browser/components/tab.dart';
 
 class BrowserTabBar extends ConsumerStatefulWidget {
-  const BrowserTabBar({super.key});
+  final int viewId;
+  const BrowserTabBar({super.key, required this.viewId});
 
   @override
   ConsumerState<ConsumerStatefulWidget> createState() => _BrowserTabBarState();
@@ -21,7 +22,7 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar> {
       buildDefaultDragHandles: false,
       itemBuilder: (context, index) {
         return ReorderableDragStartListener(
-          key: ValueKey("re-$index"),
+          key: ValueKey("Tab-$index"),
           index: index,
           child: Padding(padding: const .only(right: 2.0), child: BrowserTab()),
         );
@@ -29,7 +30,7 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar> {
       proxyDecorator: (Widget child, int index, Animation<double> animation) {
         return Material(color: Colors.transparent, elevation: 0, child: child);
       },
-      itemCount: 10,
+      itemCount: tabs.length,
       onReorder: (oldIndex, newIndex) {},
     );
   }
