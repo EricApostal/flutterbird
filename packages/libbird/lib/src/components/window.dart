@@ -135,8 +135,8 @@ class _LadybirdViewState extends State<LadybirdView> {
       modifiers: getModifiersForEvent(
         HardwareKeyboard.instance.logicalKeysPressed,
       ),
-      wheelDeltaX: -(event.scrollDelta.dx * density).toInt(),
-      wheelDeltaY: -(event.scrollDelta.dy * density).toInt(),
+      wheelDeltaX: (event.scrollDelta.dx * density).toInt(),
+      wheelDeltaY: (event.scrollDelta.dy * density).toInt(),
     );
   }
 
@@ -152,8 +152,8 @@ class _LadybirdViewState extends State<LadybirdView> {
       modifiers: getModifiersForEvent(
         HardwareKeyboard.instance.logicalKeysPressed,
       ),
-      wheelDeltaX: (event.panDelta.dx * density).toInt(),
-      wheelDeltaY: (event.panDelta.dy * density).toInt(),
+      wheelDeltaX: -(event.panDelta.dx * density).toInt(),
+      wheelDeltaY: -(event.panDelta.dy * density).toInt(),
     );
   }
 
@@ -218,27 +218,34 @@ class _LadybirdViewState extends State<LadybirdView> {
               child: SizedBox(
                 width: paddedWidth,
                 height: paddedHeight,
-                child: Focus(
-                  focusNode: _focusNode,
-                  autofocus: true,
-                  onKeyEvent: _onKeyEvent,
-                  child: Listener(
-                    onPointerDown: (e) {
+                child: MouseRegion(
+                  onEnter: (_) {
+                    if (!_focusNode.hasFocus) {
                       _focusNode.requestFocus();
-                      _onPointerEvent(e, 0);
-                    },
-                    onPointerUp: (e) => _onPointerEvent(e, 1),
-                    onPointerMove: (e) => _onPointerEvent(e, 2),
-                    onPointerHover: (e) => _onPointerEvent(e, 2),
-                    onPointerPanZoomUpdate: _onPointerPanZoomUpdate,
-                    onPointerSignal: (e) {
-                      if (e is PointerScrollEvent) {
-                        _onPointerScroll(e);
-                      }
-                    },
-                    child: Texture(
-                      key: ValueKey(_textureId),
-                      textureId: _textureId!,
+                    }
+                  },
+                  child: Focus(
+                    focusNode: _focusNode,
+                    autofocus: true,
+                    onKeyEvent: _onKeyEvent,
+                    child: Listener(
+                      onPointerDown: (e) {
+                        _focusNode.requestFocus();
+                        _onPointerEvent(e, 0);
+                      },
+                      onPointerUp: (e) => _onPointerEvent(e, 1),
+                      onPointerMove: (e) => _onPointerEvent(e, 2),
+                      onPointerHover: (e) => _onPointerEvent(e, 2),
+                      onPointerPanZoomUpdate: _onPointerPanZoomUpdate,
+                      onPointerSignal: (e) {
+                        if (e is PointerScrollEvent) {
+                          _onPointerScroll(e);
+                        }
+                      },
+                      child: Texture(
+                        key: ValueKey(_textureId),
+                        textureId: _textureId!,
+                      ),
                     ),
                   ),
                 ),
