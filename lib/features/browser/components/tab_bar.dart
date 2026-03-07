@@ -83,17 +83,54 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar> {
         ),
         Padding(
           padding: const EdgeInsets.only(left: 4, right: 4, bottom: 4),
-          child: TextField(
-            onSubmitted: (value) {
-              currentTabController.navigate(value);
-            },
-            controller: currentTabController!.textController,
-            decoration: _buildInputDecoration(),
-            style: theme.textTheme.labelMedium!.copyWith(
-              color: theme.colorScheme.onSurface.withAlpha(200),
-              fontWeight: .w500,
-              fontSize: 13,
-            ),
+          child: Row(
+            children: [
+              IconButton(
+                icon: const Icon(Icons.arrow_back, size: 20),
+                onPressed: () {
+                  currentTabController?.goBack();
+                },
+                splashRadius: 20,
+              ),
+              IconButton(
+                icon: const Icon(Icons.arrow_forward, size: 20),
+                onPressed: () {
+                  currentTabController?.goForward();
+                },
+                splashRadius: 20,
+              ),
+              IconButton(
+                icon: const Icon(Icons.refresh, size: 20),
+                onPressed: () {
+                  currentTabController?.reload();
+                },
+                splashRadius: 20,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: ValueListenableBuilder<String>(
+                  valueListenable: currentTabController!.urlNotifier,
+                  builder: (context, url, child) {
+                    if (currentTabController.textController.text != url &&
+                        !FocusScope.of(context).hasFocus) {
+                      currentTabController.textController.text = url;
+                    }
+                    return TextField(
+                      onSubmitted: (value) {
+                        currentTabController.navigate(value);
+                      },
+                      controller: currentTabController.textController,
+                      decoration: _buildInputDecoration(),
+                      style: theme.textTheme.labelMedium!.copyWith(
+                        color: theme.colorScheme.onSurface.withAlpha(200),
+                        fontWeight: FontWeight.w500,
+                        fontSize: 13,
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
           ),
         ),
       ],

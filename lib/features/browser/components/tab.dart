@@ -11,6 +11,8 @@ class BrowserTab extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final browserTab = ref.watch(browserTabProvider(viewId))!;
+
     final theme = Theme.of(context);
     return Material(
       borderRadius: .circular(8),
@@ -38,7 +40,17 @@ class BrowserTab extends ConsumerWidget {
                   alignment: Alignment.centerLeft,
                   child: Padding(
                     padding: const EdgeInsets.only(left: 12),
-                    child: Text("Tab", style: theme.textTheme.labelMedium),
+                    child: ValueListenableBuilder<String>(
+                      valueListenable: browserTab.titleNotifier,
+                      builder: (context, title, child) {
+                        return Text(
+                          title,
+                          style: theme.textTheme.labelMedium,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        );
+                      },
+                    ),
                   ),
                 ),
               ),

@@ -47,6 +47,10 @@ public:
 
     ResizeCallback m_resize_callback = nullptr;
     
+    UrlChangeCallback m_url_change_callback = nullptr;
+    TitleChangeCallback m_title_change_callback = nullptr;
+    FaviconChangeCallback m_favicon_change_callback = nullptr;
+    
     std::mutex m_mutex;
 
     virtual void initialize_client(CreateNewClient create_new_client = CreateNewClient::Yes) override {
@@ -118,6 +122,26 @@ public:
             std::println("WebContent process crashed!!!");
         };
         
+        on_url_change = [this](URL::URL const& url) {
+            std::lock_guard<std::mutex> lock(m_mutex);
+            if (m_url_change_callback) {
+                m_url_change_callback(url.to_string().to_byte_string().characters());
+            }
+        };
+
+        on_title_change = [this](Utf16String const& title) {
+            std::lock_guard<std::mutex> lock(m_mutex);
+            if (m_title_change_callback) {
+                m_title_change_callback(title.to_utf8().to_byte_string().characters());
+            }
+        };
+
+        on_favicon_change = [this](Gfx::Bitmap const& bitmap) {
+            std::lock_guard<std::mutex> lock(m_mutex);
+            if (m_favicon_change_callback) {
+                m_favicon_change_callback(nullptr, bitmap.width(), bitmap.height());
+            }
+        };
     }
 
     void resize(int width, int height) {
@@ -355,6 +379,65 @@ int get_iosurface_height(int view_id) {
     IOSurfaceRef iosurface = CVPixelBufferGetIOSurface(it->second->m_pixel_buffer);
     if (!iosurface) return it->second->m_height;
     return IOSurfaceGetHeight(iosurface);
+}
+
+void set_url_change_callback(int view_id, UrlChangeCallback callback) {
+    std::lock_guard<std::mutex> lock(g_web_views_mutex);
+    auto it = g_web_views.find(view_id);
+    if (it != g_web_views.end()) {
+        std::lock_guard<std::mutex> view_lock(it->second->m_mutex);
+        it->second->m_url_change_callback = callback;
+    }
+}
+
+void set_title_change_callback(int view_id, TitleChangeCallback callback) {
+    std::lock_guard<std::mutex> lock(g_web_views_mutex);
+    auto it = g_web_views.find(view_id);
+    if (it != g_web_views.end()) {
+        std::lock_guard<std::mutex> view_lock(it->second->m_mutex);
+        it->second->m_title_change_callback = callback;
+    }
+}
+
+void set_favicon_change_callback(int view_id, FaviconChangeCallback callback) {
+    std::lock_guard<std::mutex> lock(g_web_views_mutex);
+    auto it = g_web_views.find(view_id);
+    if (it != g_web_views.end()) {
+        std::lock_guard<std::mutex> view_lock(it->second->m_mutex);
+        it->second->m_favicon_change_callback = callback;
+    }
+}
+
+void reload_tab(int view_id) {
+    std::lock_guard<std::mutex> lock(g_web_views_mutex);
+    auto it = g_web_views.find(view_id);
+    if (it != g_web_views.end()) {
+        it->second->reload();
+    }
+}
+
+void go_back(int view_id) {
+    std::lock_guard<std::mutex> lock(g_web_views_mutex);
+    auto it = g_web_views.find(view_id);
+    if (it != g_web_views.end()) {
+        it->second->traverse_the_history_by_delta(-1);
+    }
+}
+
+void go_forward(int view_id) {
+    std::lock_guard<std::mutex> lock(g_web_views_mutex);
+    auto it = g_web_views.find(view_id);
+    if (it != g_web_views.end()) {
+        it->second->traverse_the_history_by_delta(1);
+    }
+}
+
+bool can_go_back(int view_id) {
+    return true;
+}
+
+bool can_go_forward(int view_id) {
+    return true;
 }
 
 extern "C" {

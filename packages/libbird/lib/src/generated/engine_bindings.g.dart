@@ -140,6 +140,83 @@ class LadybirdBindings {
   late final _get_iosurface_height = _get_iosurface_heightPtr
       .asFunction<int Function(int)>();
 
+  void set_url_change_callback(int view_id, UrlChangeCallback callback) {
+    return _set_url_change_callback(view_id, callback);
+  }
+
+  late final _set_url_change_callbackPtr =
+      _lookup<
+        ffi.NativeFunction<ffi.Void Function(ffi.Int, UrlChangeCallback)>
+      >('set_url_change_callback');
+  late final _set_url_change_callback = _set_url_change_callbackPtr
+      .asFunction<void Function(int, UrlChangeCallback)>();
+
+  void set_title_change_callback(int view_id, TitleChangeCallback callback) {
+    return _set_title_change_callback(view_id, callback);
+  }
+
+  late final _set_title_change_callbackPtr =
+      _lookup<
+        ffi.NativeFunction<ffi.Void Function(ffi.Int, TitleChangeCallback)>
+      >('set_title_change_callback');
+  late final _set_title_change_callback = _set_title_change_callbackPtr
+      .asFunction<void Function(int, TitleChangeCallback)>();
+
+  void set_favicon_change_callback(
+    int view_id,
+    FaviconChangeCallback callback,
+  ) {
+    return _set_favicon_change_callback(view_id, callback);
+  }
+
+  late final _set_favicon_change_callbackPtr =
+      _lookup<
+        ffi.NativeFunction<ffi.Void Function(ffi.Int, FaviconChangeCallback)>
+      >('set_favicon_change_callback');
+  late final _set_favicon_change_callback = _set_favicon_change_callbackPtr
+      .asFunction<void Function(int, FaviconChangeCallback)>();
+
+  void reload_tab(int view_id) {
+    return _reload_tab(view_id);
+  }
+
+  late final _reload_tabPtr =
+      _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Int)>>('reload_tab');
+  late final _reload_tab = _reload_tabPtr.asFunction<void Function(int)>();
+
+  void go_back(int view_id) {
+    return _go_back(view_id);
+  }
+
+  late final _go_backPtr =
+      _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Int)>>('go_back');
+  late final _go_back = _go_backPtr.asFunction<void Function(int)>();
+
+  void go_forward(int view_id) {
+    return _go_forward(view_id);
+  }
+
+  late final _go_forwardPtr =
+      _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Int)>>('go_forward');
+  late final _go_forward = _go_forwardPtr.asFunction<void Function(int)>();
+
+  bool can_go_back(int view_id) {
+    return _can_go_back(view_id);
+  }
+
+  late final _can_go_backPtr =
+      _lookup<ffi.NativeFunction<ffi.Bool Function(ffi.Int)>>('can_go_back');
+  late final _can_go_back = _can_go_backPtr.asFunction<bool Function(int)>();
+
+  bool can_go_forward(int view_id) {
+    return _can_go_forward(view_id);
+  }
+
+  late final _can_go_forwardPtr =
+      _lookup<ffi.NativeFunction<ffi.Bool Function(ffi.Int)>>('can_go_forward');
+  late final _can_go_forward = _can_go_forwardPtr
+      .asFunction<bool Function(int)>();
+
   void dispatch_mouse_event(
     int view_id,
     int type,
@@ -318,6 +395,20 @@ typedef ResizeCallback =
     ffi.Pointer<ffi.NativeFunction<ResizeCallbackFunction>>;
 typedef ResizeCallbackFunction = ffi.Void Function();
 typedef DartResizeCallbackFunction = void Function();
+typedef UrlChangeCallback =
+    ffi.Pointer<ffi.NativeFunction<UrlChangeCallbackFunction>>;
+typedef UrlChangeCallbackFunction = ffi.Void Function(ffi.Pointer<ffi.Char>);
+typedef DartUrlChangeCallbackFunction = void Function(ffi.Pointer<ffi.Char>);
+typedef TitleChangeCallback =
+    ffi.Pointer<ffi.NativeFunction<TitleChangeCallbackFunction>>;
+typedef TitleChangeCallbackFunction = ffi.Void Function(ffi.Pointer<ffi.Char>);
+typedef DartTitleChangeCallbackFunction = void Function(ffi.Pointer<ffi.Char>);
+typedef FaviconChangeCallback =
+    ffi.Pointer<ffi.NativeFunction<FaviconChangeCallbackFunction>>;
+typedef FaviconChangeCallbackFunction =
+    ffi.Void Function(ffi.Pointer<ffi.Uint8>, ffi.Int, ffi.Int);
+typedef DartFaviconChangeCallbackFunction =
+    void Function(ffi.Pointer<ffi.Uint8>, int, int);
 
 const int __bool_true_false_are_defined = 1;
 

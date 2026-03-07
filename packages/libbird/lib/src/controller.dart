@@ -17,7 +17,20 @@ class LadybirdController {
   final TextEditingController textController = TextEditingController();
 
   late final ffi.NativeCallable<ffi.Void Function()> _resizeCallback;
+  late final ffi.NativeCallable<ffi.Void Function(ffi.Pointer<ffi.Char>)>
+  _urlChangeCallback;
+  late final ffi.NativeCallable<ffi.Void Function(ffi.Pointer<ffi.Char>)>
+  _titleChangeCallback;
+  late final ffi.NativeCallable<
+    ffi.Void Function(ffi.Pointer<ffi.Uint8>, ffi.Int, ffi.Int)
+  >
+  _faviconChangeCallback;
+
   void Function()? onResize;
+
+  final ValueNotifier<String> urlNotifier = ValueNotifier("");
+  final ValueNotifier<String> titleNotifier = ValueNotifier("Tab");
+  final ValueNotifier<dynamic> faviconNotifier = ValueNotifier(null);
 
   int get viewId => _viewId;
 
@@ -32,7 +45,60 @@ class LadybirdController {
       _onResize,
     );
     _bindings.set_resize_callback(_viewId, _resizeCallback.nativeFunction);
+
+    _urlChangeCallback =
+        ffi.NativeCallable<ffi.Void Function(ffi.Pointer<ffi.Char>)>.listener(
+          _onUrlChange,
+        );
+    _bindings.set_url_change_callback(
+      _viewId,
+      _urlChangeCallback.nativeFunction,
+    );
+
+    _titleChangeCallback =
+        ffi.NativeCallable<ffi.Void Function(ffi.Pointer<ffi.Char>)>.listener(
+          _onTitleChange,
+        );
+    _bindings.set_title_change_callback(
+      _viewId,
+      _titleChangeCallback.nativeFunction,
+    );
+
+    _faviconChangeCallback =
+        ffi.NativeCallable<
+          ffi.Void Function(ffi.Pointer<ffi.Uint8>, ffi.Int, ffi.Int)
+        >.listener(_onFaviconChange);
+    _bindings.set_favicon_change_callback(
+      _viewId,
+      _faviconChangeCallback.nativeFunction,
+    );
+
     _bindings.set_zoom(_viewId, 2);
+  }
+
+  void _onUrlChange(ffi.Pointer<ffi.Char> urlPointer) {
+    if (urlPointer != ffi.nullptr) {
+      final url = urlPointer.cast<Utf8>().toDartString();
+      textController.text = url;
+      urlNotifier.value = url;
+    }
+  }
+
+  void _onTitleChange(ffi.Pointer<ffi.Char> titlePointer) {
+    if (titlePointer != ffi.nullptr) {
+      final title = titlePointer.cast<Utf8>().toDartString();
+      titleNotifier.value = title;
+    }
+  }
+
+  void _onFaviconChange(
+    ffi.Pointer<ffi.Uint8> dataPointer,
+    int width,
+    int height,
+  ) {
+    if (dataPointer != ffi.nullptr) {
+      faviconNotifier.value = null; // placeholder for later if we decode
+    }
   }
 
   void _onResize() {
@@ -45,6 +111,26 @@ class LadybirdController {
     _bindings.navigate_to(_viewId, charPointer.cast<ffi.Char>());
     _bindings.set_zoom(_viewId, 2);
     malloc.free(charPointer);
+  }
+
+  void reload() {
+    _bindings.reload_tab(_viewId);
+  }
+
+  void goBack() {
+    _bindings.go_back(_viewId);
+  }
+
+  void goForward() {
+    _bindings.go_forward(_viewId);
+  }
+
+  bool canGoBack() {
+    return _bindings.can_go_back(_viewId);
+  }
+
+  bool canGoForward() {
+    return _bindings.can_go_forward(_viewId);
   }
 
   Future<int> createTexture() async {
@@ -112,6 +198,9 @@ class LadybirdController {
 
   void dispose() {
     _resizeCallback.close();
+    _urlChangeCallback.close();
+    _titleChangeCallback.close();
+    _faviconChangeCallback.close();
     _bindings.destroy_web_view(_viewId);
   }
 }
