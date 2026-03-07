@@ -125,21 +125,26 @@ public:
         on_url_change = [this](URL::URL const& url) {
             std::lock_guard<std::mutex> lock(m_mutex);
             if (m_url_change_callback) {
-                m_url_change_callback(url.to_string().to_byte_string().characters());
+                auto url_string = url.to_string().to_byte_string();
+                m_url_change_callback(strdup(url_string.characters()));
             }
         };
 
         on_title_change = [this](Utf16String const& title) {
             std::lock_guard<std::mutex> lock(m_mutex);
             if (m_title_change_callback) {
-                m_title_change_callback(title.to_utf8().to_byte_string().characters());
+                auto title_string = title.to_utf8().to_byte_string();
+                m_title_change_callback(strdup(title_string.characters()));
             }
         };
 
         on_favicon_change = [this](Gfx::Bitmap const& bitmap) {
             std::lock_guard<std::mutex> lock(m_mutex);
             if (m_favicon_change_callback) {
-                m_favicon_change_callback(nullptr, bitmap.width(), bitmap.height());
+                size_t length = bitmap.width() * bitmap.height() * 4;
+                uint8_t* buffer = (uint8_t*)malloc(length);
+                memcpy(buffer, reinterpret_cast<const uint8_t*>(bitmap.begin()), length);
+                m_favicon_change_callback(buffer, bitmap.width(), bitmap.height());
             }
         };
     }

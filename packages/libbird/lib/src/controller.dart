@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import 'package:flutter/services.dart';
 import 'package:ladybird/src/generated/engine_bindings.g.dart';
+import 'dart:ui' as ui;
 
 class LadybirdController {
   final MethodChannel _channel = MethodChannel('ladybird');
@@ -81,6 +82,7 @@ class LadybirdController {
       final url = urlPointer.cast<Utf8>().toDartString();
       textController.text = url;
       urlNotifier.value = url;
+      malloc.free(urlPointer);
     }
   }
 
@@ -88,6 +90,7 @@ class LadybirdController {
     if (titlePointer != ffi.nullptr) {
       final title = titlePointer.cast<Utf8>().toDartString();
       titleNotifier.value = title;
+      malloc.free(titlePointer);
     }
   }
 
@@ -97,7 +100,20 @@ class LadybirdController {
     int height,
   ) {
     if (dataPointer != ffi.nullptr) {
-      faviconNotifier.value = null; // placeholder for later if we decode
+      if (width > 0 && height > 0) {
+        final length = width * height * 4;
+        final bytesCopy = Uint8List.fromList(dataPointer.asTypedList(length));
+        ui.decodeImageFromPixels(
+          bytesCopy,
+          width,
+          height,
+          ui.PixelFormat.bgra8888,
+          (image) {
+            faviconNotifier.value = image;
+          },
+        );
+      }
+      malloc.free(dataPointer);
     }
   }
 
