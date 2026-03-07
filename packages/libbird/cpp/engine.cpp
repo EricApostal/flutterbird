@@ -22,6 +22,7 @@
 #include <LibWeb/PixelUnits.h>
 #include <LibWebView/Utilities.h>
 #include <LibCore/System.h>
+#include <LibWeb/Page/InputEvent.h>
 
 std::mutex g_frame_mutex;
 CVPixelBufferRef g_pixel_buffer = nullptr;
@@ -123,6 +124,16 @@ public:
         client().async_set_viewport(m_client_state.page_index, size, g_zoom);
     }
 
+    void dispatch_mouse_event(Web::MouseEvent::Type type, int x, int y, int button, int buttons, int modifiers, int wheel_delta_x, int wheel_delta_y) {
+        Web::DevicePixelPoint position = { x, y };
+        Web::DevicePixelPoint screen_position = { x, y };
+        enqueue_input_event(Web::MouseEvent { type, position, screen_position, static_cast<Web::UIEvents::MouseButton>(button), static_cast<Web::UIEvents::MouseButton>(buttons), static_cast<Web::UIEvents::KeyModifier>(modifiers), wheel_delta_x, wheel_delta_y, nullptr });
+    }
+
+    void dispatch_key_event(Web::KeyEvent::Type type, int keycode, int modifiers, uint32_t code_point, bool repeat) {
+        enqueue_input_event(Web::KeyEvent { type, static_cast<Web::UIEvents::KeyCode>(keycode), static_cast<Web::UIEvents::KeyModifier>(modifiers), code_point, repeat, nullptr });
+    }
+
 private:
     FlutterViewImpl() {}
 
@@ -218,7 +229,7 @@ void init_ladybird() {
 
     g_web_view = FlutterViewImpl::create().release_value();
     g_web_view->initialize_client();
-    // g_web_view->load(URL::Parser::basic_parse(AK::StringView("https://giphy.com", 17)).value());
+
     const char* url = "https://ladybird.org";
     g_web_view->load(URL::Parser::basic_parse(AK::StringView(url, strlen(url))).value());
 
@@ -291,3 +302,20 @@ int get_iosurface_height() {
     if (!iosurface) return g_height;
     return IOSurfaceGetHeight(iosurface);
 }
+
+extern "C" {
+
+void dispatch_mouse_event(int type, int x, int y, int button, int buttons, int modifiers, int wheel_delta_x, int wheel_delta_y) {
+    if (g_web_view) {
+        g_web_view->dispatch_mouse_event(static_cast<Web::MouseEvent::Type>(type), x, y, button, buttons, modifiers, wheel_delta_x, wheel_delta_y);
+    }
+}
+
+void dispatch_key_event(int type, int keycode, int modifiers, uint32_t code_point, bool repeat) {
+    if (g_web_view) {
+        g_web_view->dispatch_key_event(static_cast<Web::KeyEvent::Type>(type), keycode, modifiers, code_point, repeat);
+    }
+}
+
+}
+

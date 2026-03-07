@@ -8,7 +8,11 @@ We currently only support **MacOS**. Linux support will begin shortly as we get 
 This project is ***very*** early. 
 
 ## How to use
-Right now, you'll need to do a bit of work yourself.
+1. Run `flutter pub add ladybird`
+2. Build a basic window, following the `example.dart`
+3. `flutter run -d macos`
+Note: This builds ladybird locally then bundles it into your app. It works by running the official `ladybird.py` script. I recommend navigating to the `macos` folder in your app, and running `pod install`,
+as when flutter runs `pod install` automatically you cannot see build process. This will take a while! Compiling a web browser takes a lot of time.
 
 ## What is supported
 - Launching a browser window on MacOS

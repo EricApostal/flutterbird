@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:ladybird/ladybird.dart';
 
 class LadybirdView extends StatefulWidget {
@@ -20,6 +21,19 @@ class _LadybirdViewState extends State<LadybirdView> {
       }
     };
     _createTexture();
+    _scheduleTick();
+  }
+
+  void _scheduleTick() {
+    /*
+    I'm not a huge fan of this but I'm not actually sure there's anything wrong with it
+    Ladybird doesn't really have a consistent callback (to my understanding) indicating that
+    it needs to be resized. The onResize callback only seems to work with
+    */
+    SchedulerBinding.instance.scheduleFrameCallback((_) {
+      setState(() {});
+      _scheduleTick();
+    });
   }
 
   @override

@@ -27,7 +27,6 @@ class LadybirdController {
   }
 
   void _onResize() {
-    print("ON RESIZE CALLBACK");
     onResize?.call();
   }
 
