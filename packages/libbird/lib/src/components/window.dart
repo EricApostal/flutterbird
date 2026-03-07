@@ -27,7 +27,10 @@ class _LadybirdViewState extends State<LadybirdView> {
     };
     _recreateTexture();
     _scheduleTick();
-    widget.controller.navigate(widget.controller.initialUrl);
+    if (!widget.controller.hasNavigatedInitial) {
+      widget.controller.hasNavigatedInitial = true;
+      widget.controller.navigate(widget.controller.initialUrl);
+    }
   }
 
   void _scheduleTick() {
@@ -62,6 +65,11 @@ class _LadybirdViewState extends State<LadybirdView> {
       };
 
       _recreateTexture();
+
+      if (!widget.controller.hasNavigatedInitial) {
+        widget.controller.hasNavigatedInitial = true;
+        widget.controller.navigate(widget.controller.initialUrl);
+      }
     }
   }
 

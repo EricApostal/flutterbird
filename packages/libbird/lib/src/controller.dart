@@ -13,6 +13,7 @@ class LadybirdController {
   Size? _lastSize;
   late final int _viewId;
   final String initialUrl;
+  bool hasNavigatedInitial = false;
   final TextEditingController textController = TextEditingController();
 
   late final ffi.NativeCallable<ffi.Void Function()> _resizeCallback;
@@ -38,6 +39,7 @@ class LadybirdController {
   }
 
   void navigate(String url) {
+    textController.text = url;
     final ffi.Pointer<Utf8> charPointer = url.toNativeUtf8();
     _bindings.navigate_to(_viewId, charPointer.cast<ffi.Char>());
     malloc.free(charPointer);
