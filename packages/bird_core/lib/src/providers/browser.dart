@@ -25,6 +25,13 @@ class BrowserTabController extends _$BrowserTabController {
     newState.removeWhere((e) => e.viewId == viewId);
     state = newState;
   }
+
+  void reorder(int oldIndex, int newIndex) {
+    final newState = state.toList();
+    final item = newState.removeAt(oldIndex);
+    newState.insert(newIndex, item);
+    state = newState;
+  }
 }
 
 @Riverpod(keepAlive: true)

@@ -72,7 +72,18 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar> {
                           );
                         },
                     itemCount: tabs.length + 1,
-                    onReorder: (oldIndex, newIndex) {},
+                    onReorder: (oldIndex, newIndex) {
+                      if (oldIndex == tabs.length) return;
+                      if (oldIndex < newIndex) {
+                        newIndex -= 1;
+                      }
+                      if (newIndex >= tabs.length) {
+                        newIndex = tabs.length - 1;
+                      }
+                      ref
+                          .read(browserTabControllerProvider.notifier)
+                          .reorder(oldIndex, newIndex);
+                    },
                   ),
                 ),
 
