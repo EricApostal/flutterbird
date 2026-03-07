@@ -65,7 +65,11 @@ class BrowserTab extends ConsumerWidget {
                             builder: (context, title, child) {
                               return Text(
                                 title,
-                                style: theme.textTheme.labelMedium,
+                                style: theme.textTheme.labelMedium!.copyWith(
+                                  color: selected
+                                      ? theme.colorScheme.onSurface
+                                      : theme.colorScheme.onSurfaceVariant,
+                                ),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                               );
