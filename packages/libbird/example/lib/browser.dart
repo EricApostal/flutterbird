@@ -8,37 +8,18 @@ class BrowserWindow extends StatefulWidget {
   State<BrowserWindow> createState() => _BrowserWindowState();
 }
 
-class _BrowserWindowState extends State<BrowserWindow>
-    with SingleTickerProviderStateMixin {
-  late final TabController _tabController;
-  late final List<LadybirdController> _controllers;
+class _BrowserWindowState extends State<BrowserWindow> {
+  late final LadybirdController _controller;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 1, vsync: this);
-    _controllers = [LadybirdController()];
+    _controller = LadybirdController();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: Column(
-        children: [
-          TabBar(
-            controller: _tabController,
-            tabs: [Tab(text: "Uno")],
-          ),
-          Expanded(
-            child: TabBarView(
-              controller: _tabController,
-              physics: NeverScrollableScrollPhysics(),
-              children: [_BrowserTab(controller: _controllers[0])],
-            ),
-          ),
-        ],
-      ),
-    );
+    return Scaffold(body: _BrowserTab(controller: _controller));
   }
 }
 
