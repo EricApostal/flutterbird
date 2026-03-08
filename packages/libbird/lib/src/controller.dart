@@ -35,7 +35,7 @@ class LadybirdController {
 
   int get viewId => _viewId;
 
-  LadybirdController({this.initialUrl = "https://www.ladybird.org/"}) {
+  LadybirdController({this.initialUrl = "https://duckduckgo.com/"}) {
     _lib = ffi.DynamicLibrary.process();
     _bindings = LadybirdBindings(_lib);
 
