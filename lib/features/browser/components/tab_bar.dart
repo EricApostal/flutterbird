@@ -19,12 +19,14 @@ class BrowserTabBar extends ConsumerStatefulWidget {
 class _BrowserTabBarState extends ConsumerState<BrowserTabBar> {
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
     final tabs = ref.watch(browserTabControllerProvider);
     final currentTabController = ref.watch(
       browserTabProvider(widget.currentViewId),
     );
 
-    final theme = Theme.of(context);
+    final doLeftPadding = Platform.isMacOS;
 
     return Column(
       children: [
@@ -34,7 +36,7 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar> {
             children: [
               MoveWindow(),
               Padding(
-                padding: EdgeInsets.only(left: 80),
+                padding: EdgeInsets.only(left: doLeftPadding ? 80 : 8),
                 child: ReorderableListView.builder(
                   shrinkWrap: true,
                   padding: const EdgeInsets.only(top: 4, bottom: 4),
