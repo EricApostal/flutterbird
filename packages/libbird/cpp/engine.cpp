@@ -40,7 +40,7 @@ public:
     CVPixelBufferRef m_pixel_buffer = nullptr;
     int m_width = 800;
     int m_height = 600;
-    double m_zoom = 1.5;
+    double m_zoom = 2;
 
     FrameCallback m_frame_callback = nullptr;
     void* m_frame_callback_context = nullptr;

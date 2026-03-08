@@ -130,8 +130,13 @@ class LadybirdController {
   }
 
   void navigate(String url) {
-    textController.text = url;
-    final ffi.Pointer<Utf8> charPointer = url.toNativeUtf8();
+    String parsedUrl = url;
+    // todo: more reliable system for other formats, such as file://
+    if (!url.startsWith("http")) {
+      parsedUrl = "https://$url";
+    }
+    textController.text = parsedUrl;
+    final ffi.Pointer<Utf8> charPointer = parsedUrl.toNativeUtf8();
     _bindings.navigate_to(_viewId, charPointer.cast<ffi.Char>());
     _bindings.set_zoom(_viewId, 2);
     malloc.free(charPointer);
