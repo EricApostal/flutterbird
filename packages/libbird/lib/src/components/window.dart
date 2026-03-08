@@ -13,13 +13,23 @@ class LadybirdView extends StatefulWidget {
   State<LadybirdView> createState() => _LadybirdViewState();
 }
 
-class _LadybirdViewState extends State<LadybirdView> {
+class _LadybirdViewState extends State<LadybirdView>
+    with SingleTickerProviderStateMixin {
   int? _textureId;
   final FocusNode _focusNode = FocusNode();
+
+  double _accumulatedWheelX = 0;
+  double _accumulatedWheelY = 0;
+
+  Ticker? _momentumTicker;
+  Offset _momentumVelocity = Offset.zero;
+  Offset _lastPointerPos = Offset.zero;
+  int _lastPanTime = 0;
 
   @override
   void initState() {
     super.initState();
+    _momentumTicker = createTicker(_onMomentumTick);
     widget.controller.onResize = () {
       if (mounted) {
         _recreateTexture();
@@ -36,11 +46,6 @@ class _LadybirdViewState extends State<LadybirdView> {
   }
 
   void _scheduleTick() {
-    /*
-    I'm not a huge fan of this but I'm not actually sure there's anything wrong with it
-    Ladybird doesn't really have a consistent callback (to my understanding) indicating that
-    it needs to be resized. The onResize callback only seems to work with
-    */
     SchedulerBinding.instance.scheduleFrameCallback((_) {
       if (mounted) {
         setState(() {});
@@ -99,12 +104,10 @@ class _LadybirdViewState extends State<LadybirdView> {
 
   void _onSizeChanged(Size size) {
     if (size.width <= 0 || size.height <= 0) return;
-
     widget.controller.resizeWindow(size);
   }
 
   void _onPointerEvent(PointerEvent event, int type) {
-    // primary
     int button = 1;
     if (event.buttons & kPrimaryMouseButton != 0) {
       button = 1;
@@ -137,38 +140,92 @@ class _LadybirdViewState extends State<LadybirdView> {
     );
   }
 
-  void _onPointerScroll(PointerScrollEvent event) {
-    int type = 4;
+  void _dispatchWheelDelta(Offset localPosition, double deltaX, double deltaY) {
     final density = MediaQuery.devicePixelRatioOf(context);
+
+    _accumulatedWheelX += deltaX * density;
+    _accumulatedWheelY += deltaY * density;
+
+    int wheelX = _accumulatedWheelX.truncate();
+    int wheelY = _accumulatedWheelY.truncate();
+
+    if (wheelX == 0 && wheelY == 0) return;
+
+    _accumulatedWheelX -= wheelX;
+    _accumulatedWheelY -= wheelY;
+
     widget.controller.dispatchMouseEvent(
-      type: type,
-      x: (event.localPosition.dx * density).toInt(),
-      y: (event.localPosition.dy * density).toInt(),
+      type: 4, // MouseWheel
+      x: (localPosition.dx * density).toInt(),
+      y: (localPosition.dy * density).toInt(),
       button: 0,
       buttons: 0,
       modifiers: getModifiersForEvent(
         HardwareKeyboard.instance.logicalKeysPressed,
       ),
-      wheelDeltaX: (event.scrollDelta.dx * density).toInt(),
-      wheelDeltaY: (event.scrollDelta.dy * density).toInt(),
+      wheelDeltaX: wheelX,
+      wheelDeltaY: wheelY,
     );
   }
 
-  void _onPointerPanZoomUpdate(PointerPanZoomUpdateEvent event) {
-    int type = 4;
-    final density = MediaQuery.devicePixelRatioOf(context);
-    widget.controller.dispatchMouseEvent(
-      type: type,
-      x: (event.localPosition.dx * density).toInt(),
-      y: (event.localPosition.dy * density).toInt(),
-      button: 0,
-      buttons: 0,
-      modifiers: getModifiersForEvent(
-        HardwareKeyboard.instance.logicalKeysPressed,
-      ),
-      wheelDeltaX: -(event.panDelta.dx * density).toInt(),
-      wheelDeltaY: -(event.panDelta.dy * density).toInt(),
+  void _onMomentumTick(Duration elapsed) {
+    // If momentum decays below threshold, stop
+    if (_momentumVelocity.distance < 0.2) {
+      _momentumTicker?.stop();
+      _momentumVelocity = Offset.zero;
+      return;
+    }
+
+    _dispatchWheelDelta(
+      _lastPointerPos,
+      -_momentumVelocity.dx,
+      -_momentumVelocity.dy,
     );
+
+    // Friction factor - adjust this to change how quickly it glides to a stop
+    _momentumVelocity *= 0.92;
+  }
+
+  void _onPointerScroll(PointerScrollEvent event) {
+    _dispatchWheelDelta(
+      event.localPosition,
+      event.scrollDelta.dx,
+      event.scrollDelta.dy,
+    );
+  }
+
+  void _onPointerPanZoomStart(PointerPanZoomStartEvent event) {
+    _momentumTicker?.stop();
+    _momentumVelocity = Offset.zero;
+    _lastPointerPos = event.localPosition;
+    _lastPanTime = DateTime.now().millisecondsSinceEpoch;
+  }
+
+  void _onPointerPanZoomUpdate(PointerPanZoomUpdateEvent event) {
+    _momentumTicker?.stop();
+    _lastPointerPos = event.localPosition;
+
+    int now = DateTime.now().millisecondsSinceEpoch;
+    int dt = now - _lastPanTime;
+
+    if (dt > 0 && dt < 100) {
+      _momentumVelocity = event.panDelta;
+    } else {
+      _momentumVelocity = Offset.zero;
+    }
+    _lastPanTime = now;
+
+    _dispatchWheelDelta(
+      event.localPosition,
+      -event.panDelta.dx,
+      -event.panDelta.dy,
+    );
+  }
+
+  void _onPointerPanZoomEnd(PointerPanZoomEndEvent event) {
+    if (_momentumVelocity.distance > 0.5) {
+      _momentumTicker?.start();
+    }
   }
 
   KeyEventResult _onKeyEvent(FocusNode node, KeyEvent event) {
@@ -193,6 +250,7 @@ class _LadybirdViewState extends State<LadybirdView> {
   @override
   void dispose() {
     widget.controller.onResize = null;
+    _momentumTicker?.dispose();
     _focusNode.dispose();
     print("disposing!");
     if (_textureId != null) {
@@ -251,7 +309,9 @@ class _LadybirdViewState extends State<LadybirdView> {
                       onPointerUp: (e) => _onPointerEvent(e, 1),
                       onPointerMove: (e) => _onPointerEvent(e, 2),
                       onPointerHover: (e) => _onPointerEvent(e, 2),
+                      onPointerPanZoomStart: _onPointerPanZoomStart,
                       onPointerPanZoomUpdate: _onPointerPanZoomUpdate,
+                      onPointerPanZoomEnd: _onPointerPanZoomEnd,
                       onPointerSignal: (e) {
                         if (e is PointerScrollEvent) {
                           _onPointerScroll(e);
