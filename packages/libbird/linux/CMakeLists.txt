@@ -24,6 +24,8 @@ set(VCPKG_TRIPLET "x64-linux-dynamic")
 
 file(GLOB LADYBIRD_LIBS "${LADYBIRD_DIR}/Build/release/lib64/*.so*" "${LADYBIRD_DIR}/Build/release/lib/*.so*")
 file(GLOB VCPKG_LIBS "${LADYBIRD_DIR}/Build/release/vcpkg_installed/${VCPKG_TRIPLET}/lib/*.so*")
+list(FILTER VCPKG_LIBS EXCLUDE REGEX "libz\.so")
+list(FILTER VCPKG_LIBS EXCLUDE REGEX "libharfbuzz\.so")
 file(GLOB LADYBIRD_LIBEXEC "${LADYBIRD_DIR}/Build/release/libexec/*")
 
 list(APPEND LADYBIRD_LIBS ${VCPKG_LIBS})

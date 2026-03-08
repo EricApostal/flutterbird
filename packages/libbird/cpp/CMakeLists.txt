@@ -15,7 +15,7 @@ execute_process(
 )
 
 execute_process(
-    COMMAND ${CMAKE_COMMAND} -E env "PYTHONPATH=${LADYBIRD_DIR}" python3 "Meta/ladybird.py" build
+    COMMAND ${CMAKE_COMMAND} -E env "CC=${CMAKE_C_COMPILER}" "CXX=${CMAKE_CXX_COMPILER}" "PYTHONPATH=${LADYBIRD_DIR}" python3 "Meta/ladybird.py" build
     WORKING_DIRECTORY "${LADYBIRD_DIR}"
 )
 
@@ -46,7 +46,10 @@ if (EXISTS "${LADYBIRD_DIR}/Build/release/lib")
     file(COPY "${LADYBIRD_DIR}/Build/release/lib/" DESTINATION "${CMAKE_CURRENT_BINARY_DIR}")
 endif()
 if (EXISTS "${LADYBIRD_DIR}/Build/release/vcpkg_installed/${VCPKG_TRIPLET}/lib")
-    file(COPY "${LADYBIRD_DIR}/Build/release/vcpkg_installed/${VCPKG_TRIPLET}/lib/" DESTINATION "${CMAKE_CURRENT_BINARY_DIR}")
+    file(GLOB VCPKG_LIBS "${LADYBIRD_DIR}/Build/release/vcpkg_installed/${VCPKG_TRIPLET}/lib/*")
+    list(FILTER VCPKG_LIBS EXCLUDE REGEX "libz\.so")
+    list(FILTER VCPKG_LIBS EXCLUDE REGEX "libharfbuzz\.so")
+    file(COPY ${VCPKG_LIBS} DESTINATION "${CMAKE_CURRENT_BINARY_DIR}")
 endif()
 
 target_link_directories(engine PRIVATE 
