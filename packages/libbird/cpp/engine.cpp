@@ -308,6 +308,17 @@ void init_ladybird()
 
     AK::set_rich_debug_enabled(true);
 
+#ifdef __APPLE__
+    WebView::platform_init();
+#else
+    if (auto current_executable_path = Core::System::current_executable_path(); !current_executable_path.is_error())
+    {
+        auto parent_path = LexicalPath::dirname(current_executable_path.value());
+        auto lib_path = LexicalPath::join(parent_path, "lib"sv).string();
+        WebView::platform_init(lib_path);
+    }
+#endif
+
     static char const *argv[] = {"Ladybird", nullptr};
 
     // TODO: I don't really know what this means?
