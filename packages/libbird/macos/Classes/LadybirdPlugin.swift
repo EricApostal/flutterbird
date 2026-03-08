@@ -1,4 +1,5 @@
 import Cocoa
+import CoreVideo
 import FlutterMacOS
 
 @_silgen_name("get_latest_pixel_buffer")
@@ -43,7 +44,7 @@ class TextureContext {
 
 public class LadybirdPlugin: NSObject, FlutterPlugin {
   var textureRegistry: FlutterTextureRegistry?
-  var timer: Timer?
+  var displayLink: CVDisplayLink?
   var contextPtrs: [Int64: UnsafeMutableRawPointer] = [:]
   var activeTexturesForView: [Int32: Int64] = [:]
 
@@ -57,11 +58,22 @@ public class LadybirdPlugin: NSObject, FlutterPlugin {
   }
 
   private func startLadybirdLoop() {
-    let t = Timer(timeInterval: 1.0 / 60.0, repeats: true) { _ in
-      tick_ladybird()
+    var link: CVDisplayLink?
+    CVDisplayLinkCreateWithActiveCGDisplays(&link)
+
+    if let displayLink = link {
+      CVDisplayLinkSetOutputCallback(
+        displayLink,
+        { (_, _, _, _, _, _) -> CVReturn in
+          DispatchQueue.main.async {
+            tick_ladybird()
+          }
+          return kCVReturnSuccess
+        }, nil)
+
+      CVDisplayLinkStart(displayLink)
+      self.displayLink = displayLink
     }
-    RunLoop.main.add(t, forMode: .common)
-    timer = t
   }
 
   public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {

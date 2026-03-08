@@ -78,6 +78,7 @@ class _LadybirdViewState extends State<LadybirdView> {
   }
 
   Future<void> _recreateTexture() async {
+    print("remaking texture");
     final int? oldTextureId = _textureId;
     final int textureId = await widget.controller.createTexture();
 
