@@ -5,63 +5,210 @@
 #include <sys/utsname.h>
 
 #include <cstring>
+#include <cstdio>
+#include <map>
 
 #include "ladybird_plugin_private.h"
+#include "engine.h"
 
-#define LADYBIRD_PLUGIN(obj) \
+// --- LadybirdTexture ---
+// Forward declaration
+typedef struct _LadybirdTexture LadybirdTexture;
+typedef struct
+{
+  FlPixelBufferTextureClass parent_class;
+} LadybirdTextureClass;
+
+struct _LadybirdTexture
+{
+  FlPixelBufferTexture parent_instance;
+  int view_id;
+  FlTextureRegistrar *texture_registrar;
+};
+
+G_DECLARE_FINAL_TYPE(LadybirdTexture, ladybird_texture, LADYBIRD, TEXTURE, FlPixelBufferTexture)
+
+G_DEFINE_TYPE(LadybirdTexture, ladybird_texture, fl_pixel_buffer_texture_get_type())
+
+static gboolean ladybird_texture_copy_pixels(FlPixelBufferTexture *texture,
+                                             const uint8_t **out_buffer,
+                                             uint32_t *width,
+                                             uint32_t *height,
+                                             GError **error)
+{
+  LadybirdTexture *self = LADYBIRD_TEXTURE(texture);
+
+  void *pixels = get_latest_pixel_buffer(self->view_id);
+  int w = get_iosurface_width(self->view_id);
+  int h = get_iosurface_height(self->view_id);
+
+  if (!pixels || w <= 0 || h <= 0)
+  {
+    if (width)
+      *width = 0;
+    if (height)
+      *height = 0;
+    return FALSE;
+  }
+
+  *out_buffer = (const uint8_t *)pixels;
+  *width = w;
+  *height = h;
+
+  return TRUE;
+}
+
+static void ladybird_texture_class_init(LadybirdTextureClass *klass)
+{
+  FL_PIXEL_BUFFER_TEXTURE_CLASS(klass)->copy_pixels = ladybird_texture_copy_pixels;
+}
+
+static void ladybird_texture_init(LadybirdTexture *self)
+{
+  self->view_id = -1;
+  self->texture_registrar = nullptr;
+}
+
+static LadybirdTexture *ladybird_texture_new(int view_id, FlTextureRegistrar *registrar)
+{
+  LadybirdTexture *self = LADYBIRD_TEXTURE(g_object_new(ladybird_texture_get_type(), nullptr));
+  self->view_id = view_id;
+  self->texture_registrar = registrar;
+  return self;
+}
+
+// --- LadybirdPlugin ---
+
+#define LADYBIRD_PLUGIN(obj)                                     \
   (G_TYPE_CHECK_INSTANCE_CAST((obj), ladybird_plugin_get_type(), \
                               LadybirdPlugin))
 
-struct _LadybirdPlugin {
+struct _LadybirdPlugin
+{
   GObject parent_instance;
+  FlPluginRegistrar *registrar;
+  FlTextureRegistrar *texture_registrar;
 };
 
 G_DEFINE_TYPE(LadybirdPlugin, ladybird_plugin, g_object_get_type())
 
-// Called when a method call is received from Flutter.
+static bool g_ladybird_initialized = false;
+
+static gboolean ladybird_tick_callback(gpointer user_data)
+{
+  tick_ladybird();
+  return G_SOURCE_CONTINUE;
+}
+
+static void frame_available_callback(void *context)
+{
+  LadybirdTexture *texture = LADYBIRD_TEXTURE(context);
+  if (texture && texture->texture_registrar)
+  {
+    fl_texture_registrar_mark_texture_frame_available(texture->texture_registrar, FL_TEXTURE(texture));
+  }
+}
+
 static void ladybird_plugin_handle_method_call(
-    LadybirdPlugin* self,
-    FlMethodCall* method_call) {
+    LadybirdPlugin *self,
+    FlMethodCall *method_call)
+{
   g_autoptr(FlMethodResponse) response = nullptr;
 
-  const gchar* method = fl_method_call_get_name(method_call);
+  const gchar *method = fl_method_call_get_name(method_call);
 
-  if (strcmp(method, "getPlatformVersion") == 0) {
-    response = get_platform_version();
-  } else {
+  if (!g_ladybird_initialized)
+  {
+    init_ladybird();
+    g_ladybird_initialized = true;
+    g_timeout_add(16, ladybird_tick_callback, nullptr);
+  }
+
+  if (strcmp(method, "getPlatformVersion") == 0)
+  {
+    struct utsname uname_data = {};
+    uname(&uname_data);
+    g_autofree gchar *version = g_strdup_printf("Linux %s", uname_data.version);
+    g_autoptr(FlValue) result = fl_value_new_string(version);
+    response = FL_METHOD_RESPONSE(fl_method_success_response_new(result));
+  }
+  else if (strcmp(method, "createTexture") == 0)
+  {
+    FlValue *args = fl_method_call_get_args(method_call);
+
+    if (fl_value_get_type(args) == FL_VALUE_TYPE_INT)
+    {
+      int64_t view_id = fl_value_get_int(args);
+
+      LadybirdTexture *texture = ladybird_texture_new((int)view_id, self->texture_registrar);
+      fl_texture_registrar_register_texture(self->texture_registrar, FL_TEXTURE(texture));
+
+      set_frame_callback((int)view_id, frame_available_callback, texture);
+
+      int64_t texture_id = (int64_t)fl_texture_get_id(FL_TEXTURE(texture));
+      g_autoptr(FlValue) result = fl_value_new_int(texture_id);
+      response = FL_METHOD_RESPONSE(fl_method_success_response_new(result));
+    }
+    else
+    {
+      response = FL_METHOD_RESPONSE(fl_method_error_response_new("INVALID_ARGS", "Expected int viewId", nullptr));
+    }
+  }
+  else if (strcmp(method, "unregisterTexture") == 0)
+  {
+    FlValue *args = fl_method_call_get_args(method_call);
+    if (fl_value_get_type(args) == FL_VALUE_TYPE_INT)
+    {
+      int64_t texture_id = fl_value_get_int(args);
+      FlTexture *texture = fl_texture_registrar_lookup_texture(self->texture_registrar, texture_id);
+      if (texture)
+      {
+        LadybirdTexture *l_texture = LADYBIRD_TEXTURE(texture);
+        set_frame_callback(l_texture->view_id, nullptr, nullptr);
+
+        fl_texture_registrar_unregister_texture(self->texture_registrar, texture);
+      }
+      response = FL_METHOD_RESPONSE(fl_method_success_response_new(nullptr));
+    }
+    else
+    {
+      response = FL_METHOD_RESPONSE(fl_method_error_response_new("INVALID_ARGS", "Expected int textureId", nullptr));
+    }
+  }
+  else
+  {
     response = FL_METHOD_RESPONSE(fl_method_not_implemented_response_new());
   }
 
   fl_method_call_respond(method_call, response, nullptr);
 }
 
-FlMethodResponse* get_platform_version() {
-  struct utsname uname_data = {};
-  uname(&uname_data);
-  g_autofree gchar *version = g_strdup_printf("Linux %s", uname_data.version);
-  g_autoptr(FlValue) result = fl_value_new_string(version);
-  return FL_METHOD_RESPONSE(fl_method_success_response_new(result));
-}
-
-static void ladybird_plugin_dispose(GObject* object) {
+static void ladybird_plugin_dispose(GObject *object)
+{
   G_OBJECT_CLASS(ladybird_plugin_parent_class)->dispose(object);
 }
 
-static void ladybird_plugin_class_init(LadybirdPluginClass* klass) {
+static void ladybird_plugin_class_init(LadybirdPluginClass *klass)
+{
   G_OBJECT_CLASS(klass)->dispose = ladybird_plugin_dispose;
 }
 
-static void ladybird_plugin_init(LadybirdPlugin* self) {}
+static void ladybird_plugin_init(LadybirdPlugin *self) {}
 
-static void method_call_cb(FlMethodChannel* channel, FlMethodCall* method_call,
-                           gpointer user_data) {
-  LadybirdPlugin* plugin = LADYBIRD_PLUGIN(user_data);
+static void method_call_cb(FlMethodChannel *channel, FlMethodCall *method_call,
+                           gpointer user_data)
+{
+  LadybirdPlugin *plugin = LADYBIRD_PLUGIN(user_data);
   ladybird_plugin_handle_method_call(plugin, method_call);
 }
 
-void ladybird_plugin_register_with_registrar(FlPluginRegistrar* registrar) {
-  LadybirdPlugin* plugin = LADYBIRD_PLUGIN(
+void ladybird_plugin_register_with_registrar(FlPluginRegistrar *registrar)
+{
+  LadybirdPlugin *plugin = LADYBIRD_PLUGIN(
       g_object_new(ladybird_plugin_get_type(), nullptr));
+
+  plugin->registrar = registrar;
+  plugin->texture_registrar = fl_plugin_registrar_get_texture_registrar(registrar);
 
   g_autoptr(FlStandardMethodCodec) codec = fl_standard_method_codec_new();
   g_autoptr(FlMethodChannel) channel =

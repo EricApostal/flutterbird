@@ -17,12 +17,15 @@ as when flutter runs `pod install` automatically you cannot see build process. T
 ## What is supported
 - Launching a browser window on MacOS
 - Basic navigation
+- Interacting with web pages
+- Scrolling
 
 ## What needs to be supported
 - Linux
-- Many window fixes
-- Interfacing with the web content (typing, scrolling, etc)
-- Content bindings (running JS, page change callbacks, etc)
+- Some window jank
+- Content bindings (running JS, etc)
+- Multi-window tabs
+- Callbacks for creating new tabs, etc
 
 It should also be noted that ladybird itself is very early, so you'll encounter a mix of issues introduced by both this library and Ladybird.
 
