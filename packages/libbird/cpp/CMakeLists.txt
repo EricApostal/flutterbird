@@ -19,6 +19,12 @@ execute_process(
     WORKING_DIRECTORY "${LADYBIRD_DIR}"
 )
 
+if (APPLE)
+    set(VCPKG_TRIPLET "arm64-osx-dynamic")
+else()
+    set(VCPKG_TRIPLET "x64-linux-dynamic")
+endif()
+
 add_library(engine SHARED engine.cpp)
 
 target_include_directories(engine PRIVATE
@@ -30,24 +36,32 @@ target_include_directories(engine PRIVATE
     ${LADYBIRD_DIR}/Build/release/Lagom
     ${LADYBIRD_DIR}/Build/release/Lagom/Libraries
     ${LADYBIRD_DIR}/Build/release/Lagom/Services
-    ${LADYBIRD_DIR}/Build/release/vcpkg_installed/arm64-osx-dynamic/include
+    ${LADYBIRD_DIR}/Build/release/vcpkg_installed/${VCPKG_TRIPLET}/include
 )
+
+if (EXISTS "${LADYBIRD_DIR}/Build/release/lib64")
+    file(COPY "${LADYBIRD_DIR}/Build/release/lib64/" DESTINATION "${CMAKE_CURRENT_BINARY_DIR}")
+endif()
+if (EXISTS "${LADYBIRD_DIR}/Build/release/lib")
+    file(COPY "${LADYBIRD_DIR}/Build/release/lib/" DESTINATION "${CMAKE_CURRENT_BINARY_DIR}")
+endif()
+if (EXISTS "${LADYBIRD_DIR}/Build/release/vcpkg_installed/${VCPKG_TRIPLET}/lib")
+    file(COPY "${LADYBIRD_DIR}/Build/release/vcpkg_installed/${VCPKG_TRIPLET}/lib/" DESTINATION "${CMAKE_CURRENT_BINARY_DIR}")
+endif()
 
 target_link_directories(engine PRIVATE 
     ${LADYBIRD_DIR}/Build/release/lib
-    ${LADYBIRD_DIR}/Build/release/vcpkg_installed/arm64-osx-dynamic/lib
+    ${LADYBIRD_DIR}/Build/release/lib64
+    ${LADYBIRD_DIR}/Build/release/vcpkg_installed/${VCPKG_TRIPLET}/lib
+)
+
+file(GLOB LADYBIRD_LIBS_SO
+    "${LADYBIRD_DIR}/Build/release/lib64/liblagom-*.so"
+    "${LADYBIRD_DIR}/Build/release/lib/liblagom-*.so"
 )
 
 target_link_libraries(engine PRIVATE
-    lagom-webview
-    lagom-web
-    lagom-js
-    lagom-requests
-    lagom-url
-    lagom-ipc
-    lagom-core
-    lagom-ak  
-    lagom-gfx
+    ${LADYBIRD_LIBS_SO}
     skia
 )
 
@@ -90,7 +104,6 @@ else()
     set_target_properties(engine PROPERTIES
         PREFIX "lib"
         SUFFIX ".so"
-        BUILD_WITH_INSTALL_RPATH TRUE
         INSTALL_RPATH "$ORIGIN/../lib"
     )
 endif()

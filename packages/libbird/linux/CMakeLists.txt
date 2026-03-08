@@ -19,6 +19,14 @@ list(APPEND PLUGIN_SOURCES
 # Build the engine
 add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../cpp" engine_build)
 
+set(LADYBIRD_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../third_party/ladybird")
+set(VCPKG_TRIPLET "x64-linux-dynamic")
+
+file(GLOB LADYBIRD_LIBS "${LADYBIRD_DIR}/Build/release/lib64/*.so*" "${LADYBIRD_DIR}/Build/release/lib/*.so*")
+file(GLOB VCPKG_LIBS "${LADYBIRD_DIR}/Build/release/vcpkg_installed/${VCPKG_TRIPLET}/lib/*.so*")
+
+list(APPEND LADYBIRD_LIBS ${VCPKG_LIBS})
+
 # Define the plugin library target. Its name must not be changed (see comment
 # on PLUGIN_NAME above).
 add_library(${PLUGIN_NAME} SHARED
@@ -47,11 +55,18 @@ target_link_libraries(${PLUGIN_NAME} PRIVATE flutter)
 target_link_libraries(${PLUGIN_NAME} PRIVATE PkgConfig::GTK)
 target_link_libraries(${PLUGIN_NAME} PRIVATE engine)
 
+target_link_libraries(${PLUGIN_NAME} PUBLIC
+    "-Wl,-rpath-link,${LADYBIRD_DIR}/Build/release/lib64"
+    "-Wl,-rpath-link,${LADYBIRD_DIR}/Build/release/lib"
+    "-Wl,-rpath-link,${LADYBIRD_DIR}/Build/release/vcpkg_installed/${VCPKG_TRIPLET}/lib"
+)
+
 # List of absolute paths to libraries that should be bundled with the plugin.
 # This list could contain prebuilt libraries, or libraries created by an
 # external build triggered from this build file.
 set(ladybird_bundled_libraries
   "$<TARGET_FILE:engine>"
+  ${LADYBIRD_LIBS}
   PARENT_SCOPE
 )
 
