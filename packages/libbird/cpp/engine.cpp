@@ -53,9 +53,7 @@ public:
     
     std::mutex m_mutex;
 
-    virtual void initialize_client(CreateNewClient create_new_client = CreateNewClient::Yes) override {
-        ViewImplementation::initialize_client(create_new_client);
-
+    void configure_client_process() {
         auto theme_path = LexicalPath::join(WebView::s_ladybird_resource_root, "themes"sv, "Default.ini"sv);
         auto theme = Gfx::load_system_theme(theme_path.string()).release_value_but_fixme_should_propagate_errors();
 
@@ -65,48 +63,46 @@ public:
         
         Web::DevicePixelRect screen_rect { 0, 0, 1920, 1080 };
         client().async_update_screen_rects(m_client_state.page_index, { { screen_rect } }, 0);
+    }
+
+    virtual void initialize_client(CreateNewClient create_new_client = CreateNewClient::Yes) override {
+        ViewImplementation::initialize_client(create_new_client);
+
+        configure_client_process();
         
         set_system_visibility_state(Web::HTML::VisibilityState::Visible);
 
         on_ready_to_paint = [this]() {
-            // Ensure we have a valid front bitmap and an IOSurface reference
             if (m_client_state.has_usable_bitmap && m_client_state.front_bitmap.iosurface_ref) {
                 auto size = m_client_state.front_bitmap.last_painted_size.to_type<int>();
                 
-                // Cast the void* from Ladybird back to an Apple IOSurfaceRef
                 IOSurfaceRef iosurface = (IOSurfaceRef)m_client_state.front_bitmap.iosurface_ref;
 
                 std::lock_guard<std::mutex> lock(m_mutex);
-                IOSurfaceRef current_iosurface = m_pixel_buffer ? CVPixelBufferGetIOSurface(m_pixel_buffer) : nullptr;
                 
-                // If the size changed or iosurface changed, we need to wrap the new IOSurface
-                if (current_iosurface != iosurface || size.width() != m_width || size.height() != m_height || !m_pixel_buffer) {
-                    bool size_changed = (size.width() != m_width || size.height() != m_height);
-                    
-                    m_width = size.width();
-                    m_height = size.height();
-                    
-                    if (m_pixel_buffer) {
-                        CVPixelBufferRelease(m_pixel_buffer);
-                        m_pixel_buffer = nullptr;
-                    }
+                bool size_changed = (size.width() != m_width || size.height() != m_height);
+                m_width = size.width();
+                m_height = size.height();
+                
+                if (m_pixel_buffer) {
+                    CVPixelBufferRelease(m_pixel_buffer);
+                    m_pixel_buffer = nullptr;
+                }
 
-                    // Map the IOSurface natively without properties to avoid metal texture cache corruption on resize
-                    CVReturn result = CVPixelBufferCreateWithIOSurface(
-                        kCFAllocatorDefault,
-                        iosurface,
-                        nullptr,
-                        &m_pixel_buffer
-                    );
+                CVReturn result = CVPixelBufferCreateWithIOSurface(
+                    kCFAllocatorDefault,
+                    iosurface,
+                    nullptr,
+                    &m_pixel_buffer
+                );
 
-                    if (result != kCVReturnSuccess) {
-                        std::println("Failed to wrap IOSurface in CVPixelBuffer! Error: {}", result);
-                        return;
-                    }
+                if (result != kCVReturnSuccess) {
+                    std::println("Failed to wrap IOSurface in CVPixelBuffer! Error: {}", result);
+                    return;
+                }
 
-                    if (size_changed && m_resize_callback) {
-                        m_resize_callback();
-                    }
+                if (size_changed && m_resize_callback) {
+                    m_resize_callback();
                 }
 
                 if (m_frame_callback) {
@@ -114,8 +110,10 @@ public:
                 }
             }
         };
-        on_web_content_process_change_for_cross_site_navigation = []() {
+
+        on_web_content_process_change_for_cross_site_navigation = [this]() {
             std::println("WebContent process changed for cross site navigation!");
+            configure_client_process();
         };
 
         on_web_content_crashed = []() {
@@ -428,6 +426,7 @@ void go_back(int view_id) {
         it->second->traverse_the_history_by_delta(-1);
     }
 }
+
 
 void go_forward(int view_id) {
     std::lock_guard<std::mutex> lock(g_web_views_mutex);
