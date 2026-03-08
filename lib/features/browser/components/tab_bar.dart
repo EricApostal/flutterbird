@@ -26,70 +26,69 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar> {
       children: [
         SizedBox(
           height: 45,
-          child: MoveWindow(
-            child: Row(
-              children: [
-                Expanded(
-                  child: ReorderableListView.builder(
-                    padding: const EdgeInsets.only(top: 4, left: 80, bottom: 4),
-                    scrollDirection: Axis.horizontal,
-                    buildDefaultDragHandles: false,
-                    itemBuilder: (context, index) {
-                      if (index == tabs.length) {
-                        return ReorderableDragStartListener(
-                          key: ValueKey("close"),
-                          index: index,
-                          enabled: false,
-                          child: IconButton(
-                            icon: const Icon(Icons.add, size: 20),
-                            onPressed: () {
-                              ref
-                                  .read(browserTabControllerProvider.notifier)
-                                  .add();
-                            },
-                          ),
-                        );
-                      }
-                      final id = tabs[index].viewId;
+          child: Stack(
+            children: [
+              MoveWindow(),
+              Padding(
+                padding: EdgeInsets.only(left: 80),
+                child: ReorderableListView.builder(
+                  shrinkWrap: true,
+                  padding: const EdgeInsets.only(top: 4, bottom: 4),
+                  scrollDirection: Axis.horizontal,
+                  buildDefaultDragHandles: false,
+                  itemBuilder: (context, index) {
+                    if (index == tabs.length) {
                       return ReorderableDragStartListener(
-                        key: ValueKey(id),
+                        key: ValueKey("close"),
                         index: index,
-                        child: Padding(
-                          padding: const EdgeInsets.only(right: 2.0),
-                          child: BrowserTab(
-                            viewId: tabs[index].viewId,
-                            selected: id == widget.currentViewId,
-                          ),
+                        enabled: false,
+                        child: IconButton(
+                          icon: const Icon(Icons.add, size: 20),
+                          onPressed: () {
+                            ref
+                                .read(browserTabControllerProvider.notifier)
+                                .add();
+                          },
                         ),
                       );
-                    },
-                    proxyDecorator:
-                        (Widget child, int index, Animation<double> animation) {
-                          return Material(
-                            color: Colors.transparent,
-                            elevation: 0,
-                            child: child,
-                          );
-                        },
-                    itemCount: tabs.length + 1,
-                    onReorder: (oldIndex, newIndex) {
-                      if (oldIndex == tabs.length) return;
-                      if (oldIndex < newIndex) {
-                        newIndex -= 1;
-                      }
-                      if (newIndex >= tabs.length) {
-                        newIndex = tabs.length - 1;
-                      }
-                      ref
-                          .read(browserTabControllerProvider.notifier)
-                          .reorder(oldIndex, newIndex);
-                    },
-                  ),
+                    }
+                    final id = tabs[index].viewId;
+                    return ReorderableDragStartListener(
+                      key: ValueKey(id),
+                      index: index,
+                      child: Padding(
+                        padding: const EdgeInsets.only(right: 2.0),
+                        child: BrowserTab(
+                          viewId: tabs[index].viewId,
+                          selected: id == widget.currentViewId,
+                        ),
+                      ),
+                    );
+                  },
+                  proxyDecorator:
+                      (Widget child, int index, Animation<double> animation) {
+                        return Material(
+                          color: Colors.transparent,
+                          elevation: 0,
+                          child: child,
+                        );
+                      },
+                  itemCount: tabs.length + 1,
+                  onReorder: (oldIndex, newIndex) {
+                    if (oldIndex == tabs.length) return;
+                    if (oldIndex < newIndex) {
+                      newIndex -= 1;
+                    }
+                    if (newIndex >= tabs.length) {
+                      newIndex = tabs.length - 1;
+                    }
+                    ref
+                        .read(browserTabControllerProvider.notifier)
+                        .reorder(oldIndex, newIndex);
+                  },
                 ),
-
-                const SizedBox(width: 8),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
         Padding(
