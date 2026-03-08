@@ -26,6 +26,8 @@
 #include <LibWeb/PixelUnits.h>
 #include <LibWebView/Utilities.h>
 #include <LibCore/System.h>
+#include <LibCore/ResourceImplementationFile.h>
+#include <LibCore/ResourceImplementation.h>
 #include <LibWeb/Page/InputEvent.h>
 #include <string>
 
@@ -319,10 +321,13 @@ void init_ladybird()
     if (!current_executable_path.is_error())
     {
         auto path = current_executable_path.value();
-        fprintf(stderr, "[Ladybird] Executable path: %s\n", path.characters());
-        auto parent_path = LexicalPath::dirname(path);
-        lib_path = LexicalPath::join(parent_path, "lib"sv).string();
-        fprintf(stderr, "[Ladybird] Platform init path: %s\n", lib_path->characters());
+        auto app_dir = LexicalPath::dirname(path);
+        lib_path = LexicalPath::join(app_dir, "lib"sv).string();
+
+        // Use share/Lagom in the bundle as resource root
+        auto resource_root = LexicalPath::join(app_dir, "share"sv, "Lagom"sv).string();
+        WebView::s_ladybird_resource_root = resource_root;
+        Core::ResourceImplementation::install(make<Core::ResourceImplementationFile>(MUST(String::from_byte_string(resource_root))));
     }
     else
     {

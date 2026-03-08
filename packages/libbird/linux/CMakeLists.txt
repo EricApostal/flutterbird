@@ -29,6 +29,7 @@ file(GLOB LADYBIRD_LIBEXEC "${LADYBIRD_DIR}/Build/release/libexec/*")
 list(APPEND LADYBIRD_LIBS ${VCPKG_LIBS})
 
 install(PROGRAMS ${LADYBIRD_LIBEXEC} DESTINATION "lib" COMPONENT Runtime)
+install(DIRECTORY "${LADYBIRD_DIR}/Build/release/share" DESTINATION "." COMPONENT Runtime)
 
 # Define the plugin library target. Its name must not be changed (see comment
 # on PLUGIN_NAME above).

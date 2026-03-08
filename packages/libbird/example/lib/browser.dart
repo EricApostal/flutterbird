@@ -16,8 +16,8 @@ class _BrowserWindowState extends State<BrowserWindow>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
-    _controllers = [LadybirdController(), LadybirdController()];
+    _tabController = TabController(length: 1, vsync: this);
+    _controllers = [LadybirdController()];
   }
 
   @override
@@ -27,19 +27,13 @@ class _BrowserWindowState extends State<BrowserWindow>
         children: [
           TabBar(
             controller: _tabController,
-            tabs: [
-              Tab(text: "Uno"),
-              Tab(text: "dos"),
-            ],
+            tabs: [Tab(text: "Uno")],
           ),
           Expanded(
             child: TabBarView(
               controller: _tabController,
               physics: NeverScrollableScrollPhysics(),
-              children: [
-                _BrowserTab(controller: _controllers[0]),
-                _BrowserTab(controller: _controllers[1]),
-              ],
+              children: [_BrowserTab(controller: _controllers[0])],
             ),
           ),
         ],
