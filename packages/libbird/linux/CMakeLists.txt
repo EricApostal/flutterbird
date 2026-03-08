@@ -26,7 +26,9 @@ file(GLOB LADYBIRD_LIBS "${LADYBIRD_DIR}/Build/release/lib64/*.so*" "${LADYBIRD_
 file(GLOB VCPKG_LIBS "${LADYBIRD_DIR}/Build/release/vcpkg_installed/${VCPKG_TRIPLET}/lib/*.so*")
 file(GLOB LADYBIRD_LIBEXEC "${LADYBIRD_DIR}/Build/release/libexec/*")
 
-list(APPEND LADYBIRD_LIBS ${VCPKG_LIBS} ${LADYBIRD_LIBEXEC})
+list(APPEND LADYBIRD_LIBS ${VCPKG_LIBS})
+
+install(PROGRAMS ${LADYBIRD_LIBEXEC} DESTINATION "lib" COMPONENT Runtime)
 
 # Define the plugin library target. Its name must not be changed (see comment
 # on PLUGIN_NAME above).
