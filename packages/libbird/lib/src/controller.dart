@@ -41,6 +41,7 @@ class LadybirdController {
 
     _bindings.init_ladybird();
     _viewId = _bindings.create_web_view();
+    print("view view id: $viewId");
 
     _resizeCallback = ffi.NativeCallable<ffi.Void Function()>.listener(
       _onResize,

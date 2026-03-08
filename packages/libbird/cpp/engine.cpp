@@ -389,6 +389,7 @@ int create_web_view()
     {
         g_active_view_id = id;
     }
+    std::printf("returning with id = %d", id);
     return id;
 }
 
@@ -407,7 +408,10 @@ void *get_latest_pixel_buffer(int view_id)
     std::lock_guard<std::mutex> lock(g_web_views_mutex);
     auto it = g_web_views.find(view_id);
     if (it == g_web_views.end())
+    {
+        std::printf("could not find webview\n");
         return nullptr;
+    }
 
     std::lock_guard<std::mutex> view_lock(it->second->m_mutex);
 #ifdef __APPLE__
@@ -417,8 +421,13 @@ void *get_latest_pixel_buffer(int view_id)
     CVPixelBufferRetain(it->second->m_pixel_buffer);
     return it->second->m_pixel_buffer;
 #else
+
     if (!it->second->m_bitmap)
+    {
+        std::printf("could not find m_bitmap\n");
         return nullptr;
+    }
+
     // Return pointer to the raw pixel data
     // Assuming ARGB format which Flutter expects
     // We return the raw data pointer from Gfx::Bitmap

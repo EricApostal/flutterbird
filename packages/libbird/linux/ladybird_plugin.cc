@@ -10,6 +10,7 @@
 
 #include "ladybird_plugin_private.h"
 #include "engine.h"
+#include <iostream>
 
 // --- LadybirdTexture ---
 
@@ -30,14 +31,37 @@ static gboolean ladybird_texture_copy_pixels(FlPixelBufferTexture *texture,
                                              uint32_t *height,
                                              GError **error)
 {
+  // This works so that's odd
+  // static uint8_t *dummy_buffer = nullptr;
+  // if (!dummy_buffer)
+  // {
+  //   dummy_buffer = new uint8_t[100 * 100 * 4];
+  //   for (int i = 0; i < 100 * 100; i++)
+  //   {
+  //     dummy_buffer[i * 4 + 0] = 255; // R
+  //     dummy_buffer[i * 4 + 1] = 0;   // G
+  //     dummy_buffer[i * 4 + 2] = 0;   // B
+  //     dummy_buffer[i * 4 + 3] = 255; // A
+  //   }
+  // }
+  // *out_buffer = dummy_buffer;
+  // *width = 100;
+  // *height = 100;
+  // return TRUE;
+
+  g_print("Creating ladybird texture\n");
   LadybirdTexture *self = LADYBIRD_TEXTURE(texture);
+  g_print("created\n!");
 
   void *pixels = get_latest_pixel_buffer(self->view_id);
+  g_print("got buffer\n");
   int w = get_iosurface_width(self->view_id);
   int h = get_iosurface_height(self->view_id);
+  g_print("got size\n");
 
   if (!pixels || w <= 0 || h <= 0)
   {
+    g_print("not pixels\n");
     if (width)
       *width = 0;
     if (height)
@@ -49,6 +73,7 @@ static gboolean ladybird_texture_copy_pixels(FlPixelBufferTexture *texture,
   *width = w;
   *height = h;
 
+  g_print("exiting as true\n");
   return TRUE;
 }
 
