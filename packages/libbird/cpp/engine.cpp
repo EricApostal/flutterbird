@@ -225,10 +225,12 @@ public:
 
     virtual ~FlutterViewImpl()
     {
+#ifdef __APPLE__
         if (m_pixel_buffer)
         {
             CVPixelBufferRelease(m_pixel_buffer);
         }
+#endif
     }
 
 private:

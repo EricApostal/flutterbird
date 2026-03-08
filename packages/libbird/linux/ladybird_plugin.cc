@@ -12,12 +12,6 @@
 #include "engine.h"
 
 // --- LadybirdTexture ---
-// Forward declaration
-typedef struct _LadybirdTexture LadybirdTexture;
-typedef struct
-{
-  FlPixelBufferTextureClass parent_class;
-} LadybirdTextureClass;
 
 struct _LadybirdTexture
 {
@@ -88,6 +82,7 @@ struct _LadybirdPlugin
   GObject parent_instance;
   FlPluginRegistrar *registrar;
   FlTextureRegistrar *texture_registrar;
+  std::map<int64_t, LadybirdTexture *> *textures;
 };
 
 G_DEFINE_TYPE(LadybirdPlugin, ladybird_plugin, g_object_get_type())
@@ -146,6 +141,12 @@ static void ladybird_plugin_handle_method_call(
       set_frame_callback((int)view_id, frame_available_callback, texture);
 
       int64_t texture_id = (int64_t)fl_texture_get_id(FL_TEXTURE(texture));
+
+      if (self->textures)
+      {
+        self->textures->insert(std::make_pair(texture_id, texture));
+      }
+
       g_autoptr(FlValue) result = fl_value_new_int(texture_id);
       response = FL_METHOD_RESPONSE(fl_method_success_response_new(result));
     }
@@ -160,13 +161,20 @@ static void ladybird_plugin_handle_method_call(
     if (fl_value_get_type(args) == FL_VALUE_TYPE_INT)
     {
       int64_t texture_id = fl_value_get_int(args);
-      FlTexture *texture = fl_texture_registrar_lookup_texture(self->texture_registrar, texture_id);
-      if (texture)
-      {
-        LadybirdTexture *l_texture = LADYBIRD_TEXTURE(texture);
-        set_frame_callback(l_texture->view_id, nullptr, nullptr);
 
-        fl_texture_registrar_unregister_texture(self->texture_registrar, texture);
+      if (self->textures)
+      {
+        auto it = self->textures->find(texture_id);
+        if (it != self->textures->end())
+        {
+          LadybirdTexture *l_texture = it->second;
+          FlTexture *texture = FL_TEXTURE(l_texture);
+
+          set_frame_callback(l_texture->view_id, nullptr, nullptr);
+
+          fl_texture_registrar_unregister_texture(self->texture_registrar, texture);
+          self->textures->erase(it);
+        }
       }
       response = FL_METHOD_RESPONSE(fl_method_success_response_new(nullptr));
     }
@@ -185,6 +193,12 @@ static void ladybird_plugin_handle_method_call(
 
 static void ladybird_plugin_dispose(GObject *object)
 {
+  LadybirdPlugin *self = LADYBIRD_PLUGIN(object);
+  if (self->textures)
+  {
+    delete self->textures;
+    self->textures = nullptr;
+  }
   G_OBJECT_CLASS(ladybird_plugin_parent_class)->dispose(object);
 }
 
@@ -193,7 +207,10 @@ static void ladybird_plugin_class_init(LadybirdPluginClass *klass)
   G_OBJECT_CLASS(klass)->dispose = ladybird_plugin_dispose;
 }
 
-static void ladybird_plugin_init(LadybirdPlugin *self) {}
+static void ladybird_plugin_init(LadybirdPlugin *self)
+{
+  self->textures = new std::map<int64_t, LadybirdTexture *>();
+}
 
 static void method_call_cb(FlMethodChannel *channel, FlMethodCall *method_call,
                            gpointer user_data)
