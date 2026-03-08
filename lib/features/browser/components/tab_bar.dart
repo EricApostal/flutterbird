@@ -1,8 +1,12 @@
+import 'dart:io';
+
 import 'package:bird_core/bird_core.dart';
 import 'package:bitsdojo_window/bitsdojo_window.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutterbird/features/browser/components/tab.dart';
+import 'package:go_router/go_router.dart';
 
 class BrowserTabBar extends ConsumerStatefulWidget {
   final int currentViewId;
@@ -39,15 +43,17 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar> {
                   itemBuilder: (context, index) {
                     if (index == tabs.length) {
                       return ReorderableDragStartListener(
-                        key: ValueKey("close"),
+                        key: ValueKey("add"),
                         index: index,
                         enabled: false,
                         child: IconButton(
                           icon: const Icon(Icons.add, size: 20),
                           onPressed: () {
-                            ref
+                            final controller = ref
                                 .read(browserTabControllerProvider.notifier)
                                 .add();
+
+                            context.go("/browser/tab/${controller.viewId}");
                           },
                         ),
                       );
@@ -61,6 +67,26 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar> {
                         child: BrowserTab(
                           viewId: tabs[index].viewId,
                           selected: id == widget.currentViewId,
+                          onTabClosed: () {
+                            HapticFeedback.lightImpact();
+                            if (id == widget.currentViewId) {
+                              if (tabs.length == 1) {
+                                // close application
+                                exit(0);
+                              }
+                              if (index == 0) {
+                                context.go("/browser/tab/${tabs[1].viewId}");
+                              } else {
+                                context.go(
+                                  "/browser/tab/${tabs[index - 1].viewId}",
+                                );
+                              }
+                            }
+
+                            ref
+                                .read(browserTabControllerProvider.notifier)
+                                .remove(id);
+                          },
                         ),
                       ),
                     );

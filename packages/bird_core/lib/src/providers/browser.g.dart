@@ -42,7 +42,7 @@ final class BrowserTabControllerProvider
 }
 
 String _$browserTabControllerHash() =>
-    r'e4264e307986cca1fb3a8ee0b29674fd31d1d39a';
+    r'e703240c0b0304692ae528bc53a112b447425bd4';
 
 abstract class _$BrowserTabController
     extends $Notifier<List<LadybirdController>> {

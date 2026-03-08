@@ -7,7 +7,13 @@ import 'package:go_router/go_router.dart';
 class BrowserTab extends ConsumerWidget {
   final int viewId;
   final bool selected;
-  const BrowserTab({super.key, required this.viewId, required this.selected});
+  final void Function() onTabClosed;
+  const BrowserTab({
+    super.key,
+    required this.viewId,
+    required this.selected,
+    required this.onTabClosed,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -83,11 +89,8 @@ class BrowserTab extends ConsumerWidget {
               ),
               IconButton(
                 icon: const Icon(Icons.close, size: 16),
-                onPressed: () {
-                  ref
-                      .read(browserTabControllerProvider.notifier)
-                      .remove(viewId);
-                },
+                onPressed: onTabClosed,
+
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
                 splashRadius: 16,

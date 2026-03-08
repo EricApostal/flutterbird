@@ -29,7 +29,9 @@ class _LadybirdViewState extends State<LadybirdView> {
     _scheduleTick();
     if (!widget.controller.hasNavigatedInitial) {
       widget.controller.hasNavigatedInitial = true;
-      widget.controller.navigate(widget.controller.initialUrl);
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => widget.controller.navigate(widget.controller.initialUrl),
+      );
     }
   }
 
@@ -67,8 +69,10 @@ class _LadybirdViewState extends State<LadybirdView> {
       _recreateTexture();
 
       if (!widget.controller.hasNavigatedInitial) {
-        widget.controller.hasNavigatedInitial = true;
-        widget.controller.navigate(widget.controller.initialUrl);
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          widget.controller.hasNavigatedInitial = true;
+          widget.controller.navigate(widget.controller.initialUrl);
+        });
       }
     }
   }
@@ -189,6 +193,7 @@ class _LadybirdViewState extends State<LadybirdView> {
   void dispose() {
     widget.controller.onResize = null;
     _focusNode.dispose();
+    print("disposing!");
     if (_textureId != null) {
       widget.controller.unregisterTexture(_textureId!);
     }
