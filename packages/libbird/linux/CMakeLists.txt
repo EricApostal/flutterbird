@@ -24,8 +24,9 @@ set(VCPKG_TRIPLET "x64-linux-dynamic")
 
 file(GLOB LADYBIRD_LIBS "${LADYBIRD_DIR}/Build/release/lib64/*.so*" "${LADYBIRD_DIR}/Build/release/lib/*.so*")
 file(GLOB VCPKG_LIBS "${LADYBIRD_DIR}/Build/release/vcpkg_installed/${VCPKG_TRIPLET}/lib/*.so*")
+file(GLOB LADYBIRD_LIBEXEC "${LADYBIRD_DIR}/Build/release/libexec/*")
 
-list(APPEND LADYBIRD_LIBS ${VCPKG_LIBS})
+list(APPEND LADYBIRD_LIBS ${VCPKG_LIBS} ${LADYBIRD_LIBEXEC})
 
 # Define the plugin library target. Its name must not be changed (see comment
 # on PLUGIN_NAME above).

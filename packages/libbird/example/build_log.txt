@@ -7,7 +7,7 @@ Got dependencies!
 3 packages have newer versions incompatible with dependency constraints.
 Try `flutter pub outdated` for more information.
 Building Linux application...                                   
-    Finished `release` profile [optimized] target(s) in 0.00s
+    Finished `release` profile [optimized] target(s) in 0.01s
 CMake Warning at runner/CMakeLists.txt:9 (add_executable):
   Cannot generate a safe runtime search path for target example because files
   in some directories may conflict with libraries in implicit directories:
@@ -36,4 +36,4 @@ CMake Warning at flutter/ephemeral/.plugin_symlinks/ladybird/linux/CMakeLists.tx
 /home/eric/Documents/development/projects/flutterbird/packages/libbird/example/linux/flutter/ephemeral/.plugin_symlinks/ladybird/cpp/../third_party/ladybird/AK/StringView.h:384:54: warning: literal operator suffixes not preceded by ‘_’ are reserved for future standardization [-Wliteral-suffix]
 /home/eric/Documents/development/projects/flutterbird/packages/libbird/example/linux/flutter/ephemeral/.plugin_symlinks/ladybird/cpp/../third_party/ladybird/AK/Utf16View.h:717:53: warning: literal operator suffixes not preceded by ‘_’ are reserved for future standardization [-Wliteral-suffix]
 /home/eric/Documents/development/projects/flutterbird/packages/libbird/example/linux/flutter/ephemeral/.plugin_symlinks/ladybird/cpp/../third_party/ladybird/AK/Utf16StringData.h:50:25: warning: ‘offsetof’ within non-standard-layout type ‘AK::Detail::Utf16StringData’ is conditionally-supported [-Winvalid-offsetof]
-✓ Built build/linux/x64/release/bundle/example
+Build process failed
