@@ -62,6 +62,15 @@ file(GLOB LADYBIRD_LIBS_SO
 
 target_link_libraries(engine PRIVATE
     ${LADYBIRD_LIBS_SO}
+    lagom-webview
+    lagom-web
+    lagom-js
+    lagom-requests
+    lagom-url
+    lagom-ipc
+    lagom-core
+    lagom-ak  
+    lagom-gfx
     skia
 )
 
