@@ -12,8 +12,6 @@
 #include "engine.h"
 #include <iostream>
 
-// --- LadybirdTexture ---
-
 struct _LadybirdTexture
 {
   FlPixelBufferTexture parent_instance;
@@ -31,27 +29,22 @@ static gboolean ladybird_texture_copy_pixels(FlPixelBufferTexture *texture,
                                              uint32_t *height,
                                              GError **error)
 {
-  g_print("Creating ladybird texture\n");
   LadybirdTexture *self = LADYBIRD_TEXTURE(texture);
-  g_print("created\n!");
 
   void *pixels = get_latest_pixel_buffer(self->view_id);
-  g_print("got buffer\n");
+
   int w = get_iosurface_width(self->view_id);
   int h = get_iosurface_height(self->view_id);
-  g_print("got size\n");
 
   if (!pixels || w <= 0 || h <= 0)
   {
-
-    g_print("not pixels so dummy buffer\n");
     static uint8_t *dummy_buffer = nullptr;
     if (!dummy_buffer)
     {
       dummy_buffer = new uint8_t[100 * 100 * 4];
       for (int i = 0; i < 100 * 100; i++)
       {
-        dummy_buffer[i * 4 + 0] = 255; // R
+        dummy_buffer[i * 4 + 0] = 0;   // R
         dummy_buffer[i * 4 + 1] = 0;   // G
         dummy_buffer[i * 4 + 2] = 0;   // B
         dummy_buffer[i * 4 + 3] = 255; // A
@@ -67,7 +60,6 @@ static gboolean ladybird_texture_copy_pixels(FlPixelBufferTexture *texture,
   *width = w;
   *height = h;
 
-  g_print("exiting as true\n");
   return TRUE;
 }
 
@@ -90,8 +82,6 @@ static LadybirdTexture *ladybird_texture_new(int view_id, FlTextureRegistrar *re
   return self;
 }
 
-// --- LadybirdPlugin ---
-
 #define LADYBIRD_PLUGIN(obj)                                     \
   (G_TYPE_CHECK_INSTANCE_CAST((obj), ladybird_plugin_get_type(), \
                               LadybirdPlugin))
@@ -110,7 +100,21 @@ static bool g_ladybird_initialized = false;
 
 static gboolean ladybird_tick_callback(gpointer user_data)
 {
+  LadybirdPlugin *plugin = LADYBIRD_PLUGIN(user_data);
   tick_ladybird();
+
+  if (plugin && plugin->textures)
+  {
+    for (auto const &it : *plugin->textures)
+    {
+      LadybirdTexture *texture = it.second;
+      if (texture && texture->texture_registrar)
+      {
+        fl_texture_registrar_mark_texture_frame_available(texture->texture_registrar, FL_TEXTURE(texture));
+      }
+    }
+  }
+
   return G_SOURCE_CONTINUE;
 }
 
@@ -135,7 +139,7 @@ static void ladybird_plugin_handle_method_call(
   {
     init_ladybird();
     g_ladybird_initialized = true;
-    g_timeout_add(16, ladybird_tick_callback, nullptr);
+    g_timeout_add(16, ladybird_tick_callback, self);
   }
 
   if (strcmp(method, "getPlatformVersion") == 0)
