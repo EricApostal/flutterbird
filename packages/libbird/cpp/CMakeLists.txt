@@ -15,72 +15,7 @@ execute_process(
 )
 
 if (ANDROID)
-    set(LADYBIRD_OUT_DIR "${LADYBIRD_DIR}/Build/android-${ANDROID_ABI}")
-    
-    set(CACHE_DIR "$ENV{LADYBIRD_CACHE_DIR}")
-    if (NOT CACHE_DIR OR CACHE_DIR STREQUAL "")
-        set(CACHE_DIR "${LADYBIRD_DIR}/Build/caches")
-    endif()
-
-    # 1. Build Lagom Tools for host
-    # We need to explicitly clear NDK crossed-over flags since LagomTools compiles for the host (macOS)
-    execute_process(
-        COMMAND ${CMAKE_COMMAND} -E env 
-            "BUILD_DIR=${LADYBIRD_DIR}/Build"
-            "CACHE_DIR=${CACHE_DIR}"
-            "PATH=$ENV{PATH}"
-            "CC="
-            "CXX="
-            "CFLAGS="
-            "CXXFLAGS="
-            "LDFLAGS="
-            "CMAKE_TOOLCHAIN_FILE="
-            bash "${LADYBIRD_DIR}/UI/Android/BuildLagomTools.sh"
-        WORKING_DIRECTORY "${LADYBIRD_DIR}/UI/Android"
-        RESULT_VARIABLE lagom_res
-    )
-    if(NOT lagom_res EQUAL 0)
-        message(FATAL_ERROR "BuildLagomTools.sh failed on Android cross-compile")
-    endif()
-
-    # 2. Configure for Android natively
-    execute_process(
-        COMMAND ${CMAKE_COMMAND} -E env
-            "ANDROID_NDK_HOME=${ANDROID_NDK}"
-            "CC="
-            "CXX="
-            "CFLAGS="
-            "CXXFLAGS="
-            "LDFLAGS="
-            ${CMAKE_COMMAND} -B "${LADYBIRD_OUT_DIR}" -S "${LADYBIRD_DIR}"
-            -GNinja
-            -DCMAKE_BUILD_TYPE=Release
-            -DCMAKE_MAKE_PROGRAM=ninja
-            -DANDROID_NDK=${ANDROID_NDK}
-            -DANDROID_ABI=${ANDROID_ABI}
-            -DANDROID_PLATFORM=${ANDROID_PLATFORM}
-            -DANDROID_STL=c++_shared
-            -DVCPKG_TARGET_ANDROID=ON
-            -DLagomTools_DIR=${LADYBIRD_DIR}/Build/lagom-tools-install/share/LagomTools
-            -DLADYBIRD_CACHE_DIR=${CACHE_DIR}
-            -DVCPKG_ROOT=${LADYBIRD_DIR}/Build/vcpkg
-            -DVCPKG_CHAINLOAD_TOOLCHAIN_FILE=${ANDROID_NDK}/build/cmake/android.toolchain.cmake
-        WORKING_DIRECTORY "${LADYBIRD_DIR}"
-        RESULT_VARIABLE config_res
-    )
-    if(NOT config_res EQUAL 0)
-        message(FATAL_ERROR "Ladybird CMake configure failed for Android ABI: ${ANDROID_ABI}")
-    endif()
-
-    # 3. Build Ladybird libraries using ninja
-    execute_process(
-        COMMAND ninja -C "${LADYBIRD_OUT_DIR}"
-        WORKING_DIRECTORY "${LADYBIRD_DIR}"
-        RESULT_VARIABLE build_res
-    )
-    if(NOT build_res EQUAL 0)
-        message(FATAL_ERROR "Ladybird Ninja build failed for Android ABI: ${ANDROID_ABI}")
-    endif()
+    message(FATAL_ERROR "Android builds moved to packages/libbird/android/CMakeLists.txt")
 else()
     set(LADYBIRD_OUT_DIR "${LADYBIRD_DIR}/Build/release")
     execute_process(
