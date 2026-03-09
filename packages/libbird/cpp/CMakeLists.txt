@@ -45,7 +45,14 @@ if (ANDROID)
 
     # 2. Configure for Android natively
     execute_process(
-        COMMAND ${CMAKE_COMMAND} -B "${LADYBIRD_OUT_DIR}" -S "${LADYBIRD_DIR}"
+        COMMAND ${CMAKE_COMMAND} -E env
+            "ANDROID_NDK_HOME=${ANDROID_NDK}"
+            "CC="
+            "CXX="
+            "CFLAGS="
+            "CXXFLAGS="
+            "LDFLAGS="
+            ${CMAKE_COMMAND} -B "${LADYBIRD_OUT_DIR}" -S "${LADYBIRD_DIR}"
             -GNinja
             -DCMAKE_BUILD_TYPE=Release
             -DCMAKE_MAKE_PROGRAM=ninja
@@ -57,6 +64,7 @@ if (ANDROID)
             -DLagomTools_DIR=${LADYBIRD_DIR}/Build/lagom-tools-install/share/LagomTools
             -DLADYBIRD_CACHE_DIR=${CACHE_DIR}
             -DVCPKG_ROOT=${LADYBIRD_DIR}/Build/vcpkg
+            -DVCPKG_CHAINLOAD_TOOLCHAIN_FILE=${ANDROID_NDK}/build/cmake/android.toolchain.cmake
         WORKING_DIRECTORY "${LADYBIRD_DIR}"
         RESULT_VARIABLE config_res
     )
