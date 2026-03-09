@@ -23,11 +23,18 @@ if (ANDROID)
     endif()
 
     # 1. Build Lagom Tools for host
+    # We need to explicitly clear NDK crossed-over flags since LagomTools compiles for the host (macOS)
     execute_process(
         COMMAND ${CMAKE_COMMAND} -E env 
             "BUILD_DIR=${LADYBIRD_DIR}/Build"
             "CACHE_DIR=${CACHE_DIR}"
             "PATH=$ENV{PATH}"
+            "CC="
+            "CXX="
+            "CFLAGS="
+            "CXXFLAGS="
+            "LDFLAGS="
+            "CMAKE_TOOLCHAIN_FILE="
             bash "${LADYBIRD_DIR}/UI/Android/BuildLagomTools.sh"
         WORKING_DIRECTORY "${LADYBIRD_DIR}/UI/Android"
         RESULT_VARIABLE lagom_res
