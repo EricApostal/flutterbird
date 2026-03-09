@@ -59,6 +59,14 @@ extern "C"
 
     LADYBIRD_API void dispatch_key_event(int view_id, int type, int keycode, int modifiers, uint32_t code_point, bool repeat);
 
+    typedef char *(*AskUserForDownloadPathCallback)(const char *suggestion);
+    typedef void (*DisplayDownloadConfirmationDialogCallback)(const char *suggestion, const char *path);
+    typedef void (*DisplayErrorDialogCallback)(const char *message);
+
+    LADYBIRD_API void set_ask_user_for_download_path_callback(AskUserForDownloadPathCallback callback);
+    LADYBIRD_API void set_display_download_confirmation_dialog_callback(DisplayDownloadConfirmationDialogCallback callback);
+    LADYBIRD_API void set_display_error_dialog_callback(DisplayErrorDialogCallback callback);
+
 #ifdef __cplusplus
 }
 #endif

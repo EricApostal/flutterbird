@@ -9,7 +9,8 @@ class BrowserWindow extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final browserTab = ref.watch(browserTabProvider(viewId))!;
-    return LadybirdView(controller: browserTab);
+    final controller = ref.watch(browserTabProvider(viewId))!;
+
+    return LadybirdView(controller: controller);
   }
 }

@@ -27,6 +27,15 @@ class LadybirdController {
   >
   _faviconChangeCallback;
 
+  static ffi.NativeCallable<DisplayDownloadConfirmationDialogCallbackFunction>?
+  _displayDownloadConfirmationDialogCallback;
+  static ffi.NativeCallable<DisplayErrorDialogCallbackFunction>?
+  _displayErrorDialogCallback;
+
+  static String? Function(String)? onAskUserForDownloadPath;
+  static void Function(String, String)? onDisplayDownloadConfirmationDialog;
+  static void Function(String)? onDisplayErrorDialog;
+
   void Function()? onResize;
 
   final ValueNotifier<String> urlNotifier = ValueNotifier("");
@@ -38,6 +47,27 @@ class LadybirdController {
   LadybirdController({this.initialUrl = "https://google.com/"}) {
     _lib = ffi.DynamicLibrary.process();
     _bindings = LadybirdBindings(_lib);
+    if (_displayErrorDialogCallback == null) {
+      _bindings.set_ask_user_for_download_path_callback(
+        ffi.Pointer.fromFunction(_onAskUserForDownloadPath),
+      );
+
+      _displayDownloadConfirmationDialogCallback =
+          ffi.NativeCallable<
+            DisplayDownloadConfirmationDialogCallbackFunction
+          >.listener(_onDisplayDownloadConfirmationDialog);
+      _bindings.set_display_download_confirmation_dialog_callback(
+        _displayDownloadConfirmationDialogCallback!.nativeFunction,
+      );
+
+      _displayErrorDialogCallback =
+          ffi.NativeCallable<DisplayErrorDialogCallbackFunction>.listener(
+            _onDisplayErrorDialog,
+          );
+      _bindings.set_display_error_dialog_callback(
+        _displayErrorDialogCallback!.nativeFunction,
+      );
+    }
 
     _bindings.init_ladybird();
     _viewId = _bindings.create_web_view();
@@ -233,4 +263,34 @@ class LadybirdController {
     _faviconChangeCallback.close();
     _bindings.destroy_web_view(_viewId);
   }
+}
+
+ffi.Pointer<ffi.Char> _onAskUserForDownloadPath(
+  ffi.Pointer<ffi.Char> suggestion,
+) {
+  if (LadybirdController.onAskUserForDownloadPath == null) {
+    return ffi.nullptr;
+  }
+  final s = suggestion.cast<Utf8>().toDartString();
+  final result = LadybirdController.onAskUserForDownloadPath!(s);
+  if (result != null) {
+    return result.toNativeUtf8().cast<ffi.Char>();
+  }
+  return ffi.nullptr;
+}
+
+void _onDisplayDownloadConfirmationDialog(
+  ffi.Pointer<ffi.Char> name,
+  ffi.Pointer<ffi.Char> path,
+) {
+  if (LadybirdController.onDisplayDownloadConfirmationDialog == null) return;
+  final n = name.cast<Utf8>().toDartString();
+  final p = path.cast<Utf8>().toDartString();
+  LadybirdController.onDisplayDownloadConfirmationDialog!(n, p);
+}
+
+void _onDisplayErrorDialog(ffi.Pointer<ffi.Char> message) {
+  if (LadybirdController.onDisplayErrorDialog == null) return;
+  final msg = message.cast<Utf8>().toDartString();
+  LadybirdController.onDisplayErrorDialog!(msg);
 }

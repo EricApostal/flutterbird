@@ -35,6 +35,10 @@ std::mutex g_web_views_mutex;
 int g_next_view_id = 1;
 int g_active_view_id = -1;
 
+AskUserForDownloadPathCallback g_ask_user_for_download_path_callback = nullptr;
+DisplayDownloadConfirmationDialogCallback g_display_download_confirmation_dialog_callback = nullptr;
+DisplayErrorDialogCallback g_display_error_dialog_callback = nullptr;
+
 class FlutterViewImpl final : public WebView::ViewImplementation
 {
 public:
@@ -287,9 +291,37 @@ public:
     {
         return {};
     }
-    virtual Optional<ByteString> ask_user_for_download_path(StringView) const override { return {}; }
-    virtual void display_download_confirmation_dialog(StringView, LexicalPath const &) const override {}
-    virtual void display_error_dialog(StringView) const override {}
+    virtual Optional<ByteString> ask_user_for_download_path(StringView suggestion) const override
+    {
+        if (g_ask_user_for_download_path_callback)
+        {
+            auto suggestion_string = suggestion.to_byte_string();
+            char *result = g_ask_user_for_download_path_callback(suggestion_string.characters());
+            if (result)
+            {
+                ByteString path(result);
+                free(result);
+                return path;
+            }
+        }
+        return {};
+    }
+    virtual void display_download_confirmation_dialog(StringView path, LexicalPath const &lexical_path) const override
+    {
+        if (g_display_download_confirmation_dialog_callback)
+        {
+            auto path_string = path.to_byte_string();
+            g_display_download_confirmation_dialog_callback(path_string.characters(), lexical_path.string().characters());
+        }
+    }
+    virtual void display_error_dialog(StringView message) const override
+    {
+        if (g_display_error_dialog_callback)
+        {
+            auto message_string = message.to_byte_string();
+            g_display_error_dialog_callback(message_string.characters());
+        }
+    }
 
     virtual Utf16String clipboard_text() const override { return WebView::Application::clipboard_text(); }
     virtual Vector<Web::Clipboard::SystemClipboardRepresentation> clipboard_entries() const override { return WebView::Application::clipboard_entries(); }
@@ -638,4 +670,19 @@ extern "C"
             it->second->dispatch_key_event(static_cast<Web::KeyEvent::Type>(type), keycode, modifiers, code_point, repeat);
         }
     }
+}
+
+void set_ask_user_for_download_path_callback(AskUserForDownloadPathCallback callback)
+{
+    g_ask_user_for_download_path_callback = callback;
+}
+
+void set_display_download_confirmation_dialog_callback(DisplayDownloadConfirmationDialogCallback callback)
+{
+    g_display_download_confirmation_dialog_callback = callback;
+}
+
+void set_display_error_dialog_callback(DisplayErrorDialogCallback callback)
+{
+    g_display_error_dialog_callback = callback;
 }

@@ -293,6 +293,50 @@ class LadybirdBindings {
       >('dispatch_key_event');
   late final _dispatch_key_event = _dispatch_key_eventPtr
       .asFunction<void Function(int, int, int, int, int, bool)>();
+
+  void set_ask_user_for_download_path_callback(
+    AskUserForDownloadPathCallback callback,
+  ) {
+    return _set_ask_user_for_download_path_callback(callback);
+  }
+
+  late final _set_ask_user_for_download_path_callbackPtr =
+      _lookup<
+        ffi.NativeFunction<ffi.Void Function(AskUserForDownloadPathCallback)>
+      >('set_ask_user_for_download_path_callback');
+  late final _set_ask_user_for_download_path_callback =
+      _set_ask_user_for_download_path_callbackPtr
+          .asFunction<void Function(AskUserForDownloadPathCallback)>();
+
+  void set_display_download_confirmation_dialog_callback(
+    DisplayDownloadConfirmationDialogCallback callback,
+  ) {
+    return _set_display_download_confirmation_dialog_callback(callback);
+  }
+
+  late final _set_display_download_confirmation_dialog_callbackPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.Void Function(DisplayDownloadConfirmationDialogCallback)
+        >
+      >('set_display_download_confirmation_dialog_callback');
+  late final _set_display_download_confirmation_dialog_callback =
+      _set_display_download_confirmation_dialog_callbackPtr
+          .asFunction<
+            void Function(DisplayDownloadConfirmationDialogCallback)
+          >();
+
+  void set_display_error_dialog_callback(DisplayErrorDialogCallback callback) {
+    return _set_display_error_dialog_callback(callback);
+  }
+
+  late final _set_display_error_dialog_callbackPtr =
+      _lookup<
+        ffi.NativeFunction<ffi.Void Function(DisplayErrorDialogCallback)>
+      >('set_display_error_dialog_callback');
+  late final _set_display_error_dialog_callback =
+      _set_display_error_dialog_callbackPtr
+          .asFunction<void Function(DisplayErrorDialogCallback)>();
 }
 
 final class __mbstate_t extends ffi.Union {
@@ -583,3 +627,26 @@ const int WINT_MAX = 2147483647;
 const int SIG_ATOMIC_MIN = -2147483648;
 
 const int SIG_ATOMIC_MAX = 2147483647;
+
+typedef AskUserForDownloadPathCallback =
+    ffi.Pointer<ffi.NativeFunction<AskUserForDownloadPathCallbackFunction>>;
+typedef AskUserForDownloadPathCallbackFunction =
+    ffi.Pointer<ffi.Char> Function(ffi.Pointer<ffi.Char>);
+typedef DartAskUserForDownloadPathCallbackFunction =
+    ffi.Pointer<ffi.Char> Function(ffi.Pointer<ffi.Char>);
+
+typedef DisplayDownloadConfirmationDialogCallback =
+    ffi.Pointer<
+      ffi.NativeFunction<DisplayDownloadConfirmationDialogCallbackFunction>
+    >;
+typedef DisplayDownloadConfirmationDialogCallbackFunction =
+    ffi.Void Function(ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Char>);
+typedef DartDisplayDownloadConfirmationDialogCallbackFunction =
+    void Function(ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Char>);
+
+typedef DisplayErrorDialogCallback =
+    ffi.Pointer<ffi.NativeFunction<DisplayErrorDialogCallbackFunction>>;
+typedef DisplayErrorDialogCallbackFunction =
+    ffi.Void Function(ffi.Pointer<ffi.Char>);
+typedef DartDisplayErrorDialogCallbackFunction =
+    void Function(ffi.Pointer<ffi.Char>);
