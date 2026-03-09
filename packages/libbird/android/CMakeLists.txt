@@ -8,7 +8,7 @@ set(PLUGIN_NAME "ladybird_plugin")
 # We can just put a dummy here, or since FFI, we can avoid standard Flutter plugin registration.
 # But gradle expects to build a target with PLUGIN_NAME.
 add_library(${PLUGIN_NAME} SHARED
-    ../cpp/engine.cpp
+    dummy.cpp
 )
 
 set(LADYBIRD_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../third_party/ladybird")

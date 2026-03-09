@@ -30,7 +30,7 @@ android {
         minSdk = 30
         externalNativeBuild {
             cmake {
-                cppFlags += "-std=c++2b -frtti -fexceptions -D__ANDROID_API__=30"
+                cppFlags += "-std=c++2b -frtti -fexceptions -D__ANDROID_API__=30 -D__GCC_DESTRUCTIVE_SIZE=64 -Wno-invalid-constexpr"
                 arguments += listOf("-DANDROID_STL=c++_shared")
             }
         }
