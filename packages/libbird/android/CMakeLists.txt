@@ -4,30 +4,23 @@ project(ladybird_plugin LANGUAGES CXX)
 
 set(PLUGIN_NAME "ladybird_plugin")
 
+# The flutter tooling requires at least one cpp file in the plugin
+# We can just put a dummy here, or since FFI, we can avoid standard Flutter plugin registration.
+# But gradle expects to build a target with PLUGIN_NAME.
 add_library(${PLUGIN_NAME} SHARED
-    # No C++ plugin code needed since we bind through dart ffi. Just building the engine.
     ../cpp/engine.cpp
 )
 
 set(LADYBIRD_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../third_party/ladybird")
 
-# Link the same libraries as Ladybird Android UI
-target_link_libraries(${PLUGIN_NAME} PRIVATE jnigraphics android)
+# Build the engine from the cpp folder, exactly as macOS / Linux do
+add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../cpp" engine_build)
 
-# Define standard compiler properties (C++23 is needed by ladybird)
+target_link_libraries(${PLUGIN_NAME} PRIVATE engine log android jnigraphics)
+
+# Standard C++2b is required by Ladybird
 set_target_properties(${PLUGIN_NAME} PROPERTIES
     CXX_STANDARD 23
     CXX_STANDARD_REQUIRED ON
-    CXX_EXTENSIONS OFF
 )
 
-target_include_directories(${PLUGIN_NAME} PRIVATE
-    ${LADYBIRD_DIR}
-    ${LADYBIRD_DIR}/Libraries
-    ${LADYBIRD_DIR}/Userland/Libraries
-    ${LADYBIRD_DIR}/Services
-    ${LADYBIRD_DIR}/Build/release
-)
-
-include(${LADYBIRD_DIR}/UI/cmake/AndroidExtras.cmake)
-create_ladybird_bundle(${PLUGIN_NAME})

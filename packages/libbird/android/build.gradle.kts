@@ -24,14 +24,18 @@ plugins {
 
 android {
     namespace = "com.example.ladybird"
-    compileSdk = 34
+    compileSdk = 35
 
     defaultConfig {
-        minSdk = 26
+        minSdk = 30
         externalNativeBuild {
             cmake {
-                cppFlags("-std=c++2b -frtti -fexceptions")
+                cppFlags += "-std=c++2b -frtti -fexceptions -D__ANDROID_API__=30"
+                arguments += listOf("-DANDROID_STL=c++_shared")
             }
+        }
+        ndk {
+            abiFilters += listOf("arm64-v8a")
         }
     }
 

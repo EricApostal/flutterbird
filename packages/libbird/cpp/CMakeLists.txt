@@ -21,6 +21,8 @@ execute_process(
 
 if (APPLE)
     set(VCPKG_TRIPLET "arm64-osx-dynamic")
+elseif(ANDROID)
+    set(VCPKG_TRIPLET "arm64-android")
 else()
     set(VCPKG_TRIPLET "x64-linux-dynamic")
 endif()
