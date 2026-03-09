@@ -21,7 +21,7 @@ EXTERNAL SOURCES:
 SPEC CHECKSUMS:
   bitsdojo_window_macos: 7959fb0ca65a3ccda30095c181ecb856fae48ea9
   FlutterMacOS: d0db08ddef1a9af05a5ec4b724367152bb0500b1
-  ladybird: ae90462cd518ecedc2c8a840431920187fa1dfd9
+  ladybird: 62fb75c03e5471ad0420920b94ab2a399af499aa
 
 PODFILE CHECKSUM: c3dfa49fe1718ff539b25a86b1e83753ef88ae4d
 
