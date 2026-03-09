@@ -24,13 +24,13 @@ if (ANDROID)
 
     # 1. Build Lagom Tools for host
     execute_process(
-        COMMAND bash "${LADYBIRD_DIR}/UI/Android/BuildLagomTools.sh"
-        WORKING_DIRECTORY "${LADYBIRD_DIR}/UI/Android"
-        RESULT_VARIABLE lagom_res
-        ENVIRONMENT
+        COMMAND ${CMAKE_COMMAND} -E env 
             "BUILD_DIR=${LADYBIRD_DIR}/Build"
             "CACHE_DIR=${CACHE_DIR}"
             "PATH=$ENV{PATH}"
+            bash "${LADYBIRD_DIR}/UI/Android/BuildLagomTools.sh"
+        WORKING_DIRECTORY "${LADYBIRD_DIR}/UI/Android"
+        RESULT_VARIABLE lagom_res
     )
     if(NOT lagom_res EQUAL 0)
         message(FATAL_ERROR "BuildLagomTools.sh failed on Android cross-compile")
