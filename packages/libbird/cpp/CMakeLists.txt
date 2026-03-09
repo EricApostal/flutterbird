@@ -17,19 +17,23 @@ execute_process(
 if (ANDROID)
     set(LADYBIRD_OUT_DIR "${LADYBIRD_DIR}/Build/android-${ANDROID_ABI}")
     
+    set(CACHE_DIR "$ENV{LADYBIRD_CACHE_DIR}")
+    if (NOT CACHE_DIR OR CACHE_DIR STREQUAL "")
+        set(CACHE_DIR "${LADYBIRD_DIR}/Build/caches")
+    endif()
+
     # 1. Build Lagom Tools for host
     execute_process(
         COMMAND bash "${LADYBIRD_DIR}/UI/Android/BuildLagomTools.sh"
         WORKING_DIRECTORY "${LADYBIRD_DIR}/UI/Android"
         RESULT_VARIABLE lagom_res
+        ENVIRONMENT
+            "BUILD_DIR=${LADYBIRD_DIR}/Build"
+            "CACHE_DIR=${CACHE_DIR}"
+            "PATH=$ENV{PATH}"
     )
     if(NOT lagom_res EQUAL 0)
         message(FATAL_ERROR "BuildLagomTools.sh failed on Android cross-compile")
-    endif()
-
-    set(CACHE_DIR "$ENV{LADYBIRD_CACHE_DIR}")
-    if (NOT CACHE_DIR OR CACHE_DIR STREQUAL "")
-        set(CACHE_DIR "${LADYBIRD_DIR}/Build/caches")
     endif()
 
     # 2. Configure for Android natively
