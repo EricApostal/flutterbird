@@ -1,3 +1,4 @@
 [submodule "packages/libbird/third_party/ladybird"]
 	path = packages/libbird/third_party/ladybird
-	url = https://github.com/LadybirdBrowser/ladybird
+	url = https://github.com/EricApostal/ladybird
+	branch = android-fix
