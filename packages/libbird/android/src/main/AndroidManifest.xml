@@ -1,3 +1,20 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
   package="com.example.ladybird">
+  <application>
+    <service
+      android:name="org.serenityos.ladybird.WebContentService"
+      android:enabled="true"
+      android:exported="false"
+      android:process=":WebContent" />
+    <service
+      android:name="org.serenityos.ladybird.RequestServerService"
+      android:enabled="true"
+      android:exported="false"
+      android:process=":RequestServer" />
+    <service
+      android:name="org.serenityos.ladybird.ImageDecoderService"
+      android:enabled="true"
+      android:exported="false"
+      android:process=":ImageDecoder" />
+  </application>
 </manifest>

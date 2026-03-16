@@ -7,6 +7,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <mutex>
+#include <vector>
+#include <chrono>
 #include <sys/stat.h>
 
 #ifdef __APPLE__
@@ -14,12 +16,15 @@
 #include <CoreFoundation/CoreFoundation.h>
 #elif defined(__ANDROID__)
 #include <android/log.h>
+#include <jni.h>
 #endif
 
 #include <AK/OwnPtr.h>
 #include <AK/StringView.h>
 #include <LibCore/EventLoop.h>
+#include <LibCore/Socket.h>
 #include <LibGfx/Bitmap.h>
+#include <LibWeb/Crypto/Crypto.h>
 #include <LibWebView/BrowserProcess.h>
 #include <LibWebView/ViewImplementation.h>
 #include <LibURL/URL.h>
@@ -38,6 +43,66 @@
 #if defined(__ANDROID__)
 #define LADYBIRD_LOGI(...) __android_log_print(ANDROID_LOG_INFO, "LadybirdEngine", __VA_ARGS__)
 #define LADYBIRD_LOGE(...) __android_log_print(ANDROID_LOG_ERROR, "LadybirdEngine", __VA_ARGS__)
+
+static JavaVM* s_java_vm = nullptr;
+static jobject s_plugin_instance = nullptr;
+static jmethodID s_bind_webcontent_service_method = nullptr;
+
+extern "C" LADYBIRD_API void register_android_plugin_instance(JNIEnv* env, jobject plugin)
+{
+    if (!env || !plugin)
+        return;
+
+    if (s_plugin_instance)
+        env->DeleteGlobalRef(s_plugin_instance);
+
+    env->GetJavaVM(&s_java_vm);
+    s_plugin_instance = env->NewGlobalRef(plugin);
+
+    auto plugin_class = env->GetObjectClass(plugin);
+    if (!plugin_class)
+        return;
+
+    s_bind_webcontent_service_method = env->GetMethodID(plugin_class, "bindWebContentServiceFromNative", "(I)V");
+    if (!s_bind_webcontent_service_method) {
+        if (env->ExceptionCheck()) {
+            env->ExceptionDescribe();
+            env->ExceptionClear();
+        }
+    }
+    env->DeleteLocalRef(plugin_class);
+}
+
+static ErrorOr<void> bind_webcontent_service_java(int ipc_socket)
+{
+    if (!s_java_vm || !s_plugin_instance || !s_bind_webcontent_service_method)
+        return Error::from_string_literal("Android plugin instance not registered for WebContent binding");
+
+    JNIEnv* env = nullptr;
+    bool did_attach = false;
+    auto get_env_result = s_java_vm->GetEnv(reinterpret_cast<void**>(&env), JNI_VERSION_1_6);
+    if (get_env_result == JNI_EDETACHED) {
+        if (s_java_vm->AttachCurrentThread(&env, nullptr) != JNI_OK)
+            return Error::from_string_literal("Failed to attach current thread to JVM");
+        did_attach = true;
+    } else if (get_env_result != JNI_OK || !env) {
+        return Error::from_string_literal("Failed to acquire JNI environment");
+    }
+
+    env->CallVoidMethod(s_plugin_instance, s_bind_webcontent_service_method, ipc_socket);
+    if (env->ExceptionCheck()) {
+        env->ExceptionDescribe();
+        env->ExceptionClear();
+        if (did_attach)
+            s_java_vm->DetachCurrentThread();
+        return Error::from_string_literal("bindWebContentServiceFromNative threw a Java exception");
+    }
+
+    if (did_attach)
+        s_java_vm->DetachCurrentThread();
+
+    return {};
+}
 #else
 #define LADYBIRD_LOGI(...)
 #define LADYBIRD_LOGE(...)
@@ -63,6 +128,8 @@ public:
 
 #ifdef __APPLE__
     CVPixelBufferRef m_pixel_buffer = nullptr;
+#elif defined(__ANDROID__)
+    std::vector<u8> m_pixel_buffer;
 #else
     AK::RefPtr<Gfx::Bitmap const> m_bitmap = nullptr;
 #endif
@@ -79,6 +146,7 @@ public:
     TitleChangeCallback m_title_change_callback = nullptr;
     FaviconChangeCallback m_favicon_change_callback = nullptr;
     bool m_client_ready = false;
+    std::chrono::steady_clock::time_point m_last_initialize_attempt {};
 
     std::mutex m_mutex;
 
@@ -104,17 +172,57 @@ public:
         client().async_update_screen_rects(m_client_state.page_index, {{screen_rect}}, 0);
     }
 
+#if defined(__ANDROID__)
+    ErrorOr<NonnullRefPtr<WebView::WebContentClient>> bind_web_content_client()
+    {
+        int socket_fds[2] {};
+        TRY(Core::System::socketpair(AF_LOCAL, SOCK_STREAM, 0, socket_fds));
+
+        int ui_fd = socket_fds[0];
+        int wc_fd = socket_fds[1];
+
+        auto bind_result = bind_webcontent_service_java(wc_fd);
+        if (bind_result.is_error()) {
+            MUST(Core::System::close(ui_fd));
+            MUST(Core::System::close(wc_fd));
+            return bind_result.release_error();
+        }
+
+        auto socket = TRY(Core::LocalSocket::adopt_fd(ui_fd));
+        TRY(socket->set_blocking(true));
+
+        return TRY(try_make_ref_counted<WebView::WebContentClient>(make<IPC::Transport>(move(socket)), *this));
+    }
+#endif
+
     virtual void initialize_client(CreateNewClient create_new_client = CreateNewClient::Yes) override
     {
+        m_last_initialize_attempt = std::chrono::steady_clock::now();
+
 #if defined(__ANDROID__)
-        // Android currently traps inside WebContentClient creation.
-        // Keep the process alive instead of crashing; the view will remain inert.
-        LADYBIRD_LOGE("Skipping initialize_client on Android to avoid WebContentClient trap");
-    m_client_ready = false;
-        return;
+        (void)create_new_client;
+        m_client_state = {};
+
+        auto new_client = bind_web_content_client();
+        if (new_client.is_error()) {
+            m_client_ready = false;
+            LADYBIRD_LOGE("initialize_client failed to bind WebContent service: %s", new_client.error().string_literal());
+            return;
+        }
+
+        m_client_state.client = new_client.release_value();
+        m_client_state.client_handle = MUST(Web::Crypto::generate_random_uuid());
+        client().async_set_window_handle(0, m_client_state.client_handle);
 #else
         ViewImplementation::initialize_client(create_new_client);
-    m_client_ready = true;
+        if (!m_client_state.client) {
+            m_client_ready = false;
+            LADYBIRD_LOGE("initialize_client failed to create WebContent client");
+            return;
+        }
+#endif
+
+        m_client_ready = true;
 
         configure_client_process();
 
@@ -166,16 +274,22 @@ public:
 #else
             if (m_client_state.has_usable_bitmap)
             {
-                // Linux implementation using localized Gfx::Bitmap directly from m_client_state
                 auto bitmap = m_client_state.front_bitmap.bitmap;
                 if (bitmap)
                 {
                     std::lock_guard<std::mutex> lock(m_mutex);
-                    m_bitmap = bitmap;
+                    bool size_changed = (bitmap->width() != m_width || bitmap->height() != m_height);
+                    m_width = bitmap->width();
+                    m_height = bitmap->height();
 
-                    bool size_changed = (m_bitmap->width() != m_width || m_bitmap->height() != m_height);
-                    m_width = m_bitmap->width();
-                    m_height = m_bitmap->height();
+#if defined(__ANDROID__)
+                    auto pixel_count = static_cast<size_t>(m_width) * static_cast<size_t>(m_height) * 4;
+                    m_pixel_buffer.resize(pixel_count);
+                    memcpy(m_pixel_buffer.data(), bitmap->scanline_u8(0), pixel_count);
+#else
+                    // Linux implementation uses Gfx::Bitmap directly from m_client_state.
+                    m_bitmap = bitmap;
+#endif
 
                     if (size_changed && m_resize_callback)
                     {
@@ -233,6 +347,22 @@ public:
                 m_favicon_change_callback(buffer, bitmap.width(), bitmap.height());
             }
         };
+    }
+
+    void retry_initialize_if_needed()
+    {
+#if defined(__ANDROID__)
+        if (m_client_ready)
+            return;
+
+        auto now = std::chrono::steady_clock::now();
+        if (m_last_initialize_attempt.time_since_epoch().count() != 0) {
+            auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - m_last_initialize_attempt);
+            if (elapsed.count() < 1000)
+                return;
+        }
+
+        initialize_client();
 #endif
     }
 
@@ -303,7 +433,7 @@ public:
     virtual void create_platform_arguments(Core::ArgsParser &) override {}
     virtual void create_platform_options(WebView::BrowserOptions &, WebView::RequestServerOptions &, WebView::WebContentOptions &) override {}
 
-    virtual bool should_capture_web_content_output() const override { return false; }
+    virtual bool should_capture_web_content_output() const override { return true; }
 
     virtual NonnullOwnPtr<Core::EventLoop> create_platform_event_loop() override
     {
@@ -492,6 +622,10 @@ extern "C" void tick_ladybird()
     {
         Core::EventLoop::current().pump(Core::EventLoop::WaitMode::PollForEvents);
     }
+
+    std::lock_guard<std::mutex> lock(g_web_views_mutex);
+    for (auto& [_, view] : g_web_views)
+        view->retry_initialize_if_needed();
 }
 
 int create_web_view()
@@ -550,6 +684,10 @@ void *get_latest_pixel_buffer(int view_id)
 
     CVPixelBufferRetain(it->second->m_pixel_buffer);
     return it->second->m_pixel_buffer;
+#elif defined(__ANDROID__)
+    if (it->second->m_pixel_buffer.empty())
+        return nullptr;
+    return it->second->m_pixel_buffer.data();
 #else
 
     if (!it->second->m_bitmap)
@@ -562,6 +700,25 @@ void *get_latest_pixel_buffer(int view_id)
     // Assuming ARGB format which Flutter expects
     // We return the raw data pointer from Gfx::Bitmap
     return const_cast<u8 *>(it->second->m_bitmap->scanline_u8(0));
+#endif
+}
+
+int get_pixel_buffer_size(int view_id)
+{
+    std::lock_guard<std::mutex> lock(g_web_views_mutex);
+    auto it = g_web_views.find(view_id);
+    if (it == g_web_views.end())
+        return 0;
+
+    std::lock_guard<std::mutex> view_lock(it->second->m_mutex);
+#if defined(__ANDROID__)
+    return static_cast<int>(it->second->m_pixel_buffer.size());
+#else
+    auto width = it->second->m_width;
+    auto height = it->second->m_height;
+    if (width <= 0 || height <= 0)
+        return 0;
+    return width * height * 4;
 #endif
 }
 
@@ -646,6 +803,8 @@ int get_iosurface_width(int view_id)
     if (!iosurface)
         return it->second->m_width;
     return IOSurfaceGetWidth(iosurface);
+#elif defined(__ANDROID__)
+    return it->second->m_width;
 #else
     if (it->second->m_bitmap)
         return it->second->m_bitmap->width();
@@ -668,6 +827,8 @@ int get_iosurface_height(int view_id)
     if (!iosurface)
         return it->second->m_height;
     return IOSurfaceGetHeight(iosurface);
+#elif defined(__ANDROID__)
+    return it->second->m_height;
 #else
     if (it->second->m_bitmap)
         return it->second->m_bitmap->height();

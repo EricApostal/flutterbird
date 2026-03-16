@@ -31,6 +31,10 @@ add_library(${PLUGIN_NAME} SHARED
     "${CMAKE_CURRENT_SOURCE_DIR}/../cpp/engine.cpp"
 )
 
+add_library(ladybird_jni SHARED
+    jni_bridge.cpp
+)
+
 add_subdirectory("${LADYBIRD_DIR}" "${LADYBIRD_BINARY_DIR}")
 
 find_package(OpenSSL REQUIRED)
@@ -64,6 +68,14 @@ target_link_libraries(${PLUGIN_NAME} PRIVATE
     log
     android
     jnigraphics
+    webcontentservice
+    requestserverservice
+    imagedecoderservice
+)
+
+target_link_libraries(ladybird_jni PRIVATE
+    log
+    android
 )
 
 add_dependencies(${PLUGIN_NAME} ladybird)

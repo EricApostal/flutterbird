@@ -34,7 +34,8 @@ flutter:
   plugin:
     platforms:
       android:
-        ffiPlugin: true
+        package: com.example.ladybird
+        pluginClass: LadybirdPlugin
 
       linux:
         pluginClass: LadybirdPlugin

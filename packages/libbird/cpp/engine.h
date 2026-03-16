@@ -39,6 +39,8 @@ extern "C"
 
     LADYBIRD_API int get_iosurface_height(int view_id);
 
+    LADYBIRD_API int get_pixel_buffer_size(int view_id);
+
     typedef void (*UrlChangeCallback)(const char *);
     typedef void (*TitleChangeCallback)(const char *);
     typedef void (*FaviconChangeCallback)(const uint8_t *, int, int);

@@ -13,6 +13,7 @@ buildscript {
     }
     dependencies {
         classpath("com.android.tools.build:gradle:8.1.0")
+        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:2.2.20")
     }
 }
 
@@ -25,6 +26,7 @@ allprojects {
 
 plugins {
     id("com.android.library")
+    id("org.jetbrains.kotlin.android")
 }
 
 val buildLagomTools = tasks.register<Exec>("buildLagomTools") {
@@ -68,6 +70,12 @@ android {
     compileSdk = 35
     ndkVersion = "29.0.13599879"
 
+    // sourceSets {
+    //     getByName("main") {
+    //         java.srcDir("../third_party/ladybird/UI/Android/src/main/java")
+    //     }
+    // }
+
     defaultConfig {
         minSdk = 30
         externalNativeBuild {
@@ -97,5 +105,9 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    kotlinOptions {
+        jvmTarget = "17"
     }
 }
