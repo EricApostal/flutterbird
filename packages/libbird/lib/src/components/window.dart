@@ -60,7 +60,7 @@ class _LadybirdViewState extends State<LadybirdView>
     if (oldWidget.controller != widget.controller) {
       oldWidget.controller.onResize = null;
 
-      if (_textureId != null) {
+      if (_textureId != null && _textureId! >= 0) {
         oldWidget.controller.unregisterTexture(_textureId!);
         _textureId = null;
       }
@@ -90,12 +90,14 @@ class _LadybirdViewState extends State<LadybirdView>
       setState(() {
         _textureId = textureId;
       });
-      if (oldTextureId != null && oldTextureId != textureId) {
+      if (oldTextureId != null && oldTextureId >= 0 && oldTextureId != textureId) {
         widget.controller.unregisterTexture(oldTextureId);
       }
     } else {
-      await widget.controller.unregisterTexture(textureId);
-      if (oldTextureId != null) {
+      if (textureId >= 0) {
+        await widget.controller.unregisterTexture(textureId);
+      }
+      if (oldTextureId != null && oldTextureId >= 0) {
         await widget.controller.unregisterTexture(oldTextureId);
       }
     }
@@ -252,7 +254,7 @@ class _LadybirdViewState extends State<LadybirdView>
     _momentumTicker?.dispose();
     _focusNode.dispose();
     print("disposing!");
-    if (_textureId != null) {
+    if (_textureId != null && _textureId! >= 0) {
       widget.controller.unregisterTexture(_textureId!);
     }
     super.dispose();
@@ -260,6 +262,11 @@ class _LadybirdViewState extends State<LadybirdView>
 
   @override
   Widget build(BuildContext context) {
+    if (_textureId == -1) {
+      return const Center(
+        child: Text('Texture channel unavailable in this Android build.'),
+      );
+    }
     if (_textureId == null) {
       return const Center(child: CircularProgressIndicator());
     }

@@ -2,14 +2,18 @@
 #include "engine.h"
 #include <print>
 #include <cstdio>
+#include <cerrno>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 #include <mutex>
+#include <sys/stat.h>
 
 #ifdef __APPLE__
 #include <CoreVideo/CoreVideo.h>
 #include <CoreFoundation/CoreFoundation.h>
+#elif defined(__ANDROID__)
+#include <android/log.h>
 #endif
 
 #include <AK/OwnPtr.h>
@@ -30,6 +34,14 @@
 #include <LibCore/ResourceImplementation.h>
 #include <LibWeb/Page/InputEvent.h>
 #include <string>
+
+#if defined(__ANDROID__)
+#define LADYBIRD_LOGI(...) __android_log_print(ANDROID_LOG_INFO, "LadybirdEngine", __VA_ARGS__)
+#define LADYBIRD_LOGE(...) __android_log_print(ANDROID_LOG_ERROR, "LadybirdEngine", __VA_ARGS__)
+#else
+#define LADYBIRD_LOGI(...)
+#define LADYBIRD_LOGE(...)
+#endif
 
 std::mutex g_web_views_mutex;
 int g_next_view_id = 1;
@@ -66,15 +78,25 @@ public:
     UrlChangeCallback m_url_change_callback = nullptr;
     TitleChangeCallback m_title_change_callback = nullptr;
     FaviconChangeCallback m_favicon_change_callback = nullptr;
+    bool m_client_ready = false;
 
     std::mutex m_mutex;
 
     void configure_client_process()
     {
         auto theme_path = LexicalPath::join(WebView::s_ladybird_resource_root, "themes"sv, "Default.ini"sv);
-        auto theme = Gfx::load_system_theme(theme_path.string()).release_value_but_fixme_should_propagate_errors();
+        auto maybe_theme = Gfx::load_system_theme(theme_path.string());
+        if (maybe_theme.is_error())
+        {
+            auto error = maybe_theme.release_error();
+            LADYBIRD_LOGE("Failed to load theme from %s (code=%d)", theme_path.string().characters(), error.code());
+            fprintf(stderr, "[Ladybird] Failed to load theme from %s (code=%d)\n", theme_path.string().characters(), error.code());
+        }
+        else
+        {
+            client().async_update_system_theme(m_client_state.page_index, maybe_theme.release_value());
+        }
 
-        client().async_update_system_theme(m_client_state.page_index, theme);
         client().async_set_viewport(m_client_state.page_index, viewport_size(), m_zoom);
         client().async_set_window_size(m_client_state.page_index, viewport_size());
 
@@ -84,7 +106,15 @@ public:
 
     virtual void initialize_client(CreateNewClient create_new_client = CreateNewClient::Yes) override
     {
+#if defined(__ANDROID__)
+        // Android currently traps inside WebContentClient creation.
+        // Keep the process alive instead of crashing; the view will remain inert.
+        LADYBIRD_LOGE("Skipping initialize_client on Android to avoid WebContentClient trap");
+    m_client_ready = false;
+        return;
+#else
         ViewImplementation::initialize_client(create_new_client);
+    m_client_ready = true;
 
         configure_client_process();
 
@@ -203,10 +233,13 @@ public:
                 m_favicon_change_callback(buffer, bitmap.width(), bitmap.height());
             }
         };
+#endif
     }
 
     void resize(int width, int height)
     {
+        if (!m_client_ready)
+            return;
         auto size = Web::DevicePixelSize{width, height};
         client().async_set_viewport(m_client_state.page_index, size, m_zoom);
         client().async_set_window_size(m_client_state.page_index, size);
@@ -214,12 +247,16 @@ public:
 
     void update_zoom_scale()
     {
+        if (!m_client_ready)
+            return;
         auto size = Web::DevicePixelSize{m_width, m_height};
         client().async_set_viewport(m_client_state.page_index, size, m_zoom);
     }
 
     void dispatch_mouse_event(Web::MouseEvent::Type type, int x, int y, int button, int buttons, int modifiers, int wheel_delta_x, int wheel_delta_y)
     {
+        if (!m_client_ready)
+            return;
         Web::DevicePixelPoint position = {x, y};
         Web::DevicePixelPoint screen_position = {x, y};
         enqueue_input_event(Web::MouseEvent{type, position, screen_position, static_cast<Web::UIEvents::MouseButton>(button), static_cast<Web::UIEvents::MouseButton>(buttons), static_cast<Web::UIEvents::KeyModifier>(modifiers), wheel_delta_x, wheel_delta_y, nullptr});
@@ -227,6 +264,8 @@ public:
 
     void dispatch_key_event(Web::KeyEvent::Type type, int keycode, int modifiers, uint32_t code_point, bool repeat)
     {
+        if (!m_client_ready)
+            return;
         enqueue_input_event(Web::KeyEvent{type, static_cast<Web::UIEvents::KeyCode>(keycode), static_cast<Web::UIEvents::KeyModifier>(modifiers), code_point, repeat, nullptr});
     }
 
@@ -335,16 +374,57 @@ static AK::OwnPtr<FlutterApplication> s_app;
 static AK::OwnPtr<WebView::BrowserProcess> s_browser_process;
 static bool s_ladybird_initialized = false;
 
+static void configure_android_user_dirs()
+{
+#if defined(__ANDROID__)
+    // /proc/self/cmdline contains the process/package name (NUL-terminated).
+    FILE* cmdline = fopen("/proc/self/cmdline", "rb");
+    if (!cmdline)
+        return;
+
+    char package_name[256] = { 0 };
+    size_t read = fread(package_name, 1, sizeof(package_name) - 1, cmdline);
+    fclose(cmdline);
+    if (read == 0 || package_name[0] == '\0')
+        return;
+
+    std::string home_dir = std::string("/data/user/0/") + package_name;
+    std::string base_dir = home_dir + "/files/ladybird";
+    std::string config_dir = base_dir + "/config";
+    std::string data_dir = base_dir + "/userdata";
+    auto ensure_dir = [](std::string const& path)
+    {
+        if (mkdir(path.c_str(), 0755) != 0 && errno != EEXIST)
+            LADYBIRD_LOGE("Failed to create dir %s: errno=%d", path.c_str(), errno);
+    };
+    ensure_dir(base_dir);
+    ensure_dir(config_dir);
+    ensure_dir(data_dir);
+
+    setenv("HOME", home_dir.c_str(), 1);
+    setenv("XDG_CONFIG_HOME", config_dir.c_str(), 1);
+    setenv("XDG_DATA_HOME", data_dir.c_str(), 1);
+    LADYBIRD_LOGI("Configured XDG dirs under %s", base_dir.c_str());
+#endif
+}
+
 void init_ladybird()
 {
     if (s_ladybird_initialized)
         return;
 
+    LADYBIRD_LOGI("init_ladybird() begin");
+
+    configure_android_user_dirs();
+
     AK::set_rich_debug_enabled(true);
 
     Optional<ByteString> lib_path;
 
-#ifdef __APPLE__
+#if defined(__ANDROID__)
+    // Android has a different runtime layout than desktop targets.
+    // Avoid deriving lib/resource paths from current_executable_path here.
+#elif defined(__APPLE__)
     // Do nothing on macos, it should default properly
 #else
     auto current_executable_path = Core::System::current_executable_path();
@@ -374,12 +454,17 @@ void init_ladybird()
     auto app = FlutterApplication::create(arguments, lib_path);
     if (app.is_error())
     {
+        auto error = app.release_error();
         std::println("Failed to construct Ladybird Engine Application");
+        fprintf(stderr, "[Ladybird] FlutterApplication::create failed: %s (code=%d)\n", error.string_literal(), error.code());
+        LADYBIRD_LOGE("FlutterApplication::create failed: %s (code=%d)", error.string_literal(), error.code());
         return;
     }
     s_app = app.release_value();
 
     s_browser_process = make<WebView::BrowserProcess>();
+    s_ladybird_initialized = true;
+    LADYBIRD_LOGI("init_ladybird() app=%p browser=%p", s_app.ptr(), s_browser_process.ptr());
 
     if (auto const &browser_options = WebView::Application::browser_options();
         !browser_options.headless_mode.has_value())
@@ -393,12 +478,12 @@ void init_ladybird()
                 disposition.value() == WebView::BrowserProcess::ProcessDisposition::ExitProcess)
             {
                 std::println("Opening in existing process");
+                fprintf(stderr, "[Ladybird] BrowserProcess requested ExitProcess during init\n");
+                LADYBIRD_LOGI("BrowserProcess requested ExitProcess during init");
                 return;
             }
         }
     }
-
-    s_ladybird_initialized = true;
 }
 
 extern "C" void tick_ladybird()
@@ -414,11 +499,15 @@ int create_web_view()
     if (!s_ladybird_initialized)
         init_ladybird();
 
-    if (!s_ladybird_initialized || !s_app || !s_browser_process)
+    if (!s_ladybird_initialized || !s_app)
     {
         std::println("Ladybird engine is not initialized; refusing to create web view");
+        fprintf(stderr, "[Ladybird] init failed: initialized=%d app=%p browser=%p\n", s_ladybird_initialized ? 1 : 0, s_app.ptr(), s_browser_process.ptr());
+        LADYBIRD_LOGE("create_web_view denied: initialized=%d app=%p browser=%p", s_ladybird_initialized ? 1 : 0, s_app.ptr(), s_browser_process.ptr());
         return -1;
     }
+
+    LADYBIRD_LOGI("create_web_view proceeding: app=%p browser=%p", s_app.ptr(), s_browser_process.ptr());
 
     std::lock_guard<std::mutex> lock(g_web_views_mutex);
     int id = g_next_view_id++;
@@ -519,6 +608,8 @@ void navigate_to(int view_id, const char *url)
     auto it = g_web_views.find(view_id);
     if (it != g_web_views.end())
     {
+        if (!it->second->m_client_ready)
+            return;
         auto parsed = URL::Parser::basic_parse(AK::StringView(url, strlen(url)));
         if (parsed.has_value())
         {
@@ -623,6 +714,8 @@ void reload_tab(int view_id)
     auto it = g_web_views.find(view_id);
     if (it != g_web_views.end())
     {
+        if (!it->second->m_client_ready)
+            return;
         it->second->reload();
     }
 }
@@ -633,6 +726,8 @@ void go_back(int view_id)
     auto it = g_web_views.find(view_id);
     if (it != g_web_views.end())
     {
+        if (!it->second->m_client_ready)
+            return;
         it->second->traverse_the_history_by_delta(-1);
     }
 }
@@ -643,6 +738,8 @@ void go_forward(int view_id)
     auto it = g_web_views.find(view_id);
     if (it != g_web_views.end())
     {
+        if (!it->second->m_client_ready)
+            return;
         it->second->traverse_the_history_by_delta(1);
     }
 }

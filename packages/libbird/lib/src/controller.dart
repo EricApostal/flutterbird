@@ -7,10 +7,153 @@ import 'package:flutter/services.dart';
 import 'package:ladybird/src/generated/engine_bindings.g.dart';
 import 'dart:ui' as ui;
 
+abstract class LadybirdEngineBindings {
+  void init_ladybird();
+  int create_web_view();
+  void destroy_web_view(int view_id);
+  void set_resize_callback(int view_id, ResizeCallback callback);
+  void set_url_change_callback(int view_id, UrlChangeCallback callback);
+  void set_title_change_callback(int view_id, TitleChangeCallback callback);
+  void set_favicon_change_callback(int view_id, FaviconChangeCallback callback);
+  void set_zoom(int view_id, double zoom);
+  void navigate_to(int view_id, ffi.Pointer<ffi.Char> url);
+  void reload_tab(int view_id);
+  void go_back(int view_id);
+  void go_forward(int view_id);
+  bool can_go_back(int view_id);
+  bool can_go_forward(int view_id);
+  void resize_window(int view_id, int width, int height);
+  int get_iosurface_width(int view_id);
+  int get_iosurface_height(int view_id);
+  void dispatch_mouse_event(
+    int view_id,
+    int type,
+    int x,
+    int y,
+    int button,
+    int buttons,
+    int modifiers,
+    int wheel_delta_x,
+    int wheel_delta_y,
+  );
+  void dispatch_key_event(
+    int view_id,
+    int type,
+    int keycode,
+    int modifiers,
+    int code_point,
+    bool repeat,
+  );
+}
+
+class FfiLadybirdEngineBindings implements LadybirdEngineBindings {
+  final LadybirdBindings _bindings;
+
+  FfiLadybirdEngineBindings(this._bindings);
+
+  @override
+  void init_ladybird() => _bindings.init_ladybird();
+
+  @override
+  int create_web_view() => _bindings.create_web_view();
+
+  @override
+  void destroy_web_view(int view_id) => _bindings.destroy_web_view(view_id);
+
+  @override
+  void set_resize_callback(int view_id, ResizeCallback callback) =>
+      _bindings.set_resize_callback(view_id, callback);
+
+  @override
+  void set_url_change_callback(int view_id, UrlChangeCallback callback) =>
+      _bindings.set_url_change_callback(view_id, callback);
+
+  @override
+  void set_title_change_callback(int view_id, TitleChangeCallback callback) =>
+      _bindings.set_title_change_callback(view_id, callback);
+
+  @override
+  void set_favicon_change_callback(int view_id, FaviconChangeCallback callback) =>
+      _bindings.set_favicon_change_callback(view_id, callback);
+
+  @override
+  void set_zoom(int view_id, double zoom) => _bindings.set_zoom(view_id, zoom);
+
+  @override
+  void navigate_to(int view_id, ffi.Pointer<ffi.Char> url) =>
+      _bindings.navigate_to(view_id, url);
+
+  @override
+  void reload_tab(int view_id) => _bindings.reload_tab(view_id);
+
+  @override
+  void go_back(int view_id) => _bindings.go_back(view_id);
+
+  @override
+  void go_forward(int view_id) => _bindings.go_forward(view_id);
+
+  @override
+  bool can_go_back(int view_id) => _bindings.can_go_back(view_id);
+
+  @override
+  bool can_go_forward(int view_id) => _bindings.can_go_forward(view_id);
+
+  @override
+  void resize_window(int view_id, int width, int height) =>
+      _bindings.resize_window(view_id, width, height);
+
+  @override
+  int get_iosurface_width(int view_id) => _bindings.get_iosurface_width(view_id);
+
+  @override
+  int get_iosurface_height(int view_id) =>
+      _bindings.get_iosurface_height(view_id);
+
+  @override
+  void dispatch_mouse_event(
+    int view_id,
+    int type,
+    int x,
+    int y,
+    int button,
+    int buttons,
+    int modifiers,
+    int wheel_delta_x,
+    int wheel_delta_y,
+  ) => _bindings.dispatch_mouse_event(
+    view_id,
+    type,
+    x,
+    y,
+    button,
+    buttons,
+    modifiers,
+    wheel_delta_x,
+    wheel_delta_y,
+  );
+
+  @override
+  void dispatch_key_event(
+    int view_id,
+    int type,
+    int keycode,
+    int modifiers,
+    int code_point,
+    bool repeat,
+  ) => _bindings.dispatch_key_event(
+    view_id,
+    type,
+    keycode,
+    modifiers,
+    code_point,
+    repeat,
+  );
+}
+
 class LadybirdController {
   final MethodChannel _channel = MethodChannel('ladybird');
-  late final ffi.DynamicLibrary _lib;
-  late final LadybirdBindings _bindings;
+  ffi.DynamicLibrary? _lib;
+  late final LadybirdEngineBindings _bindings;
   // int? _textureId;
   Size? _lastSize;
   late final int _viewId;
@@ -28,15 +171,6 @@ class LadybirdController {
   >
   _faviconChangeCallback;
 
-  static ffi.NativeCallable<DisplayDownloadConfirmationDialogCallbackFunction>?
-  _displayDownloadConfirmationDialogCallback;
-  static ffi.NativeCallable<DisplayErrorDialogCallbackFunction>?
-  _displayErrorDialogCallback;
-
-  static String? Function(String)? onAskUserForDownloadPath;
-  static void Function(String, String)? onDisplayDownloadConfirmationDialog;
-  static void Function(String)? onDisplayErrorDialog;
-
   void Function()? onResize;
 
   final ValueNotifier<String> urlNotifier = ValueNotifier("");
@@ -52,31 +186,16 @@ class LadybirdController {
     return ffi.DynamicLibrary.process();
   }
 
-  LadybirdController({this.initialUrl = "https://google.com/"}) {
-    _lib = _openEngineLibrary();
-    _bindings = LadybirdBindings(_lib);
-    // if (_displayErrorDialogCallback == null) {
-    //   _bindings.set_ask_user_for_download_path_callback(
-    //     ffi.Pointer.fromFunction(_onAskUserForDownloadPath),
-    //   );
-
-    //   _displayDownloadConfirmationDialogCallback =
-    //       ffi.NativeCallable<
-    //         DisplayDownloadConfirmationDialogCallbackFunction
-    //       >.listener(_onDisplayDownloadConfirmationDialog);
-    //   _bindings.set_display_download_confirmation_dialog_callback(
-    //     _displayDownloadConfirmationDialogCallback!.nativeFunction,
-    //   );
-
-    //   _displayErrorDialogCallback =
-    //       ffi.NativeCallable<DisplayErrorDialogCallbackFunction>.listener(
-    //         _onDisplayErrorDialog,
-    //       );
-    //   _bindings.set_display_error_dialog_callback(
-    //     _displayErrorDialogCallback!.nativeFunction,
-    //   );
-    // }
-
+  LadybirdController({
+    this.initialUrl = "https://google.com/",
+    LadybirdEngineBindings? bindings,
+  }) {
+    if (bindings != null) {
+      _bindings = bindings;
+    } else {
+      _lib = _openEngineLibrary();
+      _bindings = FfiLadybirdEngineBindings(LadybirdBindings(_lib!));
+    }
     _bindings.init_ladybird();
     _viewId = _bindings.create_web_view();
     if (_viewId < 0) {
@@ -207,11 +326,20 @@ class LadybirdController {
   }
 
   Future<int> createTexture() async {
-    return await _channel.invokeMethod('createTexture', _viewId);
+    try {
+      return await _channel.invokeMethod('createTexture', _viewId);
+    } on MissingPluginException {
+      return -1;
+    }
   }
 
   Future<void> unregisterTexture(int textureId) async {
-    await _channel.invokeMethod('unregisterTexture', textureId);
+    if (textureId < 0) return;
+    try {
+      await _channel.invokeMethod('unregisterTexture', textureId);
+    } on MissingPluginException {
+      // No platform texture channel is available in this build.
+    }
   }
 
   bool resizeWindow(Size size) {
@@ -276,34 +404,4 @@ class LadybirdController {
     _faviconChangeCallback.close();
     _bindings.destroy_web_view(_viewId);
   }
-}
-
-ffi.Pointer<ffi.Char> _onAskUserForDownloadPath(
-  ffi.Pointer<ffi.Char> suggestion,
-) {
-  if (LadybirdController.onAskUserForDownloadPath == null) {
-    return ffi.nullptr;
-  }
-  final s = suggestion.cast<Utf8>().toDartString();
-  final result = LadybirdController.onAskUserForDownloadPath!(s);
-  if (result != null) {
-    return result.toNativeUtf8().cast<ffi.Char>();
-  }
-  return ffi.nullptr;
-}
-
-void _onDisplayDownloadConfirmationDialog(
-  ffi.Pointer<ffi.Char> name,
-  ffi.Pointer<ffi.Char> path,
-) {
-  if (LadybirdController.onDisplayDownloadConfirmationDialog == null) return;
-  final n = name.cast<Utf8>().toDartString();
-  final p = path.cast<Utf8>().toDartString();
-  LadybirdController.onDisplayDownloadConfirmationDialog!(n, p);
-}
-
-void _onDisplayErrorDialog(ffi.Pointer<ffi.Char> message) {
-  if (LadybirdController.onDisplayErrorDialog == null) return;
-  final msg = message.cast<Utf8>().toDartString();
-  LadybirdController.onDisplayErrorDialog!(msg);
 }

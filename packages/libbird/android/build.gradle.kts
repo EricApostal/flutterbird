@@ -35,6 +35,26 @@ val buildLagomTools = tasks.register<Exec>("buildLagomTools") {
         "CACHE_DIR" to cacheDir,
         "PATH" to System.getenv("PATH")!!
     )
+
+    // Make this task incremental so Gradle does not rebuild Lagom tools on
+    // every Android build when inputs are unchanged.
+    val ladybirdSource = file(sourceDir)
+    val lagomInstallDir = file("$buildDir/lagom-tools-install")
+    inputs.file(file("$ladybirdAndroidDir/BuildLagomTools.sh"))
+    inputs.file(file("$sourceDir/CMakeLists.txt"))
+    inputs.file(file("$sourceDir/Meta/Lagom/CMakeLists.txt"))
+    inputs.file(file("$sourceDir/vcpkg.json"))
+    inputs.file(file("$sourceDir/vcpkg-configuration.json"))
+    inputs.dir(file("$sourceDir/Meta/Lagom"))
+    inputs.dir(file("$sourceDir/AK"))
+    inputs.dir(file("$sourceDir/Libraries"))
+    // Ignore generated/build artifacts under Ladybird so timestamp churn there
+    // does not invalidate this task.
+    inputs.files(fileTree(ladybirdSource) {
+        include("**/*.cmake", "**/CMakeLists.txt", "**/*.h", "**/*.hpp", "**/*.cpp", "**/*.c", "**/*.rs", "**/*.json", "**/*.toml", "**/*.sh")
+        exclude("Build/**", "UI/Android/.cxx/**", "UI/Android/build/**", ".git/**")
+    })
+    outputs.dir(lagomInstallDir)
 }
 tasks.named("preBuild") {
     dependsOn(buildLagomTools)
