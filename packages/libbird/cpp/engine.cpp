@@ -333,14 +333,12 @@ public:
 
 static AK::OwnPtr<FlutterApplication> s_app;
 static AK::OwnPtr<WebView::BrowserProcess> s_browser_process;
+static bool s_ladybird_initialized = false;
 
 void init_ladybird()
 {
-    static bool initialized = false;
-    if (initialized)
+    if (s_ladybird_initialized)
         return;
-
-    initialized = true;
 
     AK::set_rich_debug_enabled(true);
 
@@ -399,6 +397,8 @@ void init_ladybird()
             }
         }
     }
+
+    s_ladybird_initialized = true;
 }
 
 extern "C" void tick_ladybird()
@@ -411,6 +411,15 @@ extern "C" void tick_ladybird()
 
 int create_web_view()
 {
+    if (!s_ladybird_initialized)
+        init_ladybird();
+
+    if (!s_ladybird_initialized || !s_app || !s_browser_process)
+    {
+        std::println("Ladybird engine is not initialized; refusing to create web view");
+        return -1;
+    }
+
     std::lock_guard<std::mutex> lock(g_web_views_mutex);
     int id = g_next_view_id++;
     auto view = FlutterViewImpl::create(id).release_value();

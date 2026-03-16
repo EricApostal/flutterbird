@@ -52,7 +52,7 @@ android {
         minSdk = 30
         externalNativeBuild {
             cmake {
-                cppFlags += "-std=c++2b -frtti -fexceptions -D__ANDROID_API__=30 -D__GCC_DESTRUCTIVE_SIZE=64 -Wno-invalid-constexpr"
+                cppFlags += "-std=c++2b -frtti -fexceptions -D__GCC_DESTRUCTIVE_SIZE=64 -Wno-invalid-constexpr"
                 arguments += listOf(
                     "-DLagomTools_DIR=$buildDir/lagom-tools-install/share/LagomTools",
                     "-DANDROID_STL=c++_shared",

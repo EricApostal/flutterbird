@@ -1,4 +1,5 @@
 import 'dart:ffi' as ffi;
+import 'dart:io' show Platform;
 import 'package:ffi/ffi.dart';
 import 'package:flutter/material.dart';
 
@@ -44,33 +45,43 @@ class LadybirdController {
 
   int get viewId => _viewId;
 
-  LadybirdController({this.initialUrl = "https://google.com/"}) {
-    _lib = ffi.DynamicLibrary.process();
-    _bindings = LadybirdBindings(_lib);
-    if (_displayErrorDialogCallback == null) {
-      _bindings.set_ask_user_for_download_path_callback(
-        ffi.Pointer.fromFunction(_onAskUserForDownloadPath),
-      );
-
-      _displayDownloadConfirmationDialogCallback =
-          ffi.NativeCallable<
-            DisplayDownloadConfirmationDialogCallbackFunction
-          >.listener(_onDisplayDownloadConfirmationDialog);
-      _bindings.set_display_download_confirmation_dialog_callback(
-        _displayDownloadConfirmationDialogCallback!.nativeFunction,
-      );
-
-      _displayErrorDialogCallback =
-          ffi.NativeCallable<DisplayErrorDialogCallbackFunction>.listener(
-            _onDisplayErrorDialog,
-          );
-      _bindings.set_display_error_dialog_callback(
-        _displayErrorDialogCallback!.nativeFunction,
-      );
+  static ffi.DynamicLibrary _openEngineLibrary() {
+    if (Platform.isAndroid) {
+      return ffi.DynamicLibrary.open('libladybird_plugin.so');
     }
+    return ffi.DynamicLibrary.process();
+  }
+
+  LadybirdController({this.initialUrl = "https://google.com/"}) {
+    _lib = _openEngineLibrary();
+    _bindings = LadybirdBindings(_lib);
+    // if (_displayErrorDialogCallback == null) {
+    //   _bindings.set_ask_user_for_download_path_callback(
+    //     ffi.Pointer.fromFunction(_onAskUserForDownloadPath),
+    //   );
+
+    //   _displayDownloadConfirmationDialogCallback =
+    //       ffi.NativeCallable<
+    //         DisplayDownloadConfirmationDialogCallbackFunction
+    //       >.listener(_onDisplayDownloadConfirmationDialog);
+    //   _bindings.set_display_download_confirmation_dialog_callback(
+    //     _displayDownloadConfirmationDialogCallback!.nativeFunction,
+    //   );
+
+    //   _displayErrorDialogCallback =
+    //       ffi.NativeCallable<DisplayErrorDialogCallbackFunction>.listener(
+    //         _onDisplayErrorDialog,
+    //       );
+    //   _bindings.set_display_error_dialog_callback(
+    //     _displayErrorDialogCallback!.nativeFunction,
+    //   );
+    // }
 
     _bindings.init_ladybird();
     _viewId = _bindings.create_web_view();
+    if (_viewId < 0) {
+      throw StateError('Failed to create Ladybird web view (native initialization failed).');
+    }
     print("view view id: $viewId");
 
     _resizeCallback = ffi.NativeCallable<ffi.Void Function()>.listener(
