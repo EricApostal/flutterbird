@@ -80,7 +80,9 @@ class LadybirdController {
     _bindings.init_ladybird();
     _viewId = _bindings.create_web_view();
     if (_viewId < 0) {
-      throw StateError('Failed to create Ladybird web view (native initialization failed).');
+      throw StateError(
+        'Failed to create Ladybird web view (native initialization failed).',
+      );
     }
     print("view view id: $viewId");
 

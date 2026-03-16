@@ -7,7 +7,10 @@ import 'package:flutterbird/features/router/controller.dart';
 void main() {
   runApp(ProviderScope(child: const MainApp()));
 
-  if (!kIsWeb && (defaultTargetPlatform == TargetPlatform.macOS || defaultTargetPlatform == TargetPlatform.windows || defaultTargetPlatform == TargetPlatform.linux)) {
+  if (!kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.macOS ||
+          defaultTargetPlatform == TargetPlatform.windows ||
+          defaultTargetPlatform == TargetPlatform.linux)) {
     doWhenWindowReady(() {
       const initialSize = Size(600, 450);
       appWindow.minSize = initialSize;
