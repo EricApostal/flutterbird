@@ -23,8 +23,9 @@ class MinimalLadybirdScreen extends StatefulWidget {
 
 class _MinimalLadybirdScreenState extends State<MinimalLadybirdScreen> {
   late final LadybirdController _controller;
-  final TextEditingController _urlController =
-      TextEditingController(text: 'https://example.com');
+  final TextEditingController _urlController = TextEditingController(
+    text: 'https://example.com',
+  );
 
   @override
   void initState() {

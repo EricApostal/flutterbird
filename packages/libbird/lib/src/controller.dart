@@ -73,8 +73,10 @@ class FfiLadybirdEngineBindings implements LadybirdEngineBindings {
       _bindings.set_title_change_callback(view_id, callback);
 
   @override
-  void set_favicon_change_callback(int view_id, FaviconChangeCallback callback) =>
-      _bindings.set_favicon_change_callback(view_id, callback);
+  void set_favicon_change_callback(
+    int view_id,
+    FaviconChangeCallback callback,
+  ) => _bindings.set_favicon_change_callback(view_id, callback);
 
   @override
   void set_zoom(int view_id, double zoom) => _bindings.set_zoom(view_id, zoom);
@@ -103,7 +105,8 @@ class FfiLadybirdEngineBindings implements LadybirdEngineBindings {
       _bindings.resize_window(view_id, width, height);
 
   @override
-  int get_iosurface_width(int view_id) => _bindings.get_iosurface_width(view_id);
+  int get_iosurface_width(int view_id) =>
+      _bindings.get_iosurface_width(view_id);
 
   @override
   int get_iosurface_height(int view_id) =>

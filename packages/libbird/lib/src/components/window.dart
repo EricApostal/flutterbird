@@ -90,7 +90,9 @@ class _LadybirdViewState extends State<LadybirdView>
       setState(() {
         _textureId = textureId;
       });
-      if (oldTextureId != null && oldTextureId >= 0 && oldTextureId != textureId) {
+      if (oldTextureId != null &&
+          oldTextureId >= 0 &&
+          oldTextureId != textureId) {
         widget.controller.unregisterTexture(oldTextureId);
       }
     } else {
