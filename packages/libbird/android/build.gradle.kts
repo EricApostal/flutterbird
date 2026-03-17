@@ -1,10 +1,12 @@
+import com.android.build.gradle.internal.tasks.factory.dependsOn
+
 group = "com.example.ladybird"
 version = "1.0-SNAPSHOT"
 
 var buildDir = layout.buildDirectory.get()
 var cacheDir = System.getenv("LADYBIRD_CACHE_DIR") ?: "$buildDir/caches"
 var sourceDir = layout.projectDirectory.dir("../third_party/ladybird").toString()
-var ladybirdAndroidDir = layout.projectDirectory.dir("../third_party/ladybird/UI/Android").toString()
+
 
 buildscript {
     repositories {
@@ -27,8 +29,7 @@ plugins {
     id("com.android.library")
 }
 
-val buildLagomTools = tasks.register<Exec>("buildLagomTools") {
-    workingDir = file(ladybirdAndroidDir)
+task<Exec>("buildLagomTools") {
     commandLine = listOf("./BuildLagomTools.sh")
     environment = mapOf(
         "BUILD_DIR" to buildDir,
@@ -36,11 +37,9 @@ val buildLagomTools = tasks.register<Exec>("buildLagomTools") {
         "PATH" to System.getenv("PATH")!!
     )
 }
-tasks.named("preBuild") {
-    dependsOn(buildLagomTools)
-}
+tasks.named("preBuild").dependsOn("buildLagomTools")
 tasks.matching { it.name == "prepareKotlinBuildScriptModel" }.configureEach {
-    dependsOn(buildLagomTools)
+    dependsOn("buildLagomTools")
 }
 
 android {
