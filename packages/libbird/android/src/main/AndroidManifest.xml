@@ -1,3 +1,25 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
   package="com.example.ladybird">
+
+  <uses-permission android:name="com.android.browser.permission.READ_HISTORY_BOOKMARKS" />
+  <uses-permission android:name="android.permission.INTERNET" />
+  <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+  <application>
+    <service
+      android:name=".WebContentService"
+      android:enabled="true"
+      android:exported="false"
+      android:process=":WebContent" />
+    <service
+      android:name=".RequestServerService"
+      android:enabled="true"
+      android:exported="false"
+      android:process=":RequestServer" />
+    <service
+      android:name=".ImageDecoderService"
+      android:enabled="true"
+      android:exported="false"
+      android:process=":ImageDecoder" />
+  </application>
 </manifest>

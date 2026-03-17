@@ -1,7 +1,0 @@
-cmake_minimum_required(VERSION 3.10)
-project(LadybirdEngineWrapper)
-
-message(STATUS "ANDROID_NDK=${ANDROID_NDK}")
-message(STATUS "CMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}")
-message(STATUS "ANDROID_ABI=${ANDROID_ABI}")
-message(STATUS "ANDROID_PLATFORM=${ANDROID_PLATFORM}")
