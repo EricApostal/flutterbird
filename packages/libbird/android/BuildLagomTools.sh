@@ -4,7 +4,7 @@ set -eo pipefail
 
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
-LADYBIRD_SOURCE_DIR="$(realpath "${DIR}"/../..)"
+LADYBIRD_SOURCE_DIR=${LADYBIRD_SOURCE_DIR:-"$(realpath "${DIR}"/../third_party/ladybird)"}
 
 # shellcheck source=/dev/null
 . "${LADYBIRD_SOURCE_DIR}/Meta/shell_include.sh"
