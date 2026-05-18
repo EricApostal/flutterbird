@@ -54,6 +54,8 @@ target_include_directories(engine PRIVATE
     ${LADYBIRD_DIR}/Userland/Libraries
     ${LADYBIRD_DIR}/Services
     ${LADYBIRD_OUT_DIR}
+    ${LADYBIRD_OUT_DIR}/Libraries
+    ${LADYBIRD_OUT_DIR}/Services
     ${LADYBIRD_OUT_DIR}/Lagom
     ${LADYBIRD_OUT_DIR}/Lagom/Libraries
     ${LADYBIRD_OUT_DIR}/Lagom/Services

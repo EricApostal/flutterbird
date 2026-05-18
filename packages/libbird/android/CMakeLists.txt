@@ -56,6 +56,8 @@ target_include_directories(engine PRIVATE
     "${LADYBIRD_DIR}/Userland/Libraries"
     "${LADYBIRD_DIR}/Services"
     "${LADYBIRD_BINARY_DIR}"
+    "${LADYBIRD_BINARY_DIR}/Libraries"
+    "${LADYBIRD_BINARY_DIR}/Services"
     "${LADYBIRD_BINARY_DIR}/Lagom"
     "${LADYBIRD_BINARY_DIR}/Lagom/Libraries"
     "${LADYBIRD_BINARY_DIR}/Lagom/Services"
