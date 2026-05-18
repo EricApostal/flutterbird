@@ -8,6 +8,8 @@ ladybird_build_dir = File.join(plugin_root, 'third_party', 'ladybird', 'Build')
 puts "Preparing ladybird resources and building C++ engine..."
 system(<<-'CMD')
   cd "${PODS_TARGET_SRCROOT:-.}"
+
+  bash ../tool/ensure_ladybird_source.sh
   
   # Remove the old Classes/cpp_generated if it exists
   rm -rf Classes/cpp_generated

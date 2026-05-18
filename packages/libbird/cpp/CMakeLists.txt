@@ -7,12 +7,26 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 
+set(LADYBIRD_VERSION_FILE "${CMAKE_CURRENT_SOURCE_DIR}/../third_party/ladybird.version")
+set(LADYBIRD_BOOTSTRAP_SCRIPT "${CMAKE_CURRENT_SOURCE_DIR}/../tool/ensure_ladybird_source.sh")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+    "${LADYBIRD_VERSION_FILE}"
+    "${LADYBIRD_BOOTSTRAP_SCRIPT}"
+)
+
 set(LADYBIRD_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../third_party/ladybird")
 
 execute_process(
-    COMMAND git submodule update --init --recursive "third_party/ladybird"
+    COMMAND bash "${LADYBIRD_BOOTSTRAP_SCRIPT}"
     WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/.."
+    RESULT_VARIABLE LADYBIRD_BOOTSTRAP_RESULT
+    OUTPUT_VARIABLE LADYBIRD_BOOTSTRAP_STDOUT
+    ERROR_VARIABLE LADYBIRD_BOOTSTRAP_STDERR
 )
+
+if (NOT LADYBIRD_BOOTSTRAP_RESULT EQUAL 0)
+    message(FATAL_ERROR "Failed to prepare Ladybird checkout.\n${LADYBIRD_BOOTSTRAP_STDOUT}\n${LADYBIRD_BOOTSTRAP_STDERR}")
+endif()
 
 if (ANDROID)
     message(FATAL_ERROR "Android builds moved to packages/libbird/android/CMakeLists.txt")

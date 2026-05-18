@@ -27,7 +27,13 @@ plugins {
     id("com.android.library")
 }
 
+val ensureLadybirdSource = tasks.register<Exec>("ensureLadybirdSource") {
+    workingDir = layout.projectDirectory.asFile
+    commandLine = listOf("bash", "../tool/ensure_ladybird_source.sh")
+}
+
 val buildLagomTools = tasks.register<Exec>("buildLagomTools") {
+    dependsOn(ensureLadybirdSource)
     workingDir = file(ladybirdAndroidDir)
     commandLine = listOf("./BuildLagomTools.sh")
     environment = mapOf(
@@ -37,9 +43,11 @@ val buildLagomTools = tasks.register<Exec>("buildLagomTools") {
     )
 }
 tasks.named("preBuild") {
+    dependsOn(ensureLadybirdSource)
     dependsOn(buildLagomTools)
 }
 tasks.matching { it.name == "prepareKotlinBuildScriptModel" }.configureEach {
+    dependsOn(ensureLadybirdSource)
     dependsOn(buildLagomTools)
 }
 

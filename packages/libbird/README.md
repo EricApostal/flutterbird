@@ -11,8 +11,10 @@ This project is ***very*** early.
 1. Run `flutter pub add ladybird`
 2. Build a basic window, following the `example.dart`
 3. `flutter run -d macos`
-Note: This builds ladybird locally then bundles it into your app. It works by running the official `ladybird.py` script. I recommend navigating to the `macos` folder in your app, and running `pod install`,
+Note: This clones Ladybird into `third_party/ladybird`, pins it to the revision in `third_party/ladybird.version`, and then builds it locally with the official `ladybird.py` script. I recommend navigating to the `macos` folder in your app, and running `pod install`,
 as when flutter runs `pod install` automatically you cannot see build process. This will take a while! Compiling a web browser takes a lot of time.
+
+To update Ladybird to a newer upstream commit, change `LADYBIRD_REVISION` in `third_party/ladybird.version` and rerun your build. `libbird` will fetch the repository and move the checkout to the new pinned revision automatically.
 
 ## What is supported
 - Launching a browser window on MacOS

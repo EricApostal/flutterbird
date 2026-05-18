@@ -35,5 +35,6 @@ migrate_working_dir/
 /macos/Bundled
 /cpp/build
 /cpp/.cache
+/third_party/ladybird/
 /.vscode
 compile_commands.json
