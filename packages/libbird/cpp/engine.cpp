@@ -12,6 +12,7 @@
 #include <CoreVideo/CoreVideo.h>
 #endif
 
+#include <AK/BitCast.h>
 #include <AK/LexicalPath.h>
 #include <AK/OwnPtr.h>
 #include <AK/StringView.h>
@@ -30,6 +31,18 @@
 #include <LibWebView/Utilities.h>
 #include <LibWebView/ViewImplementation.h>
 #include <string>
+
+namespace IPC {
+
+template <> ErrorOr<void> encode(Encoder &encoder, float const &value) {
+  return encoder.encode(AK::bit_cast<u32>(value));
+}
+
+template <> ErrorOr<void> encode(Encoder &encoder, double const &value) {
+  return encoder.encode(AK::bit_cast<u64>(value));
+}
+
+} // namespace IPC
 
 std::mutex g_web_views_mutex;
 int g_next_view_id = 1;

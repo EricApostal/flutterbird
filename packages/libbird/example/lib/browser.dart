@@ -19,7 +19,7 @@ class _BrowserWindowState extends State<BrowserWindow> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(body: _BrowserTab(controller: _controller));
+    return Scaffold(body: Text("yo"));
   }
 }
 

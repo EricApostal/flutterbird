@@ -10,12 +10,13 @@ class BrowserWindowScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
-      body: Column(
-        children: [
-          BrowserTabBar(currentViewId: viewId),
-          Expanded(child: BrowserWindow(viewId: viewId)),
-        ],
-      ),
+      // body: Column(
+      //   children: [
+      //     BrowserTabBar(currentViewId: viewId),
+      //     Expanded(child: BrowserWindow(viewId: viewId)),
+      //   ],
+      // ),
+      body: Center(child: Text("bruh")),
     );
   }
 }
