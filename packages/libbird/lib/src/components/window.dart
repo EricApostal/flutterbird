@@ -285,9 +285,9 @@ class _LadybirdViewState extends State<LadybirdView>
                 height: paddedHeight,
                 child: MouseRegion(
                   onEnter: (_) {
-                    if (!_focusNode.hasFocus) {
-                      _focusNode.requestFocus();
-                    }
+                    // if (!_focusNode.hasFocus) {
+                    //   _focusNode.requestFocus();
+                    // }
                   },
                   child: Focus(
                     focusNode: _focusNode,

@@ -159,8 +159,8 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar> {
                       },
                       controller: currentTabController.textController,
                       decoration: _buildInputDecoration(),
-                      style: theme.textTheme.labelMedium!.copyWith(
-                        color: theme.colorScheme.onSurface.withAlpha(200),
+                      style: theme.textTheme.bodyMedium!.copyWith(
+                        color: theme.colorScheme.onSurface,
                         fontWeight: FontWeight.w500,
                         fontSize: 13,
                       ),
@@ -182,14 +182,14 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar> {
     return InputDecoration(
       hintText: "Search",
       filled: true,
-      fillColor: theme.colorScheme.surfaceContainerLow,
+      fillColor: theme.colorScheme.surfaceContainer,
 
       isDense: true,
 
       contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
 
-      hintStyle: theme.textTheme.labelMedium!.copyWith(
-        color: theme.colorScheme.onSurface.withAlpha(220),
+      hintStyle: theme.textTheme.bodyMedium!.copyWith(
+        color: theme.colorScheme.onSurface.withAlpha(200),
         fontWeight: .w500,
         fontSize: 13,
       ),
