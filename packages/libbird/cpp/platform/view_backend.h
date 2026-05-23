@@ -35,6 +35,14 @@
 #include <cstdint>
 #include <mutex>
 
+struct FrameSnapshot {
+  AK::RefPtr<Gfx::Bitmap const> bitmap;
+  int width{0};
+  int height{0};
+  int pitch{0};
+  uint64_t generation{0};
+};
+
 class ViewBackend {
 public:
   virtual ~ViewBackend() = default;
@@ -73,6 +81,13 @@ public:
   // Monotonic generation number incremented when a new frame is ingested.
   // Used by hosts to avoid signaling duplicate frames.
   virtual uint64_t frame_generation() const { return 0; }
+
+  // Optional helper for callers that need a coherent pointer + metadata
+  // snapshot without copying pixels.
+  virtual bool snapshot_frame(FrameSnapshot &out_snapshot) const {
+    (void)out_snapshot;
+    return false;
+  }
 
   // Dimensions of the most recently ingested frame.
   virtual int width() const = 0;

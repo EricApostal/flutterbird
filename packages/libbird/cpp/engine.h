@@ -36,6 +36,11 @@ LADYBIRD_API bool copy_latest_pixel_buffer(int view_id, uint8_t *out_buffer,
                                            int out_capacity, int *out_width,
                                            int *out_height);
 LADYBIRD_API uint64_t get_frame_generation(int view_id);
+LADYBIRD_API bool acquire_latest_frame(int view_id, const uint8_t **out_pixels,
+                                       int *out_width, int *out_height,
+                                       int *out_pitch, uint64_t *out_generation,
+                                       void **out_frame_handle);
+LADYBIRD_API void release_latest_frame(void *frame_handle);
 
 LADYBIRD_API void set_frame_callback(int view_id, FrameCallback callback,
                                      void *context);

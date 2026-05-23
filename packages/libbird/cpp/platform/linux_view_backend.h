@@ -34,6 +34,7 @@ public:
   bool copy_pixels_into(uint8_t *out_buffer, size_t out_capacity,
                         int &out_width, int &out_height) const override;
   uint64_t frame_generation() const override;
+  bool snapshot_frame(FrameSnapshot &out_snapshot) const override;
   int width() const override;
   int height() const override;
 

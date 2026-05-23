@@ -335,6 +335,14 @@ public:
 static AK::OwnPtr<FlutterApplication> s_app;
 static AK::OwnPtr<WebView::BrowserProcess> s_browser_process;
 
+struct LatestFrameHandle {
+  AK::RefPtr<Gfx::Bitmap const> bitmap;
+  int width{0};
+  int height{0};
+  int pitch{0};
+  uint64_t generation{0};
+};
+
 void init_ladybird() {
   static bool initialized = false;
   if (initialized)
@@ -477,6 +485,53 @@ uint64_t get_frame_generation(int view_id) {
   if (it == g_web_views.end())
     return 0;
   return it->second->m_backend->frame_generation();
+}
+
+bool acquire_latest_frame(int view_id, const uint8_t **out_pixels,
+                          int *out_width, int *out_height, int *out_pitch,
+                          uint64_t *out_generation, void **out_frame_handle) {
+  if (!out_pixels || !out_width || !out_height || !out_pitch ||
+      !out_generation || !out_frame_handle)
+    return false;
+
+  auto it = g_web_views.find(view_id);
+  if (it == g_web_views.end())
+    return false;
+
+  FrameSnapshot snapshot;
+  if (!it->second->m_backend->snapshot_frame(snapshot) || !snapshot.bitmap)
+    return false;
+
+  auto *frame = new (std::nothrow) LatestFrameHandle;
+  if (!frame)
+    return false;
+
+  frame->bitmap = snapshot.bitmap;
+  frame->width = snapshot.width;
+  frame->height = snapshot.height;
+  frame->pitch = snapshot.pitch;
+  frame->generation = snapshot.generation;
+
+  auto const *pixels = frame->bitmap->scanline_u8(0);
+  if (!pixels) {
+    delete frame;
+    return false;
+  }
+
+  *out_pixels = pixels;
+  *out_width = frame->width;
+  *out_height = frame->height;
+  *out_pitch = frame->pitch;
+  *out_generation = frame->generation;
+  *out_frame_handle = frame;
+  return true;
+}
+
+void release_latest_frame(void *frame_handle) {
+  if (!frame_handle)
+    return;
+  auto *frame = static_cast<LatestFrameHandle *>(frame_handle);
+  delete frame;
 }
 
 void set_frame_callback(int view_id, FrameCallback callback, void *context) {

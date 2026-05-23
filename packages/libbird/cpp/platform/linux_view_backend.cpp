@@ -63,6 +63,19 @@ uint64_t LinuxViewBackend::frame_generation() const {
   return m_frame_generation;
 }
 
+bool LinuxViewBackend::snapshot_frame(FrameSnapshot &out_snapshot) const {
+  std::lock_guard lock(m_bitmap_mutex);
+  if (!m_bitmap)
+    return false;
+
+  out_snapshot.bitmap = m_bitmap;
+  out_snapshot.width = m_width;
+  out_snapshot.height = m_height;
+  out_snapshot.pitch = m_bitmap->pitch();
+  out_snapshot.generation = m_frame_generation;
+  return true;
+}
+
 int LinuxViewBackend::width() const {
   std::lock_guard lock(m_bitmap_mutex);
   return m_width;

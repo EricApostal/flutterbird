@@ -7,7 +7,6 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
-#include <limits>
 #include <map>
 
 #include "engine.h"
@@ -17,8 +16,7 @@ struct _LadybirdTexture {
   FlPixelBufferTexture parent_instance;
   int view_id;
   FlTextureRegistrar *texture_registrar;
-  uint8_t *frame_buffer;
-  size_t frame_buffer_capacity;
+  void *last_frame_handle;
   uint64_t last_frame_generation;
 };
 
@@ -45,23 +43,6 @@ static void fill_dummy_frame(const uint8_t **out_buffer, uint32_t *width,
   *height = 100;
 }
 
-static bool ensure_texture_buffer_capacity(LadybirdTexture *self,
-                                           size_t required) {
-  if (required == 0)
-    return false;
-  if (self->frame_buffer_capacity >= required)
-    return true;
-
-  auto *new_buffer =
-      static_cast<uint8_t *>(g_realloc(self->frame_buffer, required));
-  if (!new_buffer)
-    return false;
-
-  self->frame_buffer = new_buffer;
-  self->frame_buffer_capacity = required;
-  return true;
-}
-
 static gboolean ladybird_texture_copy_pixels(FlPixelBufferTexture *texture,
                                              const uint8_t **out_buffer,
                                              uint32_t *width, uint32_t *height,
@@ -69,67 +50,40 @@ static gboolean ladybird_texture_copy_pixels(FlPixelBufferTexture *texture,
   (void)error;
   LadybirdTexture *self = LADYBIRD_TEXTURE(texture);
 
-  int w = get_iosurface_width(self->view_id);
-  int h = get_iosurface_height(self->view_id);
+  if (self->last_frame_handle) {
+    release_latest_frame(self->last_frame_handle);
+    self->last_frame_handle = nullptr;
+  }
 
-  if (w <= 0 || h <= 0) {
+  int w = 0;
+  int h = 0;
+  int pitch = 0;
+  uint64_t generation = 0;
+  const uint8_t *pixels = nullptr;
+  void *frame_handle = nullptr;
+
+  if (!acquire_latest_frame(self->view_id, &pixels, &w, &h, &pitch, &generation,
+                            &frame_handle) ||
+      !pixels || w <= 0 || h <= 0 || pitch <= 0) {
     fill_dummy_frame(out_buffer, width, height);
     return TRUE;
   }
 
-  size_t required = static_cast<size_t>(w) * static_cast<size_t>(h) * 4;
-  if (!ensure_texture_buffer_capacity(self, required)) {
-    fill_dummy_frame(out_buffer, width, height);
-    return TRUE;
-  }
-
-  auto try_copy = [&]() -> bool {
-    if (self->frame_buffer_capacity >
-        static_cast<size_t>(std::numeric_limits<int>::max())) {
-      return false;
-    }
-
-    int copied_w = 0;
-    int copied_h = 0;
-    if (!copy_latest_pixel_buffer(self->view_id, self->frame_buffer,
-                                  static_cast<int>(self->frame_buffer_capacity),
-                                  &copied_w, &copied_h)) {
-      return false;
-    }
-    if (copied_w <= 0 || copied_h <= 0)
-      return false;
-
-    *out_buffer = self->frame_buffer;
-    *width = static_cast<uint32_t>(copied_w);
-    *height = static_cast<uint32_t>(copied_h);
-    return true;
-  };
-
-  if (try_copy())
-    return TRUE;
-
-  // Size may have changed between get_iosurface_* and copy_latest_pixel_buffer.
-  // Resize and retry once before falling back.
-  w = get_iosurface_width(self->view_id);
-  h = get_iosurface_height(self->view_id);
-  if (w > 0 && h > 0) {
-    required = static_cast<size_t>(w) * static_cast<size_t>(h) * 4;
-    if (ensure_texture_buffer_capacity(self, required) && try_copy())
-      return TRUE;
-  }
-
-  fill_dummy_frame(out_buffer, width, height);
-  return TRUE;
-
+  // Keep this handle alive until the next copy callback so the pixel pointer
+  // remains valid while Flutter consumes the frame.
+  self->last_frame_handle = frame_handle;
+  self->last_frame_generation = generation;
+  *out_buffer = pixels;
+  *width = static_cast<uint32_t>(w);
+  *height = static_cast<uint32_t>(h);
   return TRUE;
 }
 
 static void ladybird_texture_dispose(GObject *object) {
   LadybirdTexture *self = LADYBIRD_TEXTURE(object);
-  if (self->frame_buffer) {
-    g_free(self->frame_buffer);
-    self->frame_buffer = nullptr;
-    self->frame_buffer_capacity = 0;
+  if (self->last_frame_handle) {
+    release_latest_frame(self->last_frame_handle);
+    self->last_frame_handle = nullptr;
   }
   G_OBJECT_CLASS(ladybird_texture_parent_class)->dispose(object);
 }
@@ -143,8 +97,7 @@ static void ladybird_texture_class_init(LadybirdTextureClass *klass) {
 static void ladybird_texture_init(LadybirdTexture *self) {
   self->view_id = -1;
   self->texture_registrar = nullptr;
-  self->frame_buffer = nullptr;
-  self->frame_buffer_capacity = 0;
+  self->last_frame_handle = nullptr;
   self->last_frame_generation = 0;
 }
 
