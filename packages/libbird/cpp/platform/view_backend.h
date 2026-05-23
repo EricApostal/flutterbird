@@ -31,6 +31,8 @@
 #include <AK/RefPtr.h>
 #include <LibGfx/Bitmap.h>
 
+#include <cstddef>
+#include <cstdint>
 #include <mutex>
 
 class ViewBackend {
@@ -56,6 +58,21 @@ public:
   //           Valid until the next on_bitmap_ready() call.
   //   macOS:  CVPixelBufferRef (retained — caller must CFRelease).
   virtual void *pixel_data() = 0;
+
+  // Optional helper for callers that need an atomic width/height/pixel
+  // snapshot in tightly packed BGRA rows.
+  virtual bool copy_pixels_into(uint8_t *out_buffer, size_t out_capacity,
+                                int &out_width, int &out_height) const {
+    (void)out_buffer;
+    (void)out_capacity;
+    (void)out_width;
+    (void)out_height;
+    return false;
+  }
+
+  // Monotonic generation number incremented when a new frame is ingested.
+  // Used by hosts to avoid signaling duplicate frames.
+  virtual uint64_t frame_generation() const { return 0; }
 
   // Dimensions of the most recently ingested frame.
   virtual int width() const = 0;

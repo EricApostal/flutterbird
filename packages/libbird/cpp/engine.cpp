@@ -450,6 +450,35 @@ void *get_latest_pixel_buffer(int view_id) {
   return it->second->m_backend->pixel_data();
 }
 
+bool copy_latest_pixel_buffer(int view_id, uint8_t *out_buffer,
+                              int out_capacity, int *out_width,
+                              int *out_height) {
+  if (!out_buffer || !out_width || !out_height || out_capacity <= 0)
+    return false;
+
+  auto it = g_web_views.find(view_id);
+  if (it == g_web_views.end())
+    return false;
+
+  int width = 0;
+  int height = 0;
+  bool copied = it->second->m_backend->copy_pixels_into(
+      out_buffer, static_cast<size_t>(out_capacity), width, height);
+  if (!copied)
+    return false;
+
+  *out_width = width;
+  *out_height = height;
+  return true;
+}
+
+uint64_t get_frame_generation(int view_id) {
+  auto it = g_web_views.find(view_id);
+  if (it == g_web_views.end())
+    return 0;
+  return it->second->m_backend->frame_generation();
+}
+
 void set_frame_callback(int view_id, FrameCallback callback, void *context) {
   auto it = g_web_views.find(view_id);
   if (it != g_web_views.end()) {

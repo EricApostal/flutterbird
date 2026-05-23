@@ -32,6 +32,10 @@ LADYBIRD_API int create_web_view();
 LADYBIRD_API void destroy_web_view(int view_id);
 
 LADYBIRD_API void *get_latest_pixel_buffer(int view_id);
+LADYBIRD_API bool copy_latest_pixel_buffer(int view_id, uint8_t *out_buffer,
+                                           int out_capacity, int *out_width,
+                                           int *out_height);
+LADYBIRD_API uint64_t get_frame_generation(int view_id);
 
 LADYBIRD_API void set_frame_callback(int view_id, FrameCallback callback,
                                      void *context);

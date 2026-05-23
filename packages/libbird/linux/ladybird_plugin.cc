@@ -4,18 +4,22 @@
 #include <gtk/gtk.h>
 #include <sys/utsname.h>
 
+#include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <limits>
 #include <map>
 
 #include "engine.h"
 #include "ladybird_plugin_private.h"
-#include <iostream>
 
 struct _LadybirdTexture {
   FlPixelBufferTexture parent_instance;
   int view_id;
   FlTextureRegistrar *texture_registrar;
+  uint8_t *frame_buffer;
+  size_t frame_buffer_capacity;
+  uint64_t last_frame_generation;
 };
 
 G_DECLARE_FINAL_TYPE(LadybirdTexture, ladybird_texture, LADYBIRD, TEXTURE,
@@ -24,42 +28,114 @@ G_DECLARE_FINAL_TYPE(LadybirdTexture, ladybird_texture, LADYBIRD, TEXTURE,
 G_DEFINE_TYPE(LadybirdTexture, ladybird_texture,
               fl_pixel_buffer_texture_get_type())
 
+static void fill_dummy_frame(const uint8_t **out_buffer, uint32_t *width,
+                             uint32_t *height) {
+  static uint8_t *dummy_buffer = nullptr;
+  if (!dummy_buffer) {
+    dummy_buffer = static_cast<uint8_t *>(g_malloc(100 * 100 * 4));
+    for (int i = 0; i < 100 * 100; i++) {
+      dummy_buffer[i * 4 + 0] = 0;
+      dummy_buffer[i * 4 + 1] = 0;
+      dummy_buffer[i * 4 + 2] = 0;
+      dummy_buffer[i * 4 + 3] = 255;
+    }
+  }
+  *out_buffer = dummy_buffer;
+  *width = 100;
+  *height = 100;
+}
+
+static bool ensure_texture_buffer_capacity(LadybirdTexture *self,
+                                           size_t required) {
+  if (required == 0)
+    return false;
+  if (self->frame_buffer_capacity >= required)
+    return true;
+
+  auto *new_buffer =
+      static_cast<uint8_t *>(g_realloc(self->frame_buffer, required));
+  if (!new_buffer)
+    return false;
+
+  self->frame_buffer = new_buffer;
+  self->frame_buffer_capacity = required;
+  return true;
+}
+
 static gboolean ladybird_texture_copy_pixels(FlPixelBufferTexture *texture,
                                              const uint8_t **out_buffer,
                                              uint32_t *width, uint32_t *height,
-                                             WidgetsBinding.i GError **error) {
+                                             GError **error) {
+  (void)error;
   LadybirdTexture *self = LADYBIRD_TEXTURE(texture);
-
-  void *pixels = get_latest_pixel_buffer(self->view_id);
 
   int w = get_iosurface_width(self->view_id);
   int h = get_iosurface_height(self->view_id);
 
-  if (!pixels || w <= 0 || h <= 0) {
-    static uint8_t *dummy_buffer = nullptr;
-    if (!dummy_buffer) {
-      dummy_buffer = new uint8_t[100 * 100 * 4];
-      for (int i = 0; i < 100 * 100; i++) {
-        dummy_buffer[i * 4 + 0] = 0;   // R
-        dummy_buffer[i * 4 + 1] = 0;   // G
-        dummy_buffer[i * 4 + 2] = 0;   // B
-        dummy_buffer[i * 4 + 3] = 255; // A
-      }
-    }
-    *out_buffer = dummy_buffer;
-    *width = 100;
-    *height = 100;
+  if (w <= 0 || h <= 0) {
+    fill_dummy_frame(out_buffer, width, height);
     return TRUE;
   }
 
-  *out_buffer = (const uint8_t *)pixels;
-  *width = w;
-  *height = h;
+  size_t required = static_cast<size_t>(w) * static_cast<size_t>(h) * 4;
+  if (!ensure_texture_buffer_capacity(self, required)) {
+    fill_dummy_frame(out_buffer, width, height);
+    return TRUE;
+  }
+
+  auto try_copy = [&]() -> bool {
+    if (self->frame_buffer_capacity >
+        static_cast<size_t>(std::numeric_limits<int>::max())) {
+      return false;
+    }
+
+    int copied_w = 0;
+    int copied_h = 0;
+    if (!copy_latest_pixel_buffer(self->view_id, self->frame_buffer,
+                                  static_cast<int>(self->frame_buffer_capacity),
+                                  &copied_w, &copied_h)) {
+      return false;
+    }
+    if (copied_w <= 0 || copied_h <= 0)
+      return false;
+
+    *out_buffer = self->frame_buffer;
+    *width = static_cast<uint32_t>(copied_w);
+    *height = static_cast<uint32_t>(copied_h);
+    return true;
+  };
+
+  if (try_copy())
+    return TRUE;
+
+  // Size may have changed between get_iosurface_* and copy_latest_pixel_buffer.
+  // Resize and retry once before falling back.
+  w = get_iosurface_width(self->view_id);
+  h = get_iosurface_height(self->view_id);
+  if (w > 0 && h > 0) {
+    required = static_cast<size_t>(w) * static_cast<size_t>(h) * 4;
+    if (ensure_texture_buffer_capacity(self, required) && try_copy())
+      return TRUE;
+  }
+
+  fill_dummy_frame(out_buffer, width, height);
+  return TRUE;
 
   return TRUE;
 }
 
+static void ladybird_texture_dispose(GObject *object) {
+  LadybirdTexture *self = LADYBIRD_TEXTURE(object);
+  if (self->frame_buffer) {
+    g_free(self->frame_buffer);
+    self->frame_buffer = nullptr;
+    self->frame_buffer_capacity = 0;
+  }
+  G_OBJECT_CLASS(ladybird_texture_parent_class)->dispose(object);
+}
+
 static void ladybird_texture_class_init(LadybirdTextureClass *klass) {
+  G_OBJECT_CLASS(klass)->dispose = ladybird_texture_dispose;
   FL_PIXEL_BUFFER_TEXTURE_CLASS(klass)->copy_pixels =
       ladybird_texture_copy_pixels;
 }
@@ -67,6 +143,9 @@ static void ladybird_texture_class_init(LadybirdTextureClass *klass) {
 static void ladybird_texture_init(LadybirdTexture *self) {
   self->view_id = -1;
   self->texture_registrar = nullptr;
+  self->frame_buffer = nullptr;
+  self->frame_buffer_capacity = 0;
+  self->last_frame_generation = 0;
 }
 
 static LadybirdTexture *ladybird_texture_new(int view_id,
@@ -94,18 +173,24 @@ G_DEFINE_TYPE(LadybirdPlugin, ladybird_plugin, g_object_get_type())
 static bool g_ladybird_initialized = false;
 
 static gboolean ladybird_tick_callback(gpointer user_data) {
-  (void)user_data;
+  LadybirdPlugin *plugin = LADYBIRD_PLUGIN(user_data);
   tick_ladybird();
 
-  return G_SOURCE_CONTINUE;
-}
-
-static void frame_available_callback(void *context) {
-  LadybirdTexture *texture = LADYBIRD_TEXTURE(context);
-  if (texture && texture->texture_registrar) {
-    fl_texture_registrar_mark_texture_frame_available(
-        texture->texture_registrar, FL_TEXTURE(texture));
+  if (plugin && plugin->textures) {
+    for (auto const &it : *plugin->textures) {
+      LadybirdTexture *texture = it.second;
+      if (texture && texture->texture_registrar) {
+        uint64_t generation = get_frame_generation(texture->view_id);
+        if (generation != 0 && generation != texture->last_frame_generation) {
+          texture->last_frame_generation = generation;
+          fl_texture_registrar_mark_texture_frame_available(
+              texture->texture_registrar, FL_TEXTURE(texture));
+        }
+      }
+    }
   }
+
+  return G_SOURCE_CONTINUE;
 }
 
 static void ladybird_plugin_handle_method_call(LadybirdPlugin *self,
@@ -137,7 +222,8 @@ static void ladybird_plugin_handle_method_call(LadybirdPlugin *self,
       fl_texture_registrar_register_texture(self->texture_registrar,
                                             FL_TEXTURE(texture));
 
-      set_frame_callback((int)view_id, frame_available_callback, texture);
+      // GTK timer + frame generation drive texture notifications.
+      set_frame_callback((int)view_id, nullptr, nullptr);
 
       int64_t texture_id = (int64_t)fl_texture_get_id(FL_TEXTURE(texture));
 
