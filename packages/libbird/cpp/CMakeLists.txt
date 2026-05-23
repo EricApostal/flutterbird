@@ -46,7 +46,11 @@ else()
     set(VCPKG_TRIPLET "x64-linux-dynamic")
 endif()
 
-add_library(engine SHARED engine.cpp)
+add_library(engine SHARED
+    engine.cpp
+    platform/view_backend.cpp
+    platform/linux_view_backend.cpp
+)
 
 target_include_directories(engine PRIVATE
     ${LADYBIRD_DIR}

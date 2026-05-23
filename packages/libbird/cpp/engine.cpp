@@ -1,15 +1,19 @@
 #include "engine.h"
 #include "LibWebView/Application.h"
 #include <cstdio>
+#include <memory>
 #include <mutex>
 #include <print>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 
+// Platform-specific backend header.  All __APPLE__ ifdefs live here and
+// in the on_ready_to_paint lambda — nowhere else in this file.
 #ifdef __APPLE__
-#include <CoreFoundation/CoreFoundation.h>
-#include <CoreVideo/CoreVideo.h>
+#include "platform/macos_view_backend.h"
+#else
+#include "platform/linux_view_backend.h"
 #endif
 
 #include <AK/BitCast.h>
@@ -20,7 +24,9 @@
 #include <LibCore/ResourceImplementation.h>
 #include <LibCore/ResourceImplementationFile.h>
 #include <LibCore/System.h>
+#include <LibCore/ThreadEventQueue.h>
 #include <LibGfx/Bitmap.h>
+#include <LibGfx/SharedImageBuffer.h>
 #include <LibGfx/SystemTheme.h>
 #include <LibMain/Main.h>
 #include <LibURL/Parser.h>
@@ -44,7 +50,6 @@ template <> ErrorOr<void> encode(Encoder &encoder, double const &value) {
 
 } // namespace IPC
 
-std::mutex g_web_views_mutex;
 int g_next_view_id = 1;
 int g_active_view_id = -1;
 
@@ -52,6 +57,22 @@ AskUserForDownloadPathCallback g_ask_user_for_download_path_callback = nullptr;
 DisplayDownloadConfirmationDialogCallback
     g_display_download_confirmation_dialog_callback = nullptr;
 DisplayErrorDialogCallback g_display_error_dialog_callback = nullptr;
+
+// ---------------------------------------------------------------------------
+// Platform backend factory
+// ---------------------------------------------------------------------------
+
+static std::unique_ptr<ViewBackend> create_view_backend() {
+#ifdef __APPLE__
+  return std::make_unique<MacOSViewBackend>();
+#else
+  return std::make_unique<LinuxViewBackend>();
+#endif
+}
+
+// ---------------------------------------------------------------------------
+// FlutterViewImpl
+// ---------------------------------------------------------------------------
 
 class FlutterViewImpl final : public WebView::ViewImplementation {
 public:
@@ -61,26 +82,22 @@ public:
   }
 
   int m_view_id;
+  double m_zoom{2.0};
 
-#ifdef __APPLE__
-  CVPixelBufferRef m_pixel_buffer = nullptr;
-#else
-  AK::RefPtr<Gfx::Bitmap const> m_bitmap = nullptr;
-#endif
-  int m_width = 800;
-  int m_height = 600;
-  double m_zoom = 2;
+  // Viewport dimensions — updated by resize() so viewport_size() always
+  // returns the currently-requested render size, not the last painted size.
+  int m_viewport_width{800};
+  int m_viewport_height{600};
 
-  FrameCallback m_frame_callback = nullptr;
-  void *m_frame_callback_context = nullptr;
+  // Platform rendering backend (LinuxViewBackend / MacOSViewBackend).
+  std::unique_ptr<ViewBackend> m_backend;
 
-  ResizeCallback m_resize_callback = nullptr;
+  // Mutex for the non-frame callbacks (URL, title, favicon).
+  std::mutex m_info_mutex;
 
   UrlChangeCallback m_url_change_callback = nullptr;
   TitleChangeCallback m_title_change_callback = nullptr;
   FaviconChangeCallback m_favicon_change_callback = nullptr;
-
-  std::mutex m_mutex;
 
   void sync_device_pixel_ratio() { m_device_pixel_ratio = m_zoom; }
 
@@ -103,94 +120,45 @@ public:
 
   virtual void initialize_client(
       CreateNewClient create_new_client = CreateNewClient::Yes) override {
+
+    m_backend = create_view_backend();
+
     ViewImplementation::initialize_client(create_new_client);
-
     configure_client_process();
-
     set_system_visibility_state(Web::HTML::VisibilityState::Visible);
 
+    // -----------------------------------------------------------------------
+    // on_ready_to_paint — modelled after Qt's WebContentView pattern.
+    //
+    // Extract the Gfx::Bitmap from the front shared-image buffer and pass it
+    // to the backend.  The backend stores it, detects size changes, and fires
+    // the Flutter FrameCallback / ResizeCallback.
+    //
+    // macOS NOTE: SharedImageBuffer::iosurface_handle() gives the IOSurface
+    // for zero-copy GPU texture upload.  Wire that into MacOSViewBackend once
+    // on_iosurface_ready() is implemented; until then the bitmap CPU path
+    // below works as a functional fallback on both platforms.
+    // -----------------------------------------------------------------------
     on_ready_to_paint = [this]() {
-#ifdef __APPLE__
-      auto *shared_image_buffer =
-          m_client_state.front_bitmap.shared_image_buffer.ptr();
-      if (m_client_state.has_usable_bitmap && shared_image_buffer) {
-        auto size =
-            m_client_state.front_bitmap.last_painted_size.to_type<int>();
-
-        IOSurfaceRef iosurface = reinterpret_cast<IOSurfaceRef>(
-            shared_image_buffer->iosurface_handle().core_foundation_pointer());
-        if (!iosurface) {
-          return;
-        }
-
-        std::lock_guard<std::mutex> lock(m_mutex);
-
-        bool size_changed =
-            (size.width() != m_width || size.height() != m_height);
-        m_width = size.width();
-        m_height = size.height();
-
-        if (m_pixel_buffer) {
-          CVPixelBufferRelease(m_pixel_buffer);
-          m_pixel_buffer = nullptr;
-        }
-
-        CVReturn result = CVPixelBufferCreateWithIOSurface(
-            kCFAllocatorDefault, iosurface, nullptr, &m_pixel_buffer);
-
-        if (result != kCVReturnSuccess) {
-          std::println("Failed to wrap IOSurface in CVPixelBuffer! Error: {}",
-                       result);
-          return;
-        }
-
-        if (size_changed && m_resize_callback) {
-          m_resize_callback();
-        }
-
-        if (m_frame_callback) {
-          m_frame_callback(m_frame_callback_context);
-        }
-      }
-#else
-      if (m_client_state.has_usable_bitmap) {
-        auto bitmap =
-            m_client_state.front_bitmap.shared_image_buffer
-                ? AK::RefPtr<Gfx::Bitmap const>(
-                      m_client_state.front_bitmap.shared_image_buffer->bitmap())
-                : nullptr;
-        if (bitmap) {
-          std::lock_guard<std::mutex> lock(m_mutex);
-          m_bitmap = bitmap;
-
-          bool size_changed =
-              (m_bitmap->width() != m_width || m_bitmap->height() != m_height);
-          m_width = m_bitmap->width();
-          m_height = m_bitmap->height();
-
-          if (size_changed && m_resize_callback) {
-            m_resize_callback();
-          }
-
-          if (m_frame_callback) {
-            m_frame_callback(m_frame_callback_context);
-          }
-        }
-      }
-#endif
+      if (!m_client_state.has_usable_bitmap ||
+          !m_client_state.front_bitmap.shared_image_buffer)
+        return;
+      auto bitmap = AK::RefPtr<Gfx::Bitmap const>(
+          m_client_state.front_bitmap.shared_image_buffer->bitmap());
+      m_backend->on_bitmap_ready(std::move(bitmap));
     };
 
     on_web_content_process_change_for_cross_site_navigation = [this]() {
-      std::println("WebContent process changed for cross site navigation!");
+      std::println("WebContent process changed for cross site navigation.");
       configure_client_process();
     };
 
     on_web_content_crashed = []() {
-      std::println("WebContent process crashed!!!");
+      std::println("WebContent process crashed.");
     };
 
     on_url_change = [this](URL::URL const &url) {
-      std::lock_guard<std::mutex> lock(m_mutex);
+      std::lock_guard lock(m_info_mutex);
       if (m_url_change_callback) {
         auto url_string = url.to_string().to_byte_string();
         m_url_change_callback(strdup(url_string.characters()));
@@ -198,7 +166,7 @@ public:
     };
 
     on_title_change = [this](Utf16String const &title) {
-      std::lock_guard<std::mutex> lock(m_mutex);
+      std::lock_guard lock(m_info_mutex);
       if (m_title_change_callback) {
         auto title_string = title.to_utf8().to_byte_string();
         m_title_change_callback(strdup(title_string.characters()));
@@ -206,7 +174,7 @@ public:
     };
 
     on_favicon_change = [this](Gfx::Bitmap const &bitmap) {
-      std::lock_guard<std::mutex> lock(m_mutex);
+      std::lock_guard lock(m_info_mutex);
       if (m_favicon_change_callback) {
         size_t length = bitmap.width() * bitmap.height() * 4;
         uint8_t *buffer = (uint8_t *)malloc(length);
@@ -218,6 +186,8 @@ public:
   }
 
   void resize(int width, int height) {
+    m_viewport_width = width;
+    m_viewport_height = height;
     auto size = Web::DevicePixelSize{width, height};
     sync_device_pixel_ratio();
     client().async_set_viewport(m_client_state.page_index, size,
@@ -226,9 +196,8 @@ public:
   }
 
   void update_zoom_scale() {
-    auto size = Web::DevicePixelSize{m_width, m_height};
     sync_device_pixel_ratio();
-    client().async_set_viewport(m_client_state.page_index, size,
+    client().async_set_viewport(m_client_state.page_index, viewport_size(),
                                 m_device_pixel_ratio, is_fullscreen());
   }
 
@@ -258,20 +227,15 @@ public:
                       code_point, repeat, nullptr});
   }
 
-  virtual ~FlutterViewImpl() {
-#ifdef __APPLE__
-    if (m_pixel_buffer) {
-      CVPixelBufferRelease(m_pixel_buffer);
-    }
-#endif
-  }
+  virtual ~FlutterViewImpl() = default;
 
 private:
-  FlutterViewImpl(int view_id) : m_view_id(view_id) {}
+  explicit FlutterViewImpl(int view_id) : m_view_id(view_id) {}
 
   virtual void update_zoom() override {}
+
   virtual Web::DevicePixelSize viewport_size() const override {
-    return {m_width, m_height};
+    return {m_viewport_width, m_viewport_height};
   }
   virtual Gfx::IntPoint
   to_content_position(Gfx::IntPoint widget_position) const override {
@@ -284,7 +248,8 @@ private:
 };
 
 #include <map>
-std::map<int, AK::OwnPtr<FlutterViewImpl>> g_web_views;
+// View registry — owns all FlutterViewImpl instances.
+static std::map<int, AK::OwnPtr<FlutterViewImpl>> g_web_views;
 
 class FlutterApplication : public WebView::Application {
   WEB_VIEW_APPLICATION(FlutterApplication)
@@ -310,7 +275,6 @@ public:
 
   virtual Optional<WebView::ViewImplementation &>
   active_web_view() const override {
-    // std::lock_guard<std::mutex> lock(g_web_views_mutex);
     if (g_active_view_id != -1) {
       auto it = g_web_views.find(g_active_view_id);
       if (it != g_web_views.end())
@@ -435,110 +399,96 @@ void init_ladybird() {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Event-loop tick — inspired by GTK's EventLoopImplementationGtk::pump():
+//
+//   result  = ThreadEventQueue::current().process();   // pre-drain
+//   g_main_context_iteration(ctx, FALSE);              // platform poll
+//   result += ThreadEventQueue::current().process();   // post-drain
+//
+// The pre-drain step flushes any events already posted to the queue (e.g.
+// IPC messages received between the previous tick and this one).  The pump
+// call exercises EventLoopImplementationUnix::wait_for_events() which does
+// a non-blocking poll(2) over all registered notifiers (WebContent /
+// RequestServer IPC sockets, timers, etc.).  The post-drain picks up
+// anything that was enqueued during that poll.
+// ---------------------------------------------------------------------------
 extern "C" void tick_ladybird() {
-  if (Core::EventLoop::is_running()) {
+  // Pre-drain: flush events queued since last tick.
+  Core::ThreadEventQueue::current().process();
+
+  // Non-blocking IO poll + timer dispatch.
+  if (Core::EventLoop::is_running())
     Core::EventLoop::current().pump(Core::EventLoop::WaitMode::PollForEvents);
-  }
+
+  // Post-drain: flush whatever the poll triggered.
+  Core::ThreadEventQueue::current().process();
 }
 
 int create_web_view() {
-  std::println("Create in webview code");
-  // std::lock_guard<std::mutex> lock(g_web_views_mutex);
   int id = g_next_view_id++;
   auto view = FlutterViewImpl::create(id).release_value();
   view->initialize_client();
   g_web_views[id] = std::move(view);
-
-  if (g_active_view_id == -1) {
+  if (g_active_view_id == -1)
     g_active_view_id = id;
-  }
-  std::printf("returning with id = %d", id);
   return id;
 }
 
 void destroy_web_view(int view_id) {
-  // std::lock_guard<std::mutex> lock(g_web_views_mutex);
-  if (g_active_view_id == view_id) {
+  if (g_active_view_id == view_id)
     g_active_view_id = -1;
-  }
   g_web_views.erase(view_id);
 }
 
 void *get_latest_pixel_buffer(int view_id) {
-  // std::lock_guard<std::mutex> lock(g_web_views_mutex);
   auto it = g_web_views.find(view_id);
   if (it == g_web_views.end()) {
-    std::printf("could not find webview\n");
+    std::printf("get_latest_pixel_buffer: view %d not found\n", view_id);
     return nullptr;
   }
-
-  // std::lock_guard<std::mutex> view_lock(it->second->m_mutex);
-#ifdef __APPLE__
-  if (!it->second->m_pixel_buffer)
-    return nullptr;
-
-  CVPixelBufferRetain(it->second->m_pixel_buffer);
-  return it->second->m_pixel_buffer;
-#else
-
-  if (!it->second->m_bitmap) {
-    std::printf("could not find m_bitmap\n");
-    return nullptr;
-  }
-
-  // Return pointer to the raw pixel data
-  // Assuming ARGB format which Flutter expects
-  // We return the raw data pointer from Gfx::Bitmap
-  return const_cast<u8 *>(it->second->m_bitmap->scanline_u8(0));
-#endif
+  return it->second->m_backend->pixel_data();
 }
 
 void set_frame_callback(int view_id, FrameCallback callback, void *context) {
-  // std::lock_guard<std::mutex> lock(g_web_views_mutex);
   auto it = g_web_views.find(view_id);
   if (it != g_web_views.end()) {
-    std::lock_guard<std::mutex> view_lock(it->second->m_mutex);
-    it->second->m_frame_callback = callback;
-    it->second->m_frame_callback_context = context;
+    std::lock_guard lock(it->second->m_backend->callback_mutex);
+    it->second->m_backend->frame_callback = callback;
+    it->second->m_backend->frame_callback_context = context;
   }
 }
 
 void set_resize_callback(int view_id, ResizeCallback callback) {
-  // std::lock_guard<std::mutex> lock(g_web_views_mutex);
   auto it = g_web_views.find(view_id);
   if (it != g_web_views.end()) {
-    std::lock_guard<std::mutex> view_lock(it->second->m_mutex);
-    it->second->m_resize_callback = callback;
+    std::lock_guard lock(it->second->m_backend->callback_mutex);
+    it->second->m_backend->resize_callback = callback;
   }
 }
 
 void resize_window(int view_id, int width, int height) {
   if (width <= 0 || height <= 0)
     return;
-  // std::lock_guard<std::mutex> lock(g_web_views_mutex);
   auto it = g_web_views.find(view_id);
-  if (it != g_web_views.end()) {
+  if (it != g_web_views.end())
     it->second->resize(width, height);
-  }
 }
 
 void navigate_to(int view_id, const char *url) {
   if (!url)
     return;
-  // std::lock_guard<std::mutex> lock(g_web_views_mutex);
   auto it = g_web_views.find(view_id);
   if (it != g_web_views.end()) {
     auto parsed = URL::Parser::basic_parse(AK::StringView(url, strlen(url)));
-    if (parsed.has_value()) {
+    if (parsed.has_value())
       it->second->load(parsed.value());
-    }
   }
 }
 
 void set_zoom(int view_id, double zoom) {
   if (zoom <= 0.0)
     return;
-  // std::lock_guard<std::mutex> lock(g_web_views_mutex);
   auto it = g_web_views.find(view_id);
   if (it != g_web_views.end()) {
     it->second->m_zoom = zoom;
@@ -547,72 +497,39 @@ void set_zoom(int view_id, double zoom) {
 }
 
 int get_iosurface_width(int view_id) {
-  // std::lock_guard<std::mutex> lock(g_web_views_mutex);
   auto it = g_web_views.find(view_id);
   if (it == g_web_views.end())
     return 0;
-
-  std::lock_guard<std::mutex> view_lock(it->second->m_mutex);
-#ifdef __APPLE__
-  if (!it->second->m_pixel_buffer)
-    return it->second->m_width;
-  IOSurfaceRef iosurface =
-      CVPixelBufferGetIOSurface(it->second->m_pixel_buffer);
-  if (!iosurface)
-    return it->second->m_width;
-  return IOSurfaceGetWidth(iosurface);
-#else
-  if (it->second->m_bitmap)
-    return it->second->m_bitmap->width();
-  return it->second->m_width;
-#endif
+  return it->second->m_backend->width();
 }
 
 int get_iosurface_height(int view_id) {
-  // std::lock_guard<std::mutex> lock(g_web_views_mutex);
   auto it = g_web_views.find(view_id);
   if (it == g_web_views.end())
     return 0;
-
-  std::lock_guard<std::mutex> view_lock(it->second->m_mutex);
-#ifdef __APPLE__
-  if (!it->second->m_pixel_buffer)
-    return it->second->m_height;
-  IOSurfaceRef iosurface =
-      CVPixelBufferGetIOSurface(it->second->m_pixel_buffer);
-  if (!iosurface)
-    return it->second->m_height;
-  return IOSurfaceGetHeight(iosurface);
-#else
-  if (it->second->m_bitmap)
-    return it->second->m_bitmap->height();
-  return it->second->m_height;
-#endif
+  return it->second->m_backend->height();
 }
 
 void set_url_change_callback(int view_id, UrlChangeCallback callback) {
-  // std::lock_guard<std::mutex> lock(g_web_views_mutex);
   auto it = g_web_views.find(view_id);
   if (it != g_web_views.end()) {
-    std::lock_guard<std::mutex> view_lock(it->second->m_mutex);
+    std::lock_guard lock(it->second->m_info_mutex);
     it->second->m_url_change_callback = callback;
   }
 }
 
 void set_title_change_callback(int view_id, TitleChangeCallback callback) {
-  // std::lock_guard<std::mutex> lock(g_web_views_mutex);
   auto it = g_web_views.find(view_id);
   if (it != g_web_views.end()) {
-    std::lock_guard<std::mutex> view_lock(it->second->m_mutex);
+    std::lock_guard lock(it->second->m_info_mutex);
     it->second->m_title_change_callback = callback;
   }
 }
 
 void set_favicon_change_callback(int view_id, FaviconChangeCallback callback) {
-  // std::lock_guard<std::mutex> lock(g_web_views_mutex);
   auto it = g_web_views.find(view_id);
   if (it != g_web_views.end()) {
-    std::lock_guard<std::mutex> view_lock(it->second->m_mutex);
+    std::lock_guard lock(it->second->m_info_mutex);
     it->second->m_favicon_change_callback = callback;
   }
 }
