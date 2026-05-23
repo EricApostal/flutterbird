@@ -2,16 +2,19 @@ import 'package:bird_core/bird_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 class BrowserTab extends ConsumerWidget {
   final int viewId;
   final bool selected;
+  final void Function() onTabSelected;
+  final void Function()? onTabDraggedDown;
   final void Function() onTabClosed;
   const BrowserTab({
     super.key,
     required this.viewId,
     required this.selected,
+    required this.onTabSelected,
+    this.onTabDraggedDown,
     required this.onTabClosed,
   });
 
@@ -20,83 +23,95 @@ class BrowserTab extends ConsumerWidget {
     final browserTab = ref.watch(browserTabProvider(viewId))!;
 
     final theme = Theme.of(context);
-    return Material(
-      borderRadius: .circular(8),
-      child: InkWell(
+    return GestureDetector(
+      onVerticalDragEnd: (details) {
+        if (details.primaryVelocity != null &&
+            details.primaryVelocity! > 700 &&
+            onTabDraggedDown != null) {
+          onTabDraggedDown!.call();
+        }
+      },
+      child: Material(
         borderRadius: .circular(8),
-        onTap: () {
-          HapticFeedback.lightImpact();
-          context.go("/browser/tab/$viewId");
-        },
-        child: Container(
-          width: 225,
-          decoration: BoxDecoration(
-            color: selected
-                ? theme.colorScheme.surfaceContainerHigh
-                : Colors.transparent,
-            borderRadius: const BorderRadius.vertical(
-              top: Radius.circular(8),
-              bottom: Radius.circular(8),
+        child: InkWell(
+          borderRadius: .circular(8),
+          onTap: () {
+            HapticFeedback.lightImpact();
+            onTabSelected();
+          },
+          child: Container(
+            width: 225,
+            decoration: BoxDecoration(
+              color: selected
+                  ? theme.colorScheme.surfaceContainerHigh
+                  : Colors.transparent,
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(8),
+                bottom: Radius.circular(8),
+              ),
             ),
-          ),
-          child: Row(
-            children: [
-              Expanded(
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: Padding(
-                    padding: const EdgeInsets.only(left: 12),
-                    child: Row(
-                      children: [
-                        ValueListenableBuilder<dynamic>(
-                          valueListenable: browserTab.faviconNotifier,
-                          builder: (context, image, child) {
-                            if (image != null) {
-                              return Padding(
-                                padding: const EdgeInsets.only(right: 8.0),
-                                child: RawImage(
-                                  image: image,
-                                  width: 16,
-                                  height: 16,
-                                  filterQuality: FilterQuality.high,
-                                ),
-                              );
-                            }
-                            return const SizedBox.shrink();
-                          },
-                        ),
-                        Expanded(
-                          child: ValueListenableBuilder<String>(
-                            valueListenable: browserTab.titleNotifier,
-                            builder: (context, title, child) {
-                              return Text(
-                                title,
-                                style: theme.textTheme.bodyMedium!.copyWith(
-                                  color: selected
-                                      ? theme.colorScheme.onSurface
-                                      : theme.colorScheme.onSurfaceVariant,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              );
+            child: Row(
+              children: [
+                Expanded(
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Padding(
+                      padding: const EdgeInsets.only(left: 12),
+                      child: Row(
+                        children: [
+                          ValueListenableBuilder<dynamic>(
+                            valueListenable: browserTab.faviconNotifier,
+                            builder: (context, image, child) {
+                              if (image != null) {
+                                return Padding(
+                                  padding: const EdgeInsets.only(right: 8.0),
+                                  child: RawImage(
+                                    image: image,
+                                    width: 16,
+                                    height: 16,
+                                    filterQuality: FilterQuality.high,
+                                  ),
+                                );
+                              }
+                              return const SizedBox.shrink();
                             },
                           ),
-                        ),
-                      ],
+                          Expanded(
+                            child: ValueListenableBuilder<String>(
+                              valueListenable: browserTab.titleNotifier,
+                              builder: (context, title, child) {
+                                return Text(
+                                  title,
+                                  style: theme.textTheme.bodyMedium!.copyWith(
+                                    color: selected
+                                        ? theme.colorScheme.onSurface
+                                        : theme.colorScheme.onSurfaceVariant,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                );
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
-              ),
-              IconButton(
-                icon: const Icon(Icons.close, size: 16),
-                onPressed: onTabClosed,
+                IconButton(
+                  icon: const Icon(Icons.close, size: 16),
+                  onPressed: onTabClosed,
 
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
-                splashRadius: 16,
-              ),
-              const SizedBox(width: 8),
-            ],
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(
+                    minWidth: 24,
+                    minHeight: 24,
+                  ),
+                  splashRadius: 16,
+                ),
+                const SizedBox(width: 8),
+              ],
+            ),
           ),
         ),
       ),

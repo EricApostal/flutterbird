@@ -7,29 +7,58 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutterbird/features/browser/components/tab.dart';
 import 'package:go_router/go_router.dart';
+import 'package:ladybird/ladybird.dart';
 
-class BrowserTabBar extends ConsumerStatefulWidget {
+class BrowserTabBar extends ConsumerWidget {
+  final int windowId;
   final int currentViewId;
-  const BrowserTabBar({super.key, required this.currentViewId});
+
+  const BrowserTabBar({
+    super.key,
+    required this.windowId,
+    required this.currentViewId,
+  });
 
   @override
-  ConsumerState<ConsumerStatefulWidget> createState() => _BrowserTabBarState();
-}
-
-class _BrowserTabBarState extends ConsumerState<BrowserTabBar> {
-  @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final layoutController = ref.read(browserWindowLayoutProvider.notifier);
 
-    final tabs = ref.watch(browserTabControllerProvider);
+    final allTabs = ref.watch(browserTabControllerProvider);
+    final windowTabIds = ref.watch(browserWindowTabIdsProvider(windowId));
+    final tabById = {for (final tab in allTabs) tab.viewId: tab};
+    final tabs = windowTabIds
+        .map((viewId) => tabById[viewId])
+        .whereType<LadybirdController>()
+        .toList();
+
+    if (tabs.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    final resolvedCurrentViewId = windowTabIds.contains(currentViewId)
+        ? currentViewId
+        : tabs.first.viewId;
+
     final currentTabController = ref.watch(
-      browserTabProvider(widget.currentViewId),
+      browserTabProvider(resolvedCurrentViewId),
     );
 
+    final isDetachedWindow = windowId != mainBrowserWindowId;
     final doLeftPadding = Platform.isMacOS;
 
     return Column(
       children: [
+        if (isDetachedWindow)
+          Container(
+            width: double.infinity,
+            color: theme.colorScheme.surfaceContainerHigh,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            child: Text(
+              'Swipe a tab down to merge it back into the main window.',
+              style: theme.textTheme.bodySmall,
+            ),
+          ),
         SizedBox(
           height: 45,
           child: Stack(
@@ -42,12 +71,12 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar> {
                   padding: const EdgeInsets.only(top: 4, bottom: 4),
                   scrollDirection: Axis.horizontal,
                   buildDefaultDragHandles: false,
+                  itemCount: tabs.length + 1,
                   itemBuilder: (context, index) {
                     if (index == tabs.length) {
-                      return ReorderableDragStartListener(
-                        key: ValueKey("add"),
-                        index: index,
-                        enabled: false,
+                      return Container(
+                        key: const ValueKey('add'),
+                        padding: const EdgeInsets.only(left: 4),
                         child: IconButton(
                           icon: const Icon(Icons.add, size: 20),
                           onPressed: () {
@@ -55,36 +84,89 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar> {
                                 .read(browserTabControllerProvider.notifier)
                                 .add();
 
-                            context.go("/browser/tab/${controller.viewId}");
+                            layoutController.addTabToWindow(
+                              windowId,
+                              controller.viewId,
+                              makeActive: true,
+                            );
+
+                            if (!isDetachedWindow) {
+                              context.go('/browser/tab/${controller.viewId}');
+                            }
                           },
                         ),
                       );
                     }
+
                     final id = tabs[index].viewId;
-                    return ReorderableDragStartListener(
+                    return ReorderableDelayedDragStartListener(
                       key: ValueKey(id),
                       index: index,
                       child: Padding(
-                        padding: const EdgeInsets.only(right: 2.0),
+                        padding: const EdgeInsets.only(right: 2),
                         child: BrowserTab(
-                          viewId: tabs[index].viewId,
-                          selected: id == widget.currentViewId,
+                          viewId: id,
+                          selected: id == resolvedCurrentViewId,
+                          onTabSelected: () {
+                            layoutController.setActiveTab(windowId, id);
+                            if (!isDetachedWindow) {
+                              context.go('/browser/tab/$id');
+                            }
+                          },
+                          onTabDraggedDown: () {
+                            HapticFeedback.mediumImpact();
+
+                            if (isDetachedWindow) {
+                              final merged = layoutController.mergeTabToMain(
+                                tabId: id,
+                                fromWindowId: windowId,
+                              );
+                              if (merged) {
+                                context.go('/browser/tab/$id');
+                              }
+                              return;
+                            }
+
+                            final detachedWindowId = layoutController.detachTab(
+                              tabId: id,
+                              fromWindowId: windowId,
+                            );
+                            if (detachedWindowId == null) {
+                              return;
+                            }
+
+                            final updatedLayout = ref.read(
+                              browserWindowLayoutProvider,
+                            );
+                            final activeMainTab = updatedLayout
+                                .windowById(mainBrowserWindowId)
+                                ?.activeViewId;
+                            if (activeMainTab != null) {
+                              context.go('/browser/tab/$activeMainTab');
+                            }
+                          },
                           onTabClosed: () {
                             HapticFeedback.lightImpact();
-                            if (id == widget.currentViewId) {
-                              if (tabs.length == 1) {
-                                // close application
-                                exit(0);
-                              }
-                              if (index == 0) {
-                                context.go("/browser/tab/${tabs[1].viewId}");
-                              } else {
-                                context.go(
-                                  "/browser/tab/${tabs[index - 1].viewId}",
+                            if (allTabs.length == 1) {
+                              exit(0);
+                            }
+
+                            final fallbackTab = layoutController
+                                .fallbackTabAfterClose(windowId, id);
+
+                            if (id == resolvedCurrentViewId &&
+                                fallbackTab != null) {
+                              if (isDetachedWindow) {
+                                layoutController.setActiveTab(
+                                  windowId,
+                                  fallbackTab,
                                 );
+                              } else {
+                                context.go('/browser/tab/$fallbackTab');
                               }
                             }
 
+                            layoutController.removeTab(id);
                             ref
                                 .read(browserTabControllerProvider.notifier)
                                 .remove(id);
@@ -101,18 +183,18 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar> {
                           child: child,
                         );
                       },
-                  itemCount: tabs.length + 1,
                   onReorder: (oldIndex, newIndex) {
-                    if (oldIndex == tabs.length) return;
+                    if (oldIndex == tabs.length) {
+                      return;
+                    }
                     if (oldIndex < newIndex) {
                       newIndex -= 1;
                     }
                     if (newIndex >= tabs.length) {
                       newIndex = tabs.length - 1;
                     }
-                    ref
-                        .read(browserTabControllerProvider.notifier)
-                        .reorder(oldIndex, newIndex);
+
+                    layoutController.reorderTab(windowId, oldIndex, newIndex);
                   },
                 ),
               ),
@@ -125,48 +207,42 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar> {
             children: [
               IconButton(
                 icon: const Icon(Icons.arrow_back, size: 20),
-                onPressed: () {
-                  currentTabController?.goBack();
-                },
+                onPressed: () => currentTabController?.goBack(),
                 splashRadius: 20,
               ),
               IconButton(
                 icon: const Icon(Icons.arrow_forward, size: 20),
-                onPressed: () {
-                  currentTabController?.goForward();
-                },
+                onPressed: () => currentTabController?.goForward(),
                 splashRadius: 20,
               ),
               IconButton(
                 icon: const Icon(Icons.refresh, size: 20),
-                onPressed: () {
-                  currentTabController?.reload();
-                },
+                onPressed: () => currentTabController?.reload(),
                 splashRadius: 20,
               ),
               const SizedBox(width: 8),
               Expanded(
-                child: ValueListenableBuilder<String>(
-                  valueListenable: currentTabController!.urlNotifier,
-                  builder: (context, url, child) {
-                    if (currentTabController.textController.text != url &&
-                        !FocusScope.of(context).hasFocus) {
-                      currentTabController.textController.text = url;
-                    }
-                    return TextField(
-                      onSubmitted: (value) {
-                        currentTabController.navigate(value);
-                      },
-                      controller: currentTabController.textController,
-                      decoration: _buildInputDecoration(),
-                      style: theme.textTheme.bodyMedium!.copyWith(
-                        color: theme.colorScheme.onSurface,
-                        fontWeight: FontWeight.w500,
-                        fontSize: 13,
+                child: currentTabController == null
+                    ? const SizedBox.shrink()
+                    : ValueListenableBuilder<String>(
+                        valueListenable: currentTabController.urlNotifier,
+                        builder: (context, url, child) {
+                          if (currentTabController.textController.text != url &&
+                              !FocusScope.of(context).hasFocus) {
+                            currentTabController.textController.text = url;
+                          }
+                          return TextField(
+                            onSubmitted: currentTabController.navigate,
+                            controller: currentTabController.textController,
+                            decoration: _buildInputDecoration(context),
+                            style: theme.textTheme.bodyMedium!.copyWith(
+                              color: theme.colorScheme.onSurface,
+                              fontWeight: FontWeight.w500,
+                              fontSize: 13,
+                            ),
+                          );
+                        },
                       ),
-                    );
-                  },
-                ),
               ),
             ],
           ),
@@ -175,25 +251,21 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar> {
     );
   }
 
-  InputDecoration _buildInputDecoration() {
+  InputDecoration _buildInputDecoration(BuildContext context) {
     final theme = Theme.of(context);
-    final radius = 12.0;
+    const radius = 12.0;
 
     return InputDecoration(
-      hintText: "Search",
+      hintText: 'Search',
       filled: true,
       fillColor: theme.colorScheme.surfaceContainer,
-
       isDense: true,
-
       contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-
       hintStyle: theme.textTheme.bodyMedium!.copyWith(
         color: theme.colorScheme.onSurface.withAlpha(200),
-        fontWeight: .w500,
+        fontWeight: FontWeight.w500,
         fontSize: 13,
       ),
-
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(radius),
         borderSide: BorderSide(

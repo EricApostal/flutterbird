@@ -1,5 +1,6 @@
 import 'package:flutterbird/features/browser/screens/browser.dart';
 import 'package:flutterbird/features/browser/screens/loading.dart';
+import 'package:bird_core/bird_core.dart';
 import 'package:go_router/go_router.dart';
 
 final routerController = GoRouter(
@@ -17,7 +18,10 @@ final routerController = GoRouter(
           path: "tab/:viewId",
           builder: (context, state) {
             final viewId = int.parse(state.pathParameters["viewId"] as String);
-            return BrowserWindowScreen(viewId: viewId);
+            return BrowserWindowScreen(
+              windowId: mainBrowserWindowId,
+              routedViewId: viewId,
+            );
           },
         ),
       ],

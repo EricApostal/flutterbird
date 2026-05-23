@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:bitsdojo_window/bitsdojo_window.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutterbird/features/browser/components/window_anchor.dart';
 import 'package:flutterbird/features/router/controller.dart';
 
 void main() {
@@ -31,6 +32,9 @@ class _MainAppState extends State<MainApp> {
   Widget build(BuildContext context) {
     return MaterialApp.router(
       routerConfig: routerController,
+      builder: (context, child) {
+        return BrowserWindowAnchor(child: child ?? const SizedBox.shrink());
+      },
       themeMode: .dark,
       darkTheme: ThemeData(
         colorScheme: .fromSeed(
