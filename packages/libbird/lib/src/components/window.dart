@@ -32,26 +32,18 @@ class _LadybirdViewState extends State<LadybirdView>
     _momentumTicker = createTicker(_onMomentumTick);
     widget.controller.onResize = () {
       if (mounted) {
-        _recreateTexture();
+        // Keep the same texture and only refresh layout metrics when
+        // the native surface dimensions change.
+        setState(() {});
       }
     };
     _recreateTexture();
-    _scheduleTick();
     if (!widget.controller.hasNavigatedInitial) {
       widget.controller.hasNavigatedInitial = true;
       WidgetsBinding.instance.addPostFrameCallback(
         (_) => widget.controller.navigate(widget.controller.initialUrl),
       );
     }
-  }
-
-  void _scheduleTick() {
-    SchedulerBinding.instance.scheduleFrameCallback((_) {
-      if (mounted) {
-        setState(() {});
-      }
-      _scheduleTick();
-    });
   }
 
   @override
@@ -67,7 +59,7 @@ class _LadybirdViewState extends State<LadybirdView>
 
       widget.controller.onResize = () {
         if (mounted) {
-          _recreateTexture();
+          setState(() {});
         }
       };
 
