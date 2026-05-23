@@ -49,6 +49,8 @@ struct _LadybirdTexture {
   // Zero-copy dma-buf import state.
   std::array<DmaBufImageSlot, 2> dmabuf_slots;
   bool dmabuf_import_disabled;
+  bool logged_dmabuf_active;
+  bool logged_cpu_fallback;
 
   uint64_t last_frame_generation;
 };
@@ -144,14 +146,34 @@ static bool try_populate_dmabuf(LadybirdTexture *self, uint32_t *target,
 
   LadybirdLinuxDmaBufFrame frame = {};
   if (!acquire_latest_linux_dmabuf_frame(self->view_id, &frame) ||
-      frame.fd < 0 || frame.width <= 0 || frame.height <= 0 || frame.pitch <= 0)
+      frame.fd < 0 || frame.width <= 0 || frame.height <= 0 ||
+      frame.pitch <= 0) {
+    if (!self->logged_cpu_fallback) {
+      g_message(
+          "[ladybird] view %d: DMA-BUF frame unavailable; using CPU upload "
+          "fallback",
+          self->view_id);
+      self->logged_cpu_fallback = true;
+    }
     return false;
+  }
 
   EGLDisplay display = eglGetCurrentDisplay();
   if (!can_import_dmabuf(display)) {
     ::close(frame.fd);
     self->dmabuf_import_disabled = true;
     release_all_dmabuf_slots(self);
+    if (!self->logged_cpu_fallback) {
+      g_warning(
+          "[ladybird] view %d: EGL DMA-BUF import unavailable "
+          "(EGL_EXT_image_dma_buf_import=%d, GL_OES_EGL_image=%d); "
+          "falling back to CPU uploads",
+          self->view_id,
+          display != EGL_NO_DISPLAY &&
+              epoxy_has_egl_extension(display, "EGL_EXT_image_dma_buf_import"),
+          epoxy_has_gl_extension("GL_OES_EGL_image"));
+      self->logged_cpu_fallback = true;
+    }
     return false;
   }
 
@@ -209,7 +231,14 @@ static bool try_populate_dmabuf(LadybirdTexture *self, uint32_t *target,
         display, EGL_NO_CONTEXT, EGL_LINUX_DMA_BUF_EXT, nullptr,
         has_modifiers ? attribs_with_modifiers : attribs_without_modifiers);
     if (image == EGL_NO_IMAGE_KHR) {
+      auto egl_error = eglGetError();
       ::close(frame.fd);
+      if (!self->logged_cpu_fallback) {
+        g_warning("[ladybird] view %d: eglCreateImageKHR dma-buf import failed "
+                  "(error=0x%04x); using CPU uploads",
+                  self->view_id, static_cast<unsigned>(egl_error));
+        self->logged_cpu_fallback = true;
+      }
       return false;
     }
 
@@ -239,6 +268,16 @@ static bool try_populate_dmabuf(LadybirdTexture *self, uint32_t *target,
 
   self->texture_width = slot.width;
   self->texture_height = slot.height;
+
+  if (!self->logged_dmabuf_active) {
+    g_message(
+        "[ladybird] view %d: DMA-BUF zero-copy path active (%dx%d pitch=%d "
+        "drm=0x%08x mod=0x%llx)",
+        self->view_id, slot.width, slot.height, slot.pitch, slot.drm_format,
+        static_cast<unsigned long long>(slot.modifier));
+    self->logged_dmabuf_active = true;
+  }
+
   *target = GL_TEXTURE_2D;
   *name = self->texture_name;
   *width = static_cast<uint32_t>(slot.width);
@@ -388,6 +427,8 @@ static void ladybird_texture_init(LadybirdTexture *self) {
   for (auto &slot : self->dmabuf_slots)
     slot = DmaBufImageSlot{};
   self->dmabuf_import_disabled = false;
+  self->logged_dmabuf_active = false;
+  self->logged_cpu_fallback = false;
   self->last_frame_generation = 0;
 }
 
@@ -414,26 +455,21 @@ struct _LadybirdPlugin {
 G_DEFINE_TYPE(LadybirdPlugin, ladybird_plugin, g_object_get_type())
 
 static bool g_ladybird_initialized = false;
-static constexpr guint kLadybirdTickIntervalMs = 8;
+static constexpr guint kLadybirdTickIntervalMs = 4;
+
+static void ladybird_frame_ready_callback(void *context) {
+  auto *texture = static_cast<LadybirdTexture *>(context);
+  if (!texture || !texture->texture_registrar)
+    return;
+
+  texture->last_frame_generation = get_frame_generation(texture->view_id);
+  fl_texture_registrar_mark_texture_frame_available(texture->texture_registrar,
+                                                    FL_TEXTURE(texture));
+}
 
 static gboolean ladybird_tick_callback(gpointer user_data) {
-  LadybirdPlugin *plugin = LADYBIRD_PLUGIN(user_data);
+  (void)user_data;
   tick_ladybird();
-
-  if (plugin && plugin->textures) {
-    for (auto const &it : *plugin->textures) {
-      LadybirdTexture *texture = it.second;
-      if (texture && texture->texture_registrar) {
-        uint64_t generation = get_frame_generation(texture->view_id);
-        if (generation != 0 && generation != texture->last_frame_generation) {
-          texture->last_frame_generation = generation;
-          fl_texture_registrar_mark_texture_frame_available(
-              texture->texture_registrar, FL_TEXTURE(texture));
-        }
-      }
-    }
-  }
-
   return G_SOURCE_CONTINUE;
 }
 
@@ -466,8 +502,8 @@ static void ladybird_plugin_handle_method_call(LadybirdPlugin *self,
       fl_texture_registrar_register_texture(self->texture_registrar,
                                             FL_TEXTURE(texture));
 
-      // GTK timer + frame generation drive texture notifications.
-      set_frame_callback((int)view_id, nullptr, nullptr);
+      // Drive texture presentation directly from native frame readiness.
+      set_frame_callback((int)view_id, ladybird_frame_ready_callback, texture);
 
       int64_t texture_id = (int64_t)fl_texture_get_id(FL_TEXTURE(texture));
 
@@ -514,6 +550,13 @@ static void ladybird_plugin_handle_method_call(LadybirdPlugin *self,
 static void ladybird_plugin_dispose(GObject *object) {
   LadybirdPlugin *self = LADYBIRD_PLUGIN(object);
   if (self->textures) {
+    for (auto const &it : *self->textures) {
+      if (!it.second)
+        continue;
+      set_frame_callback(it.second->view_id, nullptr, nullptr);
+      fl_texture_registrar_unregister_texture(self->texture_registrar,
+                                              FL_TEXTURE(it.second));
+    }
     delete self->textures;
     self->textures = nullptr;
   }
