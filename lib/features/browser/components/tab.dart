@@ -29,7 +29,7 @@ class BrowserTab extends ConsumerWidget {
           context.go("/browser/tab/$viewId");
         },
         child: Container(
-          width: 200,
+          width: 225,
           decoration: BoxDecoration(
             color: selected
                 ? theme.colorScheme.surfaceContainer
@@ -71,7 +71,7 @@ class BrowserTab extends ConsumerWidget {
                             builder: (context, title, child) {
                               return Text(
                                 title,
-                                style: theme.textTheme.labelMedium!.copyWith(
+                                style: theme.textTheme.bodyMedium!.copyWith(
                                   color: selected
                                       ? theme.colorScheme.onSurface
                                       : theme.colorScheme.onSurfaceVariant,

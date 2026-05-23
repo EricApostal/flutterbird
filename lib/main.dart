@@ -10,7 +10,7 @@ void main() {
 
   if (Platform.isMacOS || Platform.isLinux) {
     doWhenWindowReady(() {
-      const initialSize = Size(600, 450);
+      const initialSize = Size(800, 600);
       appWindow.minSize = initialSize;
       appWindow.size = initialSize;
       appWindow.alignment = Alignment.center;
@@ -32,14 +32,17 @@ class _MainAppState extends State<MainApp> {
     return MaterialApp.router(
       routerConfig: routerController,
       themeMode: .dark,
-
       darkTheme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: Color.fromARGB(255, 18, 34, 127),
+        colorScheme: .fromSeed(
           brightness: .dark,
+          seedColor: Color.fromARGB(255, 35, 174, 255),
         ),
+        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
       ),
-      theme: ThemeData.dark(),
+      theme: ThemeData(
+        colorScheme: .fromSeed(seedColor: Color.fromARGB(255, 35, 141, 255)),
+        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      ),
     );
   }
 }
