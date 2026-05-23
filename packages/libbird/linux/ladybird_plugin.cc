@@ -36,6 +36,8 @@ struct _LadybirdTexture {
   FlTextureGL parent_instance;
   int view_id;
   FlTextureRegistrar *texture_registrar;
+  bool frame_notify_queued;
+  guint frame_notify_source_id;
 
   // CPU fallback path state.
   uint8_t *packed_frame_buffer;
@@ -289,8 +291,9 @@ static void ensure_gl_texture(LadybirdTexture *self) {
   if (self->texture_name == 0) {
     glGenTextures(1, &self->texture_name);
     glBindTexture(GL_TEXTURE_2D, self->texture_name);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    // Match Qt-style unsmoothed bitmap presentation.
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
   } else {
@@ -402,6 +405,12 @@ static gboolean ladybird_texture_populate(FlTextureGL *texture,
 
 static void ladybird_texture_dispose(GObject *object) {
   LadybirdTexture *self = LADYBIRD_TEXTURE(object);
+  if (self->frame_notify_source_id != 0) {
+    g_source_remove(self->frame_notify_source_id);
+    self->frame_notify_source_id = 0;
+  }
+  self->frame_notify_queued = false;
+
   release_all_dmabuf_slots(self);
   if (self->packed_frame_buffer) {
     g_free(self->packed_frame_buffer);
@@ -419,6 +428,8 @@ static void ladybird_texture_class_init(LadybirdTextureClass *klass) {
 static void ladybird_texture_init(LadybirdTexture *self) {
   self->view_id = -1;
   self->texture_registrar = nullptr;
+  self->frame_notify_queued = false;
+  self->frame_notify_source_id = 0;
   self->packed_frame_buffer = nullptr;
   self->packed_frame_capacity = 0;
   self->texture_name = 0;
@@ -455,7 +466,23 @@ struct _LadybirdPlugin {
 G_DEFINE_TYPE(LadybirdPlugin, ladybird_plugin, g_object_get_type())
 
 static bool g_ladybird_initialized = false;
-static constexpr guint kLadybirdTickIntervalMs = 4;
+static constexpr guint kLadybirdTickIntervalMs = 1;
+
+static gboolean ladybird_dispatch_frame_available(gpointer user_data) {
+  auto *texture = static_cast<LadybirdTexture *>(user_data);
+  if (!texture)
+    return G_SOURCE_REMOVE;
+
+  texture->frame_notify_source_id = 0;
+  texture->frame_notify_queued = false;
+
+  if (!texture->texture_registrar)
+    return G_SOURCE_REMOVE;
+
+  fl_texture_registrar_mark_texture_frame_available(texture->texture_registrar,
+                                                    FL_TEXTURE(texture));
+  return G_SOURCE_REMOVE;
+}
 
 static void ladybird_frame_ready_callback(void *context) {
   auto *texture = static_cast<LadybirdTexture *>(context);
@@ -463,8 +490,13 @@ static void ladybird_frame_ready_callback(void *context) {
     return;
 
   texture->last_frame_generation = get_frame_generation(texture->view_id);
-  fl_texture_registrar_mark_texture_frame_available(texture->texture_registrar,
-                                                    FL_TEXTURE(texture));
+  if (texture->frame_notify_queued)
+    return;
+
+  texture->frame_notify_queued = true;
+  texture->frame_notify_source_id =
+      g_idle_add_full(G_PRIORITY_HIGH_IDLE, ladybird_dispatch_frame_available,
+                      texture, nullptr);
 }
 
 static gboolean ladybird_tick_callback(gpointer user_data) {
@@ -529,6 +561,11 @@ static void ladybird_plugin_handle_method_call(LadybirdPlugin *self,
           FlTexture *texture = FL_TEXTURE(l_texture);
 
           set_frame_callback(l_texture->view_id, nullptr, nullptr);
+          if (l_texture->frame_notify_source_id != 0) {
+            g_source_remove(l_texture->frame_notify_source_id);
+            l_texture->frame_notify_source_id = 0;
+          }
+          l_texture->frame_notify_queued = false;
 
           fl_texture_registrar_unregister_texture(self->texture_registrar,
                                                   texture);
@@ -554,6 +591,11 @@ static void ladybird_plugin_dispose(GObject *object) {
       if (!it.second)
         continue;
       set_frame_callback(it.second->view_id, nullptr, nullptr);
+      if (it.second->frame_notify_source_id != 0) {
+        g_source_remove(it.second->frame_notify_source_id);
+        it.second->frame_notify_source_id = 0;
+      }
+      it.second->frame_notify_queued = false;
       fl_texture_registrar_unregister_texture(self->texture_registrar,
                                               FL_TEXTURE(it.second));
     }
