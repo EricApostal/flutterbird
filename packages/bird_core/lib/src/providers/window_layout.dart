@@ -5,6 +5,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/src/widgets/_window.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
+import 'browser.dart';
 
 part 'window_layout.g.dart';
 
@@ -253,11 +254,23 @@ class BrowserWindowLayout extends _$BrowserWindowLayout {
 
   int? detachTab({required int tabId, required int fromWindowId}) {
     final sourceWindow = state.windowById(fromWindowId);
-    if (sourceWindow == null || sourceWindow.tabIds.length <= 1) {
+    if (sourceWindow == null) {
       return null;
     }
     if (!sourceWindow.tabIds.contains(tabId)) {
       return null;
+    }
+
+    var replacementMainTabId = -1;
+    if (sourceWindow.tabIds.length <= 1) {
+      if (fromWindowId != mainBrowserWindowId) {
+        return null;
+      }
+
+      final replacementController = ref
+          .read(browserTabControllerProvider.notifier)
+          .add();
+      replacementMainTabId = replacementController.viewId;
     }
 
     final detachedController = RegularWindowController(
@@ -268,6 +281,9 @@ class BrowserWindowLayout extends _$BrowserWindowLayout {
     final remainingTabs = sourceWindow.tabIds
         .where((id) => id != tabId)
         .toList();
+    if (replacementMainTabId != -1) {
+      remainingTabs.add(replacementMainTabId);
+    }
     final sourceActive = sourceWindow.activeViewId == tabId
         ? remainingTabs.first
         : sourceWindow.activeViewId;

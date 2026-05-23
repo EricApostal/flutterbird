@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 class BrowserTab extends ConsumerWidget {
   final int viewId;
   final bool selected;
+  final Widget? dragHandle;
   final void Function() onTabSelected;
   final void Function()? onTabDraggedDown;
   final void Function() onTabClosed;
@@ -13,6 +14,7 @@ class BrowserTab extends ConsumerWidget {
     super.key,
     required this.viewId,
     required this.selected,
+    this.dragHandle,
     required this.onTabSelected,
     this.onTabDraggedDown,
     required this.onTabClosed,
@@ -24,9 +26,10 @@ class BrowserTab extends ConsumerWidget {
 
     final theme = Theme.of(context);
     return GestureDetector(
+      behavior: HitTestBehavior.opaque,
       onVerticalDragEnd: (details) {
         if (details.primaryVelocity != null &&
-            details.primaryVelocity! > 700 &&
+            details.primaryVelocity! > 200 &&
             onTabDraggedDown != null) {
           onTabDraggedDown!.call();
         }
@@ -109,6 +112,7 @@ class BrowserTab extends ConsumerWidget {
                   ),
                   splashRadius: 16,
                 ),
+                if (dragHandle != null) dragHandle!,
                 const SizedBox(width: 8),
               ],
             ),

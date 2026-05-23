@@ -99,79 +99,86 @@ class BrowserTabBar extends ConsumerWidget {
                     }
 
                     final id = tabs[index].viewId;
-                    return ReorderableDelayedDragStartListener(
+                    return Padding(
                       key: ValueKey(id),
-                      index: index,
-                      child: Padding(
-                        padding: const EdgeInsets.only(right: 2),
-                        child: BrowserTab(
-                          viewId: id,
-                          selected: id == resolvedCurrentViewId,
-                          onTabSelected: () {
-                            layoutController.setActiveTab(windowId, id);
-                            if (!isDetachedWindow) {
-                              context.go('/browser/tab/$id');
-                            }
-                          },
-                          onTabDraggedDown: () {
-                            HapticFeedback.mediumImpact();
+                      padding: const EdgeInsets.only(right: 2),
+                      child: BrowserTab(
+                        viewId: id,
+                        selected: id == resolvedCurrentViewId,
+                        dragHandle: ReorderableDragStartListener(
+                          index: index,
+                          child: const Tooltip(
+                            message: 'Drag to reorder',
+                            child: Padding(
+                              padding: EdgeInsets.only(right: 4),
+                              child: Icon(Icons.drag_indicator, size: 14),
+                            ),
+                          ),
+                        ),
+                        onTabSelected: () {
+                          layoutController.setActiveTab(windowId, id);
+                          if (!isDetachedWindow) {
+                            context.go('/browser/tab/$id');
+                          }
+                        },
+                        onTabDraggedDown: () {
+                          HapticFeedback.mediumImpact();
 
-                            if (isDetachedWindow) {
-                              final merged = layoutController.mergeTabToMain(
-                                tabId: id,
-                                fromWindowId: windowId,
-                              );
-                              if (merged) {
-                                context.go('/browser/tab/$id');
-                              }
-                              return;
-                            }
-
-                            final detachedWindowId = layoutController.detachTab(
+                          if (isDetachedWindow) {
+                            final merged = layoutController.mergeTabToMain(
                               tabId: id,
                               fromWindowId: windowId,
                             );
-                            if (detachedWindowId == null) {
-                              return;
+                            if (merged) {
+                              context.go('/browser/tab/$id');
                             }
+                            return;
+                          }
 
-                            final updatedLayout = ref.read(
-                              browserWindowLayoutProvider,
-                            );
-                            final activeMainTab = updatedLayout
-                                .windowById(mainBrowserWindowId)
-                                ?.activeViewId;
-                            if (activeMainTab != null) {
-                              context.go('/browser/tab/$activeMainTab');
+                          final detachedWindowId = layoutController.detachTab(
+                            tabId: id,
+                            fromWindowId: windowId,
+                          );
+                          if (detachedWindowId == null) {
+                            return;
+                          }
+
+                          final updatedLayout = ref.read(
+                            browserWindowLayoutProvider,
+                          );
+                          final activeMainTab = updatedLayout
+                              .windowById(mainBrowserWindowId)
+                              ?.activeViewId;
+                          if (activeMainTab != null) {
+                            context.go('/browser/tab/$activeMainTab');
+                          }
+                        },
+                        onTabClosed: () {
+                          HapticFeedback.lightImpact();
+                          if (allTabs.length == 1) {
+                            exit(0);
+                          }
+
+                          final fallbackTab = layoutController
+                              .fallbackTabAfterClose(windowId, id);
+
+                          if (id == resolvedCurrentViewId &&
+                              fallbackTab != null) {
+                            if (isDetachedWindow) {
+                              layoutController.setActiveTab(
+                                windowId,
+                                fallbackTab,
+                              );
+                            } else {
+                              context.go('/browser/tab/$fallbackTab');
                             }
-                          },
-                          onTabClosed: () {
-                            HapticFeedback.lightImpact();
-                            if (allTabs.length == 1) {
-                              exit(0);
-                            }
+                          }
 
-                            final fallbackTab = layoutController
-                                .fallbackTabAfterClose(windowId, id);
-
-                            if (id == resolvedCurrentViewId &&
-                                fallbackTab != null) {
-                              if (isDetachedWindow) {
-                                layoutController.setActiveTab(
-                                  windowId,
-                                  fallbackTab,
-                                );
-                              } else {
-                                context.go('/browser/tab/$fallbackTab');
-                              }
-                            }
-
-                            layoutController.removeTab(id);
-                            ref
-                                .read(browserTabControllerProvider.notifier)
-                                .remove(id);
-                          },
-                        ),
+                          layoutController.removeTab(id);
+                          ref
+                              .read(browserTabControllerProvider.notifier)
+                              .remove(id);
+                        },
                       ),
                     );
                   },
