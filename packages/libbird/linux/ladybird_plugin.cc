@@ -8,6 +8,7 @@
 #include <sys/utsname.h>
 #include <unistd.h>
 
+#include <array>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -15,6 +16,21 @@
 
 #include "engine.h"
 #include "ladybird_plugin_private.h"
+
+struct DmaBufImageSlot {
+  EGLDisplay display{EGL_NO_DISPLAY};
+  EGLImageKHR image{EGL_NO_IMAGE_KHR};
+  int fd{-1};
+  dev_t dev{0};
+  ino_t ino{0};
+  int width{0};
+  int height{0};
+  int pitch{0};
+  uint32_t drm_format{0};
+  uint64_t modifier{0};
+  bool premultiplied{true};
+  uint64_t last_generation{0};
+};
 
 struct _LadybirdTexture {
   FlTextureGL parent_instance;
@@ -31,15 +47,7 @@ struct _LadybirdTexture {
   int texture_height;
 
   // Zero-copy dma-buf import state.
-  EGLDisplay egl_display;
-  EGLImageKHR egl_image;
-  int egl_image_fd;
-  int egl_image_width;
-  int egl_image_height;
-  int egl_image_pitch;
-  uint32_t egl_image_drm_format;
-  uint64_t egl_image_modifier;
-  bool egl_image_premultiplied;
+  std::array<DmaBufImageSlot, 2> dmabuf_slots;
   bool dmabuf_import_disabled;
 
   uint64_t last_frame_generation;
@@ -52,34 +60,70 @@ G_DEFINE_TYPE(LadybirdTexture, ladybird_texture, fl_texture_gl_get_type())
 
 static void ensure_gl_texture(LadybirdTexture *self);
 
-static void release_dmabuf_image(LadybirdTexture *self) {
-  if (self->egl_image != EGL_NO_IMAGE_KHR &&
-      self->egl_display != EGL_NO_DISPLAY) {
-    eglDestroyImageKHR(self->egl_display, self->egl_image);
-    self->egl_image = EGL_NO_IMAGE_KHR;
+static void release_dmabuf_slot(DmaBufImageSlot *slot) {
+  if (slot->image != EGL_NO_IMAGE_KHR && slot->display != EGL_NO_DISPLAY) {
+    eglDestroyImageKHR(slot->display, slot->image);
+    slot->image = EGL_NO_IMAGE_KHR;
   }
-  if (self->egl_image_fd >= 0) {
-    ::close(self->egl_image_fd);
-    self->egl_image_fd = -1;
+  if (slot->fd >= 0) {
+    ::close(slot->fd);
+    slot->fd = -1;
   }
-  self->egl_image_width = 0;
-  self->egl_image_height = 0;
-  self->egl_image_pitch = 0;
-  self->egl_image_drm_format = 0;
-  self->egl_image_modifier = 0;
-  self->egl_image_premultiplied = true;
+  slot->display = EGL_NO_DISPLAY;
+  slot->dev = 0;
+  slot->ino = 0;
+  slot->width = 0;
+  slot->height = 0;
+  slot->pitch = 0;
+  slot->drm_format = 0;
+  slot->modifier = 0;
+  slot->premultiplied = true;
+  slot->last_generation = 0;
 }
 
-static bool same_dmabuf_object(int fd_a, int fd_b) {
-  if (fd_a < 0 || fd_b < 0)
-    return false;
+static void release_all_dmabuf_slots(LadybirdTexture *self) {
+  for (auto &slot : self->dmabuf_slots)
+    release_dmabuf_slot(&slot);
+}
 
-  struct stat a = {};
-  struct stat b = {};
-  if (::fstat(fd_a, &a) != 0 || ::fstat(fd_b, &b) != 0)
-    return false;
+static int find_dmabuf_slot(LadybirdTexture *self, EGLDisplay display,
+                            dev_t dev, ino_t ino, int width, int height,
+                            int pitch, uint32_t drm_format, uint64_t modifier,
+                            bool premultiplied) {
+  for (size_t i = 0; i < self->dmabuf_slots.size(); ++i) {
+    auto const &slot = self->dmabuf_slots[i];
+    if (slot.image == EGL_NO_IMAGE_KHR)
+      continue;
+    if (slot.display != display)
+      continue;
+    if (slot.dev != dev || slot.ino != ino)
+      continue;
+    if (slot.width != width || slot.height != height || slot.pitch != pitch)
+      continue;
+    if (slot.drm_format != drm_format || slot.modifier != modifier)
+      continue;
+    if (slot.premultiplied != premultiplied)
+      continue;
+    return static_cast<int>(i);
+  }
+  return -1;
+}
 
-  return a.st_dev == b.st_dev && a.st_ino == b.st_ino;
+static int choose_dmabuf_slot_to_replace(LadybirdTexture *self) {
+  for (size_t i = 0; i < self->dmabuf_slots.size(); ++i) {
+    if (self->dmabuf_slots[i].image == EGL_NO_IMAGE_KHR)
+      return static_cast<int>(i);
+  }
+
+  int oldest_index = 0;
+  uint64_t oldest_generation = self->dmabuf_slots[0].last_generation;
+  for (size_t i = 1; i < self->dmabuf_slots.size(); ++i) {
+    if (self->dmabuf_slots[i].last_generation < oldest_generation) {
+      oldest_generation = self->dmabuf_slots[i].last_generation;
+      oldest_index = static_cast<int>(i);
+    }
+  }
+  return oldest_index;
 }
 
 static bool can_import_dmabuf(EGLDisplay display) {
@@ -107,20 +151,21 @@ static bool try_populate_dmabuf(LadybirdTexture *self, uint32_t *target,
   if (!can_import_dmabuf(display)) {
     ::close(frame.fd);
     self->dmabuf_import_disabled = true;
+    release_all_dmabuf_slots(self);
     return false;
   }
 
-  bool needs_recreate = self->egl_image == EGL_NO_IMAGE_KHR ||
-                        self->egl_display != display ||
-                        self->egl_image_width != frame.width ||
-                        self->egl_image_height != frame.height ||
-                        self->egl_image_pitch != frame.pitch ||
-                        self->egl_image_drm_format != frame.drm_format ||
-                        self->egl_image_modifier != frame.modifier ||
-                        self->egl_image_premultiplied != frame.premultiplied ||
-                        !same_dmabuf_object(frame.fd, self->egl_image_fd);
+  struct stat st = {};
+  if (::fstat(frame.fd, &st) != 0) {
+    ::close(frame.fd);
+    return false;
+  }
 
-  if (needs_recreate) {
+  int slot_index = find_dmabuf_slot(
+      self, display, st.st_dev, st.st_ino, frame.width, frame.height,
+      frame.pitch, frame.drm_format, frame.modifier, frame.premultiplied);
+
+  if (slot_index < 0) {
     bool has_modifiers = epoxy_has_egl_extension(
         display, "EGL_EXT_image_dma_buf_import_modifiers");
 
@@ -168,29 +213,36 @@ static bool try_populate_dmabuf(LadybirdTexture *self, uint32_t *target,
       return false;
     }
 
-    release_dmabuf_image(self);
-    self->egl_display = display;
-    self->egl_image = image;
-    self->egl_image_fd = frame.fd;
-    self->egl_image_width = frame.width;
-    self->egl_image_height = frame.height;
-    self->egl_image_pitch = frame.pitch;
-    self->egl_image_drm_format = frame.drm_format;
-    self->egl_image_modifier = frame.modifier;
-    self->egl_image_premultiplied = frame.premultiplied;
+    slot_index = choose_dmabuf_slot_to_replace(self);
+    auto &slot = self->dmabuf_slots[slot_index];
+    release_dmabuf_slot(&slot);
+    slot.display = display;
+    slot.image = image;
+    slot.fd = frame.fd;
+    slot.dev = st.st_dev;
+    slot.ino = st.st_ino;
+    slot.width = frame.width;
+    slot.height = frame.height;
+    slot.pitch = frame.pitch;
+    slot.drm_format = frame.drm_format;
+    slot.modifier = frame.modifier;
+    slot.premultiplied = frame.premultiplied;
   } else {
     ::close(frame.fd);
   }
 
-  ensure_gl_texture(self);
-  glEGLImageTargetTexture2DOES(GL_TEXTURE_2D, self->egl_image);
+  auto &slot = self->dmabuf_slots[slot_index];
+  slot.last_generation = frame.generation;
 
-  self->texture_width = self->egl_image_width;
-  self->texture_height = self->egl_image_height;
+  ensure_gl_texture(self);
+  glEGLImageTargetTexture2DOES(GL_TEXTURE_2D, slot.image);
+
+  self->texture_width = slot.width;
+  self->texture_height = slot.height;
   *target = GL_TEXTURE_2D;
   *name = self->texture_name;
-  *width = static_cast<uint32_t>(self->egl_image_width);
-  *height = static_cast<uint32_t>(self->egl_image_height);
+  *width = static_cast<uint32_t>(slot.width);
+  *height = static_cast<uint32_t>(slot.height);
   return true;
 }
 
@@ -226,7 +278,6 @@ static gboolean ladybird_texture_populate(FlTextureGL *texture,
     return TRUE;
 
   ensure_gl_texture(self);
-  release_dmabuf_image(self);
 
   auto publish_black = [&]() {
     static uint8_t kBlackPixel[] = {0, 0, 0, 255};
@@ -312,7 +363,7 @@ static gboolean ladybird_texture_populate(FlTextureGL *texture,
 
 static void ladybird_texture_dispose(GObject *object) {
   LadybirdTexture *self = LADYBIRD_TEXTURE(object);
-  release_dmabuf_image(self);
+  release_all_dmabuf_slots(self);
   if (self->packed_frame_buffer) {
     g_free(self->packed_frame_buffer);
     self->packed_frame_buffer = nullptr;
@@ -334,15 +385,8 @@ static void ladybird_texture_init(LadybirdTexture *self) {
   self->texture_name = 0;
   self->texture_width = 0;
   self->texture_height = 0;
-  self->egl_display = EGL_NO_DISPLAY;
-  self->egl_image = EGL_NO_IMAGE_KHR;
-  self->egl_image_fd = -1;
-  self->egl_image_width = 0;
-  self->egl_image_height = 0;
-  self->egl_image_pitch = 0;
-  self->egl_image_drm_format = 0;
-  self->egl_image_modifier = 0;
-  self->egl_image_premultiplied = true;
+  for (auto &slot : self->dmabuf_slots)
+    slot = DmaBufImageSlot{};
   self->dmabuf_import_disabled = false;
   self->last_frame_generation = 0;
 }
