@@ -17,6 +17,8 @@ struct _LadybirdTexture {
   int view_id;
   FlTextureRegistrar *texture_registrar;
   void *last_frame_handle;
+  uint8_t *packed_frame_buffer;
+  size_t packed_frame_capacity;
   uint64_t last_frame_generation;
 };
 
@@ -69,10 +71,49 @@ static gboolean ladybird_texture_copy_pixels(FlPixelBufferTexture *texture,
     return TRUE;
   }
 
+  auto tight_row_bytes = static_cast<size_t>(w) * 4;
+
+  // Flutter Linux pixel textures expect tightly packed BGRA rows.
+  // If source pitch is larger than width*4, repack rows into a contiguous
+  // buffer to avoid corruption after resizes.
+  if (pitch != static_cast<int>(tight_row_bytes)) {
+    if (pitch < static_cast<int>(tight_row_bytes)) {
+      release_latest_frame(frame_handle);
+      fill_dummy_frame(out_buffer, width, height);
+      return TRUE;
+    }
+
+    auto required = tight_row_bytes * static_cast<size_t>(h);
+    if (self->packed_frame_capacity < required) {
+      auto *new_buffer = static_cast<uint8_t *>(
+          g_realloc(self->packed_frame_buffer, required));
+      if (!new_buffer) {
+        release_latest_frame(frame_handle);
+        fill_dummy_frame(out_buffer, width, height);
+        return TRUE;
+      }
+      self->packed_frame_buffer = new_buffer;
+      self->packed_frame_capacity = required;
+    }
+
+    for (int row = 0; row < h; ++row) {
+      std::memcpy(self->packed_frame_buffer +
+                      (static_cast<size_t>(row) * tight_row_bytes),
+                  pixels +
+                      (static_cast<size_t>(row) * static_cast<size_t>(pitch)),
+                  tight_row_bytes);
+    }
+
+    release_latest_frame(frame_handle);
+    *out_buffer = self->packed_frame_buffer;
+    *width = static_cast<uint32_t>(w);
+    *height = static_cast<uint32_t>(h);
+    return TRUE;
+  }
+
   // Keep this handle alive until the next copy callback so the pixel pointer
   // remains valid while Flutter consumes the frame.
   self->last_frame_handle = frame_handle;
-  self->last_frame_generation = generation;
   *out_buffer = pixels;
   *width = static_cast<uint32_t>(w);
   *height = static_cast<uint32_t>(h);
@@ -84,6 +125,11 @@ static void ladybird_texture_dispose(GObject *object) {
   if (self->last_frame_handle) {
     release_latest_frame(self->last_frame_handle);
     self->last_frame_handle = nullptr;
+  }
+  if (self->packed_frame_buffer) {
+    g_free(self->packed_frame_buffer);
+    self->packed_frame_buffer = nullptr;
+    self->packed_frame_capacity = 0;
   }
   G_OBJECT_CLASS(ladybird_texture_parent_class)->dispose(object);
 }
@@ -98,6 +144,8 @@ static void ladybird_texture_init(LadybirdTexture *self) {
   self->view_id = -1;
   self->texture_registrar = nullptr;
   self->last_frame_handle = nullptr;
+  self->packed_frame_buffer = nullptr;
+  self->packed_frame_capacity = 0;
   self->last_frame_generation = 0;
 }
 
@@ -124,6 +172,7 @@ struct _LadybirdPlugin {
 G_DEFINE_TYPE(LadybirdPlugin, ladybird_plugin, g_object_get_type())
 
 static bool g_ladybird_initialized = false;
+static constexpr guint kLadybirdTickIntervalMs = 8;
 
 static gboolean ladybird_tick_callback(gpointer user_data) {
   LadybirdPlugin *plugin = LADYBIRD_PLUGIN(user_data);
@@ -155,7 +204,7 @@ static void ladybird_plugin_handle_method_call(LadybirdPlugin *self,
   if (!g_ladybird_initialized) {
     init_ladybird();
     g_ladybird_initialized = true;
-    g_timeout_add(16, ladybird_tick_callback, self);
+    g_timeout_add(kLadybirdTickIntervalMs, ladybird_tick_callback, self);
   }
 
   if (strcmp(method, "getPlatformVersion") == 0) {
