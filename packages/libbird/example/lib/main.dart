@@ -13,6 +13,7 @@ class MainApp extends StatefulWidget {
 }
 
 class _MainAppState extends State<MainApp> {
+  bool _loaded = false;
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -24,7 +25,18 @@ class _MainAppState extends State<MainApp> {
         ),
       ),
       theme: ThemeData.dark(),
-      home: BrowserWindow(),
+      home: _loaded
+          ? BrowserWindow()
+          : Center(
+              child: FilledButton(
+                onPressed: () {
+                  setState(() {
+                    _loaded = true;
+                  });
+                },
+                child: Text("Load Webview"),
+              ),
+            ),
     );
   }
 }

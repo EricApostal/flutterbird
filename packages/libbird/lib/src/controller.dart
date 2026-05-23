@@ -48,33 +48,33 @@ class LadybirdController {
     _lib = ffi.DynamicLibrary.process();
     _bindings = LadybirdBindings(_lib);
     print("start bindings");
-    // if (_displayErrorDialogCallback == null) {
-    //   _bindings.set_ask_user_for_download_path_callback(
-    //     ffi.Pointer.fromFunction(_onAskUserForDownloadPath),
-    //   );
+    if (_displayErrorDialogCallback == null) {
+      _bindings.set_ask_user_for_download_path_callback(
+        ffi.Pointer.fromFunction(_onAskUserForDownloadPath),
+      );
 
-    //   _displayDownloadConfirmationDialogCallback =
-    //       ffi.NativeCallable<
-    //         DisplayDownloadConfirmationDialogCallbackFunction
-    //       >.listener(_onDisplayDownloadConfirmationDialog);
-    //   _bindings.set_display_download_confirmation_dialog_callback(
-    //     _displayDownloadConfirmationDialogCallback!.nativeFunction,
-    //   );
+      _displayDownloadConfirmationDialogCallback =
+          ffi.NativeCallable<
+            DisplayDownloadConfirmationDialogCallbackFunction
+          >.listener(_onDisplayDownloadConfirmationDialog);
+      _bindings.set_display_download_confirmation_dialog_callback(
+        _displayDownloadConfirmationDialogCallback!.nativeFunction,
+      );
 
-    //   _displayErrorDialogCallback =
-    //       ffi.NativeCallable<DisplayErrorDialogCallbackFunction>.listener(
-    //         _onDisplayErrorDialog,
-    //       );
-    //   _bindings.set_display_error_dialog_callback(
-    //     _displayErrorDialogCallback!.nativeFunction,
-    //   );
-    // }
+      _displayErrorDialogCallback =
+          ffi.NativeCallable<DisplayErrorDialogCallbackFunction>.listener(
+            _onDisplayErrorDialog,
+          );
+      _bindings.set_display_error_dialog_callback(
+        _displayErrorDialogCallback!.nativeFunction,
+      );
+    }
 
     _bindings.init_ladybird();
     print("init ladybird");
     _viewId = _bindings.create_web_view();
     print("created webview");
-    print("view view id: $viewId");
+    print("view id: $viewId");
 
     _resizeCallback = ffi.NativeCallable<ffi.Void Function()>.listener(
       _onResize,
@@ -109,6 +109,7 @@ class LadybirdController {
     );
 
     _bindings.set_zoom(_viewId, 2);
+    print("all things set");
   }
 
   void _onUrlChange(ffi.Pointer<ffi.Char> urlPointer) {

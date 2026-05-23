@@ -310,7 +310,7 @@ public:
 
   virtual Optional<WebView::ViewImplementation &>
   active_web_view() const override {
-    std::lock_guard<std::mutex> lock(g_web_views_mutex);
+    // std::lock_guard<std::mutex> lock(g_web_views_mutex);
     if (g_active_view_id != -1) {
       auto it = g_web_views.find(g_active_view_id);
       if (it != g_web_views.end())
@@ -442,7 +442,8 @@ extern "C" void tick_ladybird() {
 }
 
 int create_web_view() {
-  std::lock_guard<std::mutex> lock(g_web_views_mutex);
+  std::println("Create in webview code");
+  // std::lock_guard<std::mutex> lock(g_web_views_mutex);
   int id = g_next_view_id++;
   auto view = FlutterViewImpl::create(id).release_value();
   view->initialize_client();
@@ -456,7 +457,7 @@ int create_web_view() {
 }
 
 void destroy_web_view(int view_id) {
-  std::lock_guard<std::mutex> lock(g_web_views_mutex);
+  // std::lock_guard<std::mutex> lock(g_web_views_mutex);
   if (g_active_view_id == view_id) {
     g_active_view_id = -1;
   }
@@ -464,14 +465,14 @@ void destroy_web_view(int view_id) {
 }
 
 void *get_latest_pixel_buffer(int view_id) {
-  std::lock_guard<std::mutex> lock(g_web_views_mutex);
+  // std::lock_guard<std::mutex> lock(g_web_views_mutex);
   auto it = g_web_views.find(view_id);
   if (it == g_web_views.end()) {
     std::printf("could not find webview\n");
     return nullptr;
   }
 
-  std::lock_guard<std::mutex> view_lock(it->second->m_mutex);
+  // std::lock_guard<std::mutex> view_lock(it->second->m_mutex);
 #ifdef __APPLE__
   if (!it->second->m_pixel_buffer)
     return nullptr;
@@ -493,7 +494,7 @@ void *get_latest_pixel_buffer(int view_id) {
 }
 
 void set_frame_callback(int view_id, FrameCallback callback, void *context) {
-  std::lock_guard<std::mutex> lock(g_web_views_mutex);
+  // std::lock_guard<std::mutex> lock(g_web_views_mutex);
   auto it = g_web_views.find(view_id);
   if (it != g_web_views.end()) {
     std::lock_guard<std::mutex> view_lock(it->second->m_mutex);
@@ -503,7 +504,7 @@ void set_frame_callback(int view_id, FrameCallback callback, void *context) {
 }
 
 void set_resize_callback(int view_id, ResizeCallback callback) {
-  std::lock_guard<std::mutex> lock(g_web_views_mutex);
+  // std::lock_guard<std::mutex> lock(g_web_views_mutex);
   auto it = g_web_views.find(view_id);
   if (it != g_web_views.end()) {
     std::lock_guard<std::mutex> view_lock(it->second->m_mutex);
@@ -514,7 +515,7 @@ void set_resize_callback(int view_id, ResizeCallback callback) {
 void resize_window(int view_id, int width, int height) {
   if (width <= 0 || height <= 0)
     return;
-  std::lock_guard<std::mutex> lock(g_web_views_mutex);
+  // std::lock_guard<std::mutex> lock(g_web_views_mutex);
   auto it = g_web_views.find(view_id);
   if (it != g_web_views.end()) {
     it->second->resize(width, height);
@@ -524,7 +525,7 @@ void resize_window(int view_id, int width, int height) {
 void navigate_to(int view_id, const char *url) {
   if (!url)
     return;
-  std::lock_guard<std::mutex> lock(g_web_views_mutex);
+  // std::lock_guard<std::mutex> lock(g_web_views_mutex);
   auto it = g_web_views.find(view_id);
   if (it != g_web_views.end()) {
     auto parsed = URL::Parser::basic_parse(AK::StringView(url, strlen(url)));
@@ -537,7 +538,7 @@ void navigate_to(int view_id, const char *url) {
 void set_zoom(int view_id, double zoom) {
   if (zoom <= 0.0)
     return;
-  std::lock_guard<std::mutex> lock(g_web_views_mutex);
+  // std::lock_guard<std::mutex> lock(g_web_views_mutex);
   auto it = g_web_views.find(view_id);
   if (it != g_web_views.end()) {
     it->second->m_zoom = zoom;
@@ -546,7 +547,7 @@ void set_zoom(int view_id, double zoom) {
 }
 
 int get_iosurface_width(int view_id) {
-  std::lock_guard<std::mutex> lock(g_web_views_mutex);
+  // std::lock_guard<std::mutex> lock(g_web_views_mutex);
   auto it = g_web_views.find(view_id);
   if (it == g_web_views.end())
     return 0;
@@ -568,7 +569,7 @@ int get_iosurface_width(int view_id) {
 }
 
 int get_iosurface_height(int view_id) {
-  std::lock_guard<std::mutex> lock(g_web_views_mutex);
+  // std::lock_guard<std::mutex> lock(g_web_views_mutex);
   auto it = g_web_views.find(view_id);
   if (it == g_web_views.end())
     return 0;
@@ -590,7 +591,7 @@ int get_iosurface_height(int view_id) {
 }
 
 void set_url_change_callback(int view_id, UrlChangeCallback callback) {
-  std::lock_guard<std::mutex> lock(g_web_views_mutex);
+  // std::lock_guard<std::mutex> lock(g_web_views_mutex);
   auto it = g_web_views.find(view_id);
   if (it != g_web_views.end()) {
     std::lock_guard<std::mutex> view_lock(it->second->m_mutex);
@@ -599,7 +600,7 @@ void set_url_change_callback(int view_id, UrlChangeCallback callback) {
 }
 
 void set_title_change_callback(int view_id, TitleChangeCallback callback) {
-  std::lock_guard<std::mutex> lock(g_web_views_mutex);
+  // std::lock_guard<std::mutex> lock(g_web_views_mutex);
   auto it = g_web_views.find(view_id);
   if (it != g_web_views.end()) {
     std::lock_guard<std::mutex> view_lock(it->second->m_mutex);
@@ -608,7 +609,7 @@ void set_title_change_callback(int view_id, TitleChangeCallback callback) {
 }
 
 void set_favicon_change_callback(int view_id, FaviconChangeCallback callback) {
-  std::lock_guard<std::mutex> lock(g_web_views_mutex);
+  // std::lock_guard<std::mutex> lock(g_web_views_mutex);
   auto it = g_web_views.find(view_id);
   if (it != g_web_views.end()) {
     std::lock_guard<std::mutex> view_lock(it->second->m_mutex);
@@ -617,7 +618,7 @@ void set_favicon_change_callback(int view_id, FaviconChangeCallback callback) {
 }
 
 void reload_tab(int view_id) {
-  std::lock_guard<std::mutex> lock(g_web_views_mutex);
+  // std::lock_guard<std::mutex> lock(g_web_views_mutex);
   auto it = g_web_views.find(view_id);
   if (it != g_web_views.end()) {
     it->second->reload();
@@ -625,7 +626,7 @@ void reload_tab(int view_id) {
 }
 
 void go_back(int view_id) {
-  std::lock_guard<std::mutex> lock(g_web_views_mutex);
+  // std::lock_guard<std::mutex> lock(g_web_views_mutex);
   auto it = g_web_views.find(view_id);
   if (it != g_web_views.end()) {
     it->second->traverse_the_history_by_delta(-1);
@@ -633,7 +634,7 @@ void go_back(int view_id) {
 }
 
 void go_forward(int view_id) {
-  std::lock_guard<std::mutex> lock(g_web_views_mutex);
+  // std::lock_guard<std::mutex> lock(g_web_views_mutex);
   auto it = g_web_views.find(view_id);
   if (it != g_web_views.end()) {
     it->second->traverse_the_history_by_delta(1);
@@ -649,7 +650,7 @@ extern "C" {
 void dispatch_mouse_event(int view_id, int type, int x, int y, int button,
                           int buttons, int modifiers, int wheel_delta_x,
                           int wheel_delta_y) {
-  std::lock_guard<std::mutex> lock(g_web_views_mutex);
+  // std::lock_guard<std::mutex> lock(g_web_views_mutex);
   auto it = g_web_views.find(view_id);
   if (it != g_web_views.end()) {
     it->second->dispatch_mouse_event(static_cast<Web::MouseEvent::Type>(type),
@@ -660,7 +661,7 @@ void dispatch_mouse_event(int view_id, int type, int x, int y, int button,
 
 void dispatch_key_event(int view_id, int type, int keycode, int modifiers,
                         uint32_t code_point, bool repeat) {
-  std::lock_guard<std::mutex> lock(g_web_views_mutex);
+  // std::lock_guard<std::mutex> lock(g_web_views_mutex);
   auto it = g_web_views.find(view_id);
   if (it != g_web_views.end()) {
     it->second->dispatch_key_event(static_cast<Web::KeyEvent::Type>(type),
