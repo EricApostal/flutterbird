@@ -12,6 +12,7 @@ class LadybirdController {
   late final LadybirdBindings _bindings;
   // int? _textureId;
   Size? _lastSize;
+  double? _lastDevicePixelRatio;
   late final int _viewId;
   final String initialUrl;
   bool hasNavigatedInitial = false;
@@ -108,7 +109,8 @@ class LadybirdController {
       _faviconChangeCallback.nativeFunction,
     );
 
-    _bindings.set_zoom(_viewId, 2);
+    _bindings.set_zoom(_viewId, 1.0);
+    _lastDevicePixelRatio = 1.0;
     print("all things set");
   }
 
@@ -173,8 +175,14 @@ class LadybirdController {
     textController.text = parsedUrl;
     final ffi.Pointer<Utf8> charPointer = parsedUrl.toNativeUtf8();
     _bindings.navigate_to(_viewId, charPointer.cast<ffi.Char>());
-    _bindings.set_zoom(_viewId, 2);
     malloc.free(charPointer);
+  }
+
+  void updateDevicePixelRatio(double ratio) {
+    if (ratio <= 0) return;
+    if (_lastDevicePixelRatio == ratio) return;
+    _lastDevicePixelRatio = ratio;
+    _bindings.set_zoom(_viewId, ratio);
   }
 
   void reload() {

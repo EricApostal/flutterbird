@@ -93,8 +93,9 @@ class _LadybirdViewState extends State<LadybirdView>
     }
   }
 
-  void _onSizeChanged(Size size) {
+  void _onSizeChanged(Size size, double density) {
     if (size.width <= 0 || size.height <= 0) return;
+    widget.controller.updateDevicePixelRatio(density);
     widget.controller.resizeWindow(size);
   }
 
@@ -263,7 +264,7 @@ class _LadybirdViewState extends State<LadybirdView>
             constraints.maxWidth * density,
             constraints.maxHeight * density,
           );
-          _onSizeChanged(size);
+          _onSizeChanged(size, density);
 
           final paddedWidth = widget.controller.getSurfaceWidth() / density;
           final paddedHeight = widget.controller.getSurfaceHeight() / density;

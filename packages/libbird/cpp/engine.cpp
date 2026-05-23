@@ -82,7 +82,7 @@ public:
   }
 
   int m_view_id;
-  double m_zoom{2.0};
+  double m_zoom{1.0};
 
   // Viewport dimensions — updated by resize() so viewport_size() always
   // returns the currently-requested render size, not the last painted size.
