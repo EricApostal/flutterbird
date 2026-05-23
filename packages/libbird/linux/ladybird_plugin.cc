@@ -1,5 +1,6 @@
 #include "include/ladybird/ladybird_plugin.h"
 
+#include <epoxy/gl.h>
 #include <flutter_linux/flutter_linux.h>
 #include <gtk/gtk.h>
 #include <sys/utsname.h>
@@ -13,49 +14,41 @@
 #include "ladybird_plugin_private.h"
 
 struct _LadybirdTexture {
-  FlPixelBufferTexture parent_instance;
+  FlTextureGL parent_instance;
   int view_id;
   FlTextureRegistrar *texture_registrar;
-  void *last_frame_handle;
   uint8_t *packed_frame_buffer;
   size_t packed_frame_capacity;
+  uint32_t texture_name;
+  int texture_width;
+  int texture_height;
   uint64_t last_frame_generation;
 };
 
 G_DECLARE_FINAL_TYPE(LadybirdTexture, ladybird_texture, LADYBIRD, TEXTURE,
-                     FlPixelBufferTexture)
+                     FlTextureGL)
 
-G_DEFINE_TYPE(LadybirdTexture, ladybird_texture,
-              fl_pixel_buffer_texture_get_type())
+G_DEFINE_TYPE(LadybirdTexture, ladybird_texture, fl_texture_gl_get_type())
 
-static void fill_dummy_frame(const uint8_t **out_buffer, uint32_t *width,
-                             uint32_t *height) {
-  static uint8_t *dummy_buffer = nullptr;
-  if (!dummy_buffer) {
-    dummy_buffer = static_cast<uint8_t *>(g_malloc(100 * 100 * 4));
-    for (int i = 0; i < 100 * 100; i++) {
-      dummy_buffer[i * 4 + 0] = 0;
-      dummy_buffer[i * 4 + 1] = 0;
-      dummy_buffer[i * 4 + 2] = 0;
-      dummy_buffer[i * 4 + 3] = 255;
-    }
+static void ensure_gl_texture(LadybirdTexture *self) {
+  if (self->texture_name == 0) {
+    glGenTextures(1, &self->texture_name);
+    glBindTexture(GL_TEXTURE_2D, self->texture_name);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+  } else {
+    glBindTexture(GL_TEXTURE_2D, self->texture_name);
   }
-  *out_buffer = dummy_buffer;
-  *width = 100;
-  *height = 100;
 }
 
-static gboolean ladybird_texture_copy_pixels(FlPixelBufferTexture *texture,
-                                             const uint8_t **out_buffer,
-                                             uint32_t *width, uint32_t *height,
-                                             GError **error) {
+static gboolean ladybird_texture_populate(FlTextureGL *texture,
+                                          uint32_t *target, uint32_t *name,
+                                          uint32_t *width, uint32_t *height,
+                                          GError **error) {
   (void)error;
   LadybirdTexture *self = LADYBIRD_TEXTURE(texture);
-
-  if (self->last_frame_handle) {
-    release_latest_frame(self->last_frame_handle);
-    self->last_frame_handle = nullptr;
-  }
 
   int w = 0;
   int h = 0;
@@ -63,23 +56,45 @@ static gboolean ladybird_texture_copy_pixels(FlPixelBufferTexture *texture,
   uint64_t generation = 0;
   const uint8_t *pixels = nullptr;
   void *frame_handle = nullptr;
+  (void)generation;
+
+  ensure_gl_texture(self);
+
+  auto publish_black = [&]() {
+    static uint8_t kBlackPixel[] = {0, 0, 0, 255};
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    if (self->texture_width != 1 || self->texture_height != 1) {
+      glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, 1, 1, 0, GL_RGBA,
+                   GL_UNSIGNED_BYTE, kBlackPixel);
+      self->texture_width = 1;
+      self->texture_height = 1;
+    } else {
+      glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE,
+                      kBlackPixel);
+    }
+
+    *target = GL_TEXTURE_2D;
+    *name = self->texture_name;
+    *width = 1;
+    *height = 1;
+  };
 
   if (!acquire_latest_frame(self->view_id, &pixels, &w, &h, &pitch, &generation,
                             &frame_handle) ||
       !pixels || w <= 0 || h <= 0 || pitch <= 0) {
-    fill_dummy_frame(out_buffer, width, height);
+    publish_black();
     return TRUE;
   }
 
+  const uint8_t *upload_pixels = pixels;
   auto tight_row_bytes = static_cast<size_t>(w) * 4;
 
-  // Flutter Linux pixel textures expect tightly packed BGRA rows.
   // If source pitch is larger than width*4, repack rows into a contiguous
-  // buffer to avoid corruption after resizes.
+  // buffer before upload.
   if (pitch != static_cast<int>(tight_row_bytes)) {
     if (pitch < static_cast<int>(tight_row_bytes)) {
       release_latest_frame(frame_handle);
-      fill_dummy_frame(out_buffer, width, height);
+      publish_black();
       return TRUE;
     }
 
@@ -89,7 +104,7 @@ static gboolean ladybird_texture_copy_pixels(FlPixelBufferTexture *texture,
           g_realloc(self->packed_frame_buffer, required));
       if (!new_buffer) {
         release_latest_frame(frame_handle);
-        fill_dummy_frame(out_buffer, width, height);
+        publish_black();
         return TRUE;
       }
       self->packed_frame_buffer = new_buffer;
@@ -104,17 +119,24 @@ static gboolean ladybird_texture_copy_pixels(FlPixelBufferTexture *texture,
                   tight_row_bytes);
     }
 
-    release_latest_frame(frame_handle);
-    *out_buffer = self->packed_frame_buffer;
-    *width = static_cast<uint32_t>(w);
-    *height = static_cast<uint32_t>(h);
-    return TRUE;
+    upload_pixels = self->packed_frame_buffer;
   }
 
-  // Keep this handle alive until the next copy callback so the pixel pointer
-  // remains valid while Flutter consumes the frame.
-  self->last_frame_handle = frame_handle;
-  *out_buffer = pixels;
+  glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+  if (self->texture_width != w || self->texture_height != h) {
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, w, h, 0, GL_BGRA, GL_UNSIGNED_BYTE,
+                 upload_pixels);
+    self->texture_width = w;
+    self->texture_height = h;
+  } else {
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, w, h, GL_BGRA, GL_UNSIGNED_BYTE,
+                    upload_pixels);
+  }
+
+  release_latest_frame(frame_handle);
+
+  *target = GL_TEXTURE_2D;
+  *name = self->texture_name;
   *width = static_cast<uint32_t>(w);
   *height = static_cast<uint32_t>(h);
   return TRUE;
@@ -122,10 +144,6 @@ static gboolean ladybird_texture_copy_pixels(FlPixelBufferTexture *texture,
 
 static void ladybird_texture_dispose(GObject *object) {
   LadybirdTexture *self = LADYBIRD_TEXTURE(object);
-  if (self->last_frame_handle) {
-    release_latest_frame(self->last_frame_handle);
-    self->last_frame_handle = nullptr;
-  }
   if (self->packed_frame_buffer) {
     g_free(self->packed_frame_buffer);
     self->packed_frame_buffer = nullptr;
@@ -136,16 +154,17 @@ static void ladybird_texture_dispose(GObject *object) {
 
 static void ladybird_texture_class_init(LadybirdTextureClass *klass) {
   G_OBJECT_CLASS(klass)->dispose = ladybird_texture_dispose;
-  FL_PIXEL_BUFFER_TEXTURE_CLASS(klass)->copy_pixels =
-      ladybird_texture_copy_pixels;
+  FL_TEXTURE_GL_CLASS(klass)->populate = ladybird_texture_populate;
 }
 
 static void ladybird_texture_init(LadybirdTexture *self) {
   self->view_id = -1;
   self->texture_registrar = nullptr;
-  self->last_frame_handle = nullptr;
   self->packed_frame_buffer = nullptr;
   self->packed_frame_capacity = 0;
+  self->texture_name = 0;
+  self->texture_width = 0;
+  self->texture_height = 0;
   self->last_frame_generation = 0;
 }
 
