@@ -26,6 +26,17 @@ extern "C" {
 typedef void (*FrameCallback)(void *);
 typedef void (*ResizeCallback)();
 
+typedef struct {
+  int fd;
+  int width;
+  int height;
+  int pitch;
+  uint32_t drm_format;
+  uint64_t modifier;
+  bool premultiplied;
+  uint64_t generation;
+} LadybirdLinuxDmaBufFrame;
+
 LADYBIRD_API void init_ladybird();
 
 LADYBIRD_API int create_web_view();
@@ -41,6 +52,9 @@ LADYBIRD_API bool acquire_latest_frame(int view_id, const uint8_t **out_pixels,
                                        int *out_pitch, uint64_t *out_generation,
                                        void **out_frame_handle);
 LADYBIRD_API void release_latest_frame(void *frame_handle);
+LADYBIRD_API bool
+acquire_latest_linux_dmabuf_frame(int view_id,
+                                  LadybirdLinuxDmaBufFrame *out_frame);
 
 LADYBIRD_API void set_frame_callback(int view_id, FrameCallback callback,
                                      void *context);

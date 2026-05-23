@@ -1,9 +1,12 @@
 #include "include/ladybird/ladybird_plugin.h"
 
+#include <epoxy/egl.h>
 #include <epoxy/gl.h>
 #include <flutter_linux/flutter_linux.h>
 #include <gtk/gtk.h>
+#include <sys/stat.h>
 #include <sys/utsname.h>
+#include <unistd.h>
 
 #include <cstdint>
 #include <cstdio>
@@ -17,11 +20,28 @@ struct _LadybirdTexture {
   FlTextureGL parent_instance;
   int view_id;
   FlTextureRegistrar *texture_registrar;
+
+  // CPU fallback path state.
   uint8_t *packed_frame_buffer;
   size_t packed_frame_capacity;
+
+  // Shared GL texture object used by both dma-buf and CPU upload paths.
   uint32_t texture_name;
   int texture_width;
   int texture_height;
+
+  // Zero-copy dma-buf import state.
+  EGLDisplay egl_display;
+  EGLImageKHR egl_image;
+  int egl_image_fd;
+  int egl_image_width;
+  int egl_image_height;
+  int egl_image_pitch;
+  uint32_t egl_image_drm_format;
+  uint64_t egl_image_modifier;
+  bool egl_image_premultiplied;
+  bool dmabuf_import_disabled;
+
   uint64_t last_frame_generation;
 };
 
@@ -29,6 +49,150 @@ G_DECLARE_FINAL_TYPE(LadybirdTexture, ladybird_texture, LADYBIRD, TEXTURE,
                      FlTextureGL)
 
 G_DEFINE_TYPE(LadybirdTexture, ladybird_texture, fl_texture_gl_get_type())
+
+static void ensure_gl_texture(LadybirdTexture *self);
+
+static void release_dmabuf_image(LadybirdTexture *self) {
+  if (self->egl_image != EGL_NO_IMAGE_KHR &&
+      self->egl_display != EGL_NO_DISPLAY) {
+    eglDestroyImageKHR(self->egl_display, self->egl_image);
+    self->egl_image = EGL_NO_IMAGE_KHR;
+  }
+  if (self->egl_image_fd >= 0) {
+    ::close(self->egl_image_fd);
+    self->egl_image_fd = -1;
+  }
+  self->egl_image_width = 0;
+  self->egl_image_height = 0;
+  self->egl_image_pitch = 0;
+  self->egl_image_drm_format = 0;
+  self->egl_image_modifier = 0;
+  self->egl_image_premultiplied = true;
+}
+
+static bool same_dmabuf_object(int fd_a, int fd_b) {
+  if (fd_a < 0 || fd_b < 0)
+    return false;
+
+  struct stat a = {};
+  struct stat b = {};
+  if (::fstat(fd_a, &a) != 0 || ::fstat(fd_b, &b) != 0)
+    return false;
+
+  return a.st_dev == b.st_dev && a.st_ino == b.st_ino;
+}
+
+static bool can_import_dmabuf(EGLDisplay display) {
+  if (display == EGL_NO_DISPLAY)
+    return false;
+  if (!epoxy_has_egl_extension(display, "EGL_EXT_image_dma_buf_import"))
+    return false;
+  if (!epoxy_has_gl_extension("GL_OES_EGL_image"))
+    return false;
+  return true;
+}
+
+static bool try_populate_dmabuf(LadybirdTexture *self, uint32_t *target,
+                                uint32_t *name, uint32_t *width,
+                                uint32_t *height) {
+  if (self->dmabuf_import_disabled)
+    return false;
+
+  LadybirdLinuxDmaBufFrame frame = {};
+  if (!acquire_latest_linux_dmabuf_frame(self->view_id, &frame) ||
+      frame.fd < 0 || frame.width <= 0 || frame.height <= 0 || frame.pitch <= 0)
+    return false;
+
+  EGLDisplay display = eglGetCurrentDisplay();
+  if (!can_import_dmabuf(display)) {
+    ::close(frame.fd);
+    self->dmabuf_import_disabled = true;
+    return false;
+  }
+
+  bool needs_recreate = self->egl_image == EGL_NO_IMAGE_KHR ||
+                        self->egl_display != display ||
+                        self->egl_image_width != frame.width ||
+                        self->egl_image_height != frame.height ||
+                        self->egl_image_pitch != frame.pitch ||
+                        self->egl_image_drm_format != frame.drm_format ||
+                        self->egl_image_modifier != frame.modifier ||
+                        self->egl_image_premultiplied != frame.premultiplied ||
+                        !same_dmabuf_object(frame.fd, self->egl_image_fd);
+
+  if (needs_recreate) {
+    bool has_modifiers = epoxy_has_egl_extension(
+        display, "EGL_EXT_image_dma_buf_import_modifiers");
+
+    EGLint attribs_without_modifiers[] = {
+        EGL_WIDTH,
+        frame.width,
+        EGL_HEIGHT,
+        frame.height,
+        EGL_LINUX_DRM_FOURCC_EXT,
+        static_cast<EGLint>(frame.drm_format),
+        EGL_DMA_BUF_PLANE0_FD_EXT,
+        frame.fd,
+        EGL_DMA_BUF_PLANE0_OFFSET_EXT,
+        0,
+        EGL_DMA_BUF_PLANE0_PITCH_EXT,
+        frame.pitch,
+        EGL_NONE,
+    };
+
+    EGLint attribs_with_modifiers[] = {
+        EGL_WIDTH,
+        frame.width,
+        EGL_HEIGHT,
+        frame.height,
+        EGL_LINUX_DRM_FOURCC_EXT,
+        static_cast<EGLint>(frame.drm_format),
+        EGL_DMA_BUF_PLANE0_FD_EXT,
+        frame.fd,
+        EGL_DMA_BUF_PLANE0_OFFSET_EXT,
+        0,
+        EGL_DMA_BUF_PLANE0_PITCH_EXT,
+        frame.pitch,
+        EGL_DMA_BUF_PLANE0_MODIFIER_LO_EXT,
+        static_cast<EGLint>(frame.modifier & 0xffffffffu),
+        EGL_DMA_BUF_PLANE0_MODIFIER_HI_EXT,
+        static_cast<EGLint>((frame.modifier >> 32u) & 0xffffffffu),
+        EGL_NONE,
+    };
+
+    EGLImageKHR image = eglCreateImageKHR(
+        display, EGL_NO_CONTEXT, EGL_LINUX_DMA_BUF_EXT, nullptr,
+        has_modifiers ? attribs_with_modifiers : attribs_without_modifiers);
+    if (image == EGL_NO_IMAGE_KHR) {
+      ::close(frame.fd);
+      return false;
+    }
+
+    release_dmabuf_image(self);
+    self->egl_display = display;
+    self->egl_image = image;
+    self->egl_image_fd = frame.fd;
+    self->egl_image_width = frame.width;
+    self->egl_image_height = frame.height;
+    self->egl_image_pitch = frame.pitch;
+    self->egl_image_drm_format = frame.drm_format;
+    self->egl_image_modifier = frame.modifier;
+    self->egl_image_premultiplied = frame.premultiplied;
+  } else {
+    ::close(frame.fd);
+  }
+
+  ensure_gl_texture(self);
+  glEGLImageTargetTexture2DOES(GL_TEXTURE_2D, self->egl_image);
+
+  self->texture_width = self->egl_image_width;
+  self->texture_height = self->egl_image_height;
+  *target = GL_TEXTURE_2D;
+  *name = self->texture_name;
+  *width = static_cast<uint32_t>(self->egl_image_width);
+  *height = static_cast<uint32_t>(self->egl_image_height);
+  return true;
+}
 
 static void ensure_gl_texture(LadybirdTexture *self) {
   if (self->texture_name == 0) {
@@ -58,7 +222,11 @@ static gboolean ladybird_texture_populate(FlTextureGL *texture,
   void *frame_handle = nullptr;
   (void)generation;
 
+  if (try_populate_dmabuf(self, target, name, width, height))
+    return TRUE;
+
   ensure_gl_texture(self);
+  release_dmabuf_image(self);
 
   auto publish_black = [&]() {
     static uint8_t kBlackPixel[] = {0, 0, 0, 255};
@@ -144,6 +312,7 @@ static gboolean ladybird_texture_populate(FlTextureGL *texture,
 
 static void ladybird_texture_dispose(GObject *object) {
   LadybirdTexture *self = LADYBIRD_TEXTURE(object);
+  release_dmabuf_image(self);
   if (self->packed_frame_buffer) {
     g_free(self->packed_frame_buffer);
     self->packed_frame_buffer = nullptr;
@@ -165,6 +334,16 @@ static void ladybird_texture_init(LadybirdTexture *self) {
   self->texture_name = 0;
   self->texture_width = 0;
   self->texture_height = 0;
+  self->egl_display = EGL_NO_DISPLAY;
+  self->egl_image = EGL_NO_IMAGE_KHR;
+  self->egl_image_fd = -1;
+  self->egl_image_width = 0;
+  self->egl_image_height = 0;
+  self->egl_image_pitch = 0;
+  self->egl_image_drm_format = 0;
+  self->egl_image_modifier = 0;
+  self->egl_image_premultiplied = true;
+  self->dmabuf_import_disabled = false;
   self->last_frame_generation = 0;
 }
 

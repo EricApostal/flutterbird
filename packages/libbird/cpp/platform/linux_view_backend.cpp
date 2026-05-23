@@ -1,6 +1,15 @@
 #include "linux_view_backend.h"
 
 #include <cstring>
+#include <unistd.h>
+
+LinuxViewBackend::~LinuxViewBackend() {
+  std::lock_guard lock(m_bitmap_mutex);
+  if (m_dmabuf_fd >= 0) {
+    ::close(m_dmabuf_fd);
+    m_dmabuf_fd = -1;
+  }
+}
 
 void LinuxViewBackend::on_bitmap_ready(AK::RefPtr<Gfx::Bitmap const> bitmap) {
   if (!bitmap)
@@ -74,6 +83,68 @@ bool LinuxViewBackend::snapshot_frame(FrameSnapshot &out_snapshot) const {
   out_snapshot.pitch = m_bitmap->pitch();
   out_snapshot.generation = m_frame_generation;
   return true;
+}
+
+bool LinuxViewBackend::snapshot_linux_dmabuf_frame(
+    LinuxDmaBufFrameSnapshot &out_snapshot) const {
+  std::lock_guard lock(m_bitmap_mutex);
+  if (m_dmabuf_fd < 0 || m_dmabuf_width <= 0 || m_dmabuf_height <= 0 ||
+      m_dmabuf_pitch <= 0)
+    return false;
+
+  int cloned_fd = ::dup(m_dmabuf_fd);
+  if (cloned_fd < 0)
+    return false;
+
+  out_snapshot.fd = cloned_fd;
+  out_snapshot.width = m_dmabuf_width;
+  out_snapshot.height = m_dmabuf_height;
+  out_snapshot.pitch = m_dmabuf_pitch;
+  out_snapshot.drm_format = m_dmabuf_drm_format;
+  out_snapshot.modifier = m_dmabuf_modifier;
+  out_snapshot.premultiplied = m_dmabuf_premultiplied;
+  out_snapshot.generation = m_frame_generation;
+  return true;
+}
+
+void LinuxViewBackend::set_linux_dmabuf_frame(int source_fd, int width,
+                                              int height, int pitch,
+                                              uint32_t drm_format,
+                                              uint64_t modifier,
+                                              bool premultiplied) {
+  if (source_fd < 0 || width <= 0 || height <= 0 || pitch <= 0) {
+    clear_linux_dmabuf_frame();
+    return;
+  }
+
+  int owned_fd = ::dup(source_fd);
+  if (owned_fd < 0)
+    return;
+
+  std::lock_guard lock(m_bitmap_mutex);
+  if (m_dmabuf_fd >= 0)
+    ::close(m_dmabuf_fd);
+  m_dmabuf_fd = owned_fd;
+  m_dmabuf_width = width;
+  m_dmabuf_height = height;
+  m_dmabuf_pitch = pitch;
+  m_dmabuf_drm_format = drm_format;
+  m_dmabuf_modifier = modifier;
+  m_dmabuf_premultiplied = premultiplied;
+}
+
+void LinuxViewBackend::clear_linux_dmabuf_frame() {
+  std::lock_guard lock(m_bitmap_mutex);
+  if (m_dmabuf_fd >= 0) {
+    ::close(m_dmabuf_fd);
+    m_dmabuf_fd = -1;
+  }
+  m_dmabuf_width = 0;
+  m_dmabuf_height = 0;
+  m_dmabuf_pitch = 0;
+  m_dmabuf_drm_format = 0;
+  m_dmabuf_modifier = 0;
+  m_dmabuf_premultiplied = true;
 }
 
 int LinuxViewBackend::width() const {

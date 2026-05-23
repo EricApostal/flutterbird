@@ -27,6 +27,7 @@
 class LinuxViewBackend final : public ViewBackend {
 public:
   LinuxViewBackend() = default;
+  ~LinuxViewBackend() override;
 
   // ViewBackend overrides
   void on_bitmap_ready(AK::RefPtr<Gfx::Bitmap const> bitmap) override;
@@ -35,8 +36,15 @@ public:
                         int &out_width, int &out_height) const override;
   uint64_t frame_generation() const override;
   bool snapshot_frame(FrameSnapshot &out_snapshot) const override;
+  bool snapshot_linux_dmabuf_frame(
+      LinuxDmaBufFrameSnapshot &out_snapshot) const override;
   int width() const override;
   int height() const override;
+
+  void set_linux_dmabuf_frame(int source_fd, int width, int height, int pitch,
+                              uint32_t drm_format, uint64_t modifier,
+                              bool premultiplied);
+  void clear_linux_dmabuf_frame();
 
 private:
   mutable std::mutex m_bitmap_mutex;
@@ -44,4 +52,12 @@ private:
   int m_width{800};
   int m_height{600};
   uint64_t m_frame_generation{0};
+
+  int m_dmabuf_fd{-1};
+  int m_dmabuf_width{0};
+  int m_dmabuf_height{0};
+  int m_dmabuf_pitch{0};
+  uint32_t m_dmabuf_drm_format{0};
+  uint64_t m_dmabuf_modifier{0};
+  bool m_dmabuf_premultiplied{true};
 };

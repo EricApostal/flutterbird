@@ -38,6 +38,15 @@ else()
     )
 endif()
 
+set(LADYBIRD_USE_VULKAN_DMABUF_IMAGES OFF)
+set(LADYBIRD_CACHE_FILE "${LADYBIRD_OUT_DIR}/CMakeCache.txt")
+if (EXISTS "${LADYBIRD_CACHE_FILE}")
+    file(STRINGS "${LADYBIRD_CACHE_FILE}" _ladybird_dmabuf_cache_line REGEX "^USE_VULKAN_DMABUF_IMAGES:BOOL=ON$")
+    if (_ladybird_dmabuf_cache_line)
+        set(LADYBIRD_USE_VULKAN_DMABUF_IMAGES ON)
+    endif()
+endif()
+
 if (APPLE)
     set(VCPKG_TRIPLET "arm64-osx-dynamic")
 elseif(ANDROID)
@@ -51,6 +60,20 @@ add_library(engine SHARED
     platform/view_backend.cpp
     platform/linux_view_backend.cpp
 )
+
+# The Ladybird headers intentionally use unqualified std casts and literal
+# suffixes that trigger strict Clang warnings; keep engine builds resilient
+# when dmabuf paths pull in those headers.
+if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    target_compile_options(engine PRIVATE
+        -Wno-unqualified-std-cast-call
+        -Wno-user-defined-literals
+    )
+endif()
+
+if (LADYBIRD_USE_VULKAN_DMABUF_IMAGES)
+    target_compile_definitions(engine PRIVATE USE_VULKAN_DMABUF_IMAGES=1)
+endif()
 
 target_include_directories(engine PRIVATE
     ${LADYBIRD_DIR}

@@ -37,6 +37,9 @@
 #include <LibWebView/Utilities.h>
 #include <LibWebView/ViewImplementation.h>
 #include <string>
+#ifndef __APPLE__
+#include <unistd.h>
+#endif
 
 namespace IPC {
 
@@ -143,6 +146,24 @@ public:
       if (!m_client_state.has_usable_bitmap ||
           !m_client_state.front_bitmap.shared_image_buffer)
         return;
+
+#ifndef __APPLE__
+#ifdef USE_VULKAN_DMABUF_IMAGES
+      auto *linux_backend = static_cast<LinuxViewBackend *>(m_backend.get());
+      if (auto const &dmabuf = m_client_state.front_bitmap.shared_image_buffer
+                                   ->linux_dmabuf_handle();
+          dmabuf.has_value()) {
+        linux_backend->set_linux_dmabuf_frame(
+            dmabuf->file.fd(), dmabuf->size.width(), dmabuf->size.height(),
+            static_cast<int>(dmabuf->pitch), dmabuf->drm_format,
+            dmabuf->modifier,
+            dmabuf->alpha_type == Gfx::AlphaType::Premultiplied);
+      } else {
+        linux_backend->clear_linux_dmabuf_frame();
+      }
+#endif
+#endif
+
       auto bitmap = AK::RefPtr<Gfx::Bitmap const>(
           m_client_state.front_bitmap.shared_image_buffer->bitmap());
       m_backend->on_bitmap_ready(std::move(bitmap));
@@ -532,6 +553,30 @@ void release_latest_frame(void *frame_handle) {
     return;
   auto *frame = static_cast<LatestFrameHandle *>(frame_handle);
   delete frame;
+}
+
+bool acquire_latest_linux_dmabuf_frame(int view_id,
+                                       LadybirdLinuxDmaBufFrame *out_frame) {
+  if (!out_frame)
+    return false;
+
+  auto it = g_web_views.find(view_id);
+  if (it == g_web_views.end())
+    return false;
+
+  LinuxDmaBufFrameSnapshot snapshot;
+  if (!it->second->m_backend->snapshot_linux_dmabuf_frame(snapshot))
+    return false;
+
+  out_frame->fd = snapshot.fd;
+  out_frame->width = snapshot.width;
+  out_frame->height = snapshot.height;
+  out_frame->pitch = snapshot.pitch;
+  out_frame->drm_format = snapshot.drm_format;
+  out_frame->modifier = snapshot.modifier;
+  out_frame->premultiplied = snapshot.premultiplied;
+  out_frame->generation = snapshot.generation;
+  return true;
 }
 
 void set_frame_callback(int view_id, FrameCallback callback, void *context) {

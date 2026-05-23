@@ -43,6 +43,17 @@ struct FrameSnapshot {
   uint64_t generation{0};
 };
 
+struct LinuxDmaBufFrameSnapshot {
+  int fd{-1};
+  int width{0};
+  int height{0};
+  int pitch{0};
+  uint32_t drm_format{0};
+  uint64_t modifier{0};
+  bool premultiplied{true};
+  uint64_t generation{0};
+};
+
 class ViewBackend {
 public:
   virtual ~ViewBackend() = default;
@@ -85,6 +96,14 @@ public:
   // Optional helper for callers that need a coherent pointer + metadata
   // snapshot without copying pixels.
   virtual bool snapshot_frame(FrameSnapshot &out_snapshot) const {
+    (void)out_snapshot;
+    return false;
+  }
+
+  // Optional helper for callers that can consume Linux dma-buf backed frames.
+  // The returned fd is owned by the caller and must be closed.
+  virtual bool
+  snapshot_linux_dmabuf_frame(LinuxDmaBufFrameSnapshot &out_snapshot) const {
     (void)out_snapshot;
     return false;
   }
