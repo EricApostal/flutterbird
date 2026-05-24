@@ -2,17 +2,16 @@ import 'package:bird_core/bird_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 class BrowserTab extends ConsumerWidget {
   final int viewId;
   final bool selected;
-  final void Function() onTabSelected;
   final void Function() onTabClosed;
   const BrowserTab({
     super.key,
     required this.viewId,
     required this.selected,
-    required this.onTabSelected,
     required this.onTabClosed,
   });
 
@@ -27,7 +26,7 @@ class BrowserTab extends ConsumerWidget {
         borderRadius: .circular(8),
         onTap: () {
           HapticFeedback.lightImpact();
-          onTabSelected();
+          context.go("/browser/tab/$viewId");
         },
         child: Container(
           width: 225,

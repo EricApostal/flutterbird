@@ -17,7 +17,6 @@ class _BrowserLoadingScreenState extends ConsumerState<BrowserLoadingScreen> {
     super.initState();
     final tab = ref.read(browserTabControllerProvider).first;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(browserWindowLayoutProvider.notifier).ensureMainTab(tab.viewId);
       context.go("/browser/tab/${tab.viewId}");
     });
   }

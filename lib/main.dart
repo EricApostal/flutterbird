@@ -1,31 +1,22 @@
 import 'dart:io';
 
+import 'package:bitsdojo_window/bitsdojo_window.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutterbird/features/browser/components/window_anchor.dart';
 import 'package:flutterbird/features/router/controller.dart';
-import 'package:window_manager/window_manager.dart';
 
-Future<void> main() async {
-  WidgetsFlutterBinding.ensureInitialized();
+void main() {
+  runApp(ProviderScope(child: const MainApp()));
 
-  if (Platform.isLinux || Platform.isMacOS || Platform.isWindows) {
-    await windowManager.ensureInitialized();
-
-    const windowOptions = WindowOptions(
-      size: Size(1200, 820),
-      minimumSize: Size(900, 650),
-      titleBarStyle: TitleBarStyle.hidden,
-    );
-
-    await windowManager.waitUntilReadyToShow(windowOptions, () async {
-      await windowManager.setAsFrameless();
-      await windowManager.show();
-      await windowManager.focus();
+  if (Platform.isMacOS || Platform.isLinux) {
+    doWhenWindowReady(() {
+      const initialSize = Size(800, 600);
+      appWindow.minSize = initialSize;
+      appWindow.size = initialSize;
+      appWindow.alignment = Alignment.center;
+      appWindow.show();
     });
   }
-
-  runApp(ProviderScope(child: const MainApp()));
 }
 
 class MainApp extends StatefulWidget {
@@ -40,9 +31,6 @@ class _MainAppState extends State<MainApp> {
   Widget build(BuildContext context) {
     return MaterialApp.router(
       routerConfig: routerController,
-      builder: (context, child) {
-        return BrowserWindowAnchor(child: child ?? const SizedBox.shrink());
-      },
       themeMode: .dark,
       darkTheme: ThemeData(
         colorScheme: .fromSeed(
