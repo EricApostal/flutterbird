@@ -33,7 +33,8 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar> {
   static final Map<int, Offset> _detachedWindowScreenOriginById =
       <int, Offset>{};
   static Offset? _mainWindowScreenOrigin;
-  static const bool _enableOverlapMergeFallback = true;
+  static const bool _enableOverlapMergeFallback = false;
+  static const bool _useFirefoxStyleProxyDrag = true;
   static const bool _mergeDebugLogs = true;
   static int _lastMergeDebugLogMs = 0;
 
@@ -357,6 +358,13 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar> {
     if (currentWindow != null &&
         !currentWindow.isMain &&
         currentWindow.tabIds.length == 1) {
+      if (_useFirefoxStyleProxyDrag) {
+        _logMergeDebug(
+          'proxy-drag detached-single tab=${dragData.tabId} pointer=${details.globalPosition}',
+          throttle: true,
+        );
+        return;
+      }
       _moveDetachedWindowForDrag(
         dragData.currentWindowId,
         details.globalPosition,
@@ -480,6 +488,51 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar> {
       'offset=${details.offset}',
     );
 
+    if (_useFirefoxStyleProxyDrag) {
+      if (dragOriginWindowId == mainBrowserWindowId) {
+        _logMergeDebug('drag-end proxy skip origin-main tab=${dragData.tabId}');
+        return;
+      }
+
+      if (dragData.currentWindowId == mainBrowserWindowId) {
+        _logMergeDebug(
+          'drag-end proxy skip already-main tab=${dragData.tabId}',
+        );
+        return;
+      }
+
+      final droppedOutsideSourceStrip = !_isPointerInsideTabStrip(
+        details.offset,
+      );
+      if (!droppedOutsideSourceStrip) {
+        _logMergeDebug(
+          'drag-end proxy no-merge inside-source-strip tab=${dragData.tabId} '
+          'offset=${details.offset}',
+        );
+        return;
+      }
+
+      final merged = layoutController.mergeTabToMain(
+        tabId: dragData.tabId,
+        fromWindowId: dragData.currentWindowId,
+      );
+      if (!merged) {
+        _logMergeDebug(
+          'drag-end proxy merge-to-main rejected tab=${dragData.tabId} '
+          'from=${dragData.currentWindowId}',
+        );
+        return;
+      }
+
+      dragData.currentWindowId = mainBrowserWindowId;
+      layoutController.setActiveTab(mainBrowserWindowId, dragData.tabId);
+      _goToMainTabIfRouterAvailable(dragData.tabId);
+      _logMergeDebug(
+        'drag-end proxy merged-to-main tab=${dragData.tabId} offset=${details.offset}',
+      );
+      return;
+    }
+
     if (details.wasAccepted) {
       if (dragData.currentWindowId != dragOriginWindowId) {
         _logMergeDebug(
@@ -558,13 +611,16 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar> {
                           selected: tabs[index].viewId == resolvedCurrentViewId,
                           initialWindowId: widget.windowId,
                           canDetachOnDrag: isDetachedWindow,
-                          hideDragFeedback: isDetachedWindow,
+                          hideDragFeedback:
+                              isDetachedWindow && !_useFirefoxStyleProxyDrag,
                           onDraggableDragStarted: isDetachedWindow
-                              ? (globalPosition) {
-                                  _startCurrentWindowMoveDrag(
-                                    globalPosition ?? Offset.zero,
-                                  );
-                                }
+                              ? (_useFirefoxStyleProxyDrag
+                                    ? null
+                                    : (globalPosition) {
+                                        _startCurrentWindowMoveDrag(
+                                          globalPosition ?? Offset.zero,
+                                        );
+                                      })
                               : null,
                           onSingleTabWindowDragStart:
                               _startCurrentWindowMoveDrag,
