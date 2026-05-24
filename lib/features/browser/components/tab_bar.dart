@@ -29,8 +29,35 @@ class BrowserTabBar extends ConsumerStatefulWidget {
 }
 
 class _BrowserTabBarState extends ConsumerState<BrowserTabBar> {
+  static final Map<int, Rect> _tabStripRectsByWindow = <int, Rect>{};
+
   final GlobalKey _tabStripKey = GlobalKey();
   _GtkWindowMoveDart? _gtkWindowMove;
+
+  @override
+  void didUpdateWidget(covariant BrowserTabBar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.windowId != widget.windowId) {
+      _tabStripRectsByWindow.remove(oldWidget.windowId);
+    }
+  }
+
+  @override
+  void dispose() {
+    _tabStripRectsByWindow.remove(widget.windowId);
+    super.dispose();
+  }
+
+  void _publishTabStripRect() {
+    final context = _tabStripKey.currentContext;
+    final renderObject = context?.findRenderObject();
+    if (renderObject is! RenderBox || !renderObject.hasSize) {
+      return;
+    }
+
+    final topLeft = renderObject.localToGlobal(Offset.zero);
+    _tabStripRectsByWindow[widget.windowId] = topLeft & renderObject.size;
+  }
 
   _GtkWindowMoveDart? _resolveGtkWindowMove() {
     if (!Platform.isLinux) {
@@ -137,6 +164,12 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar> {
     if (currentWindow != null &&
         !currentWindow.isMain &&
         currentWindow.tabIds.length == 1) {
+      _maybeMergeSingleTabDragIntoHoveredWindow(
+        sourceWindowId: dragData.currentWindowId,
+        tabId: dragData.tabId,
+        globalPosition: details.globalPosition,
+        layoutController: layoutController,
+      );
       _moveDetachedWindowForDrag(
         dragData.currentWindowId,
         details.globalPosition,
@@ -252,6 +285,55 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar> {
     _goToMainTabIfRouterAvailable(dragData.tabId);
   }
 
+  void _maybeMergeSingleTabDragIntoHoveredWindow({
+    required int sourceWindowId,
+    required int tabId,
+    required Offset globalPosition,
+    required BrowserWindowLayout layoutController,
+  }) {
+    if (sourceWindowId == mainBrowserWindowId) {
+      return;
+    }
+
+    int? targetWindowId;
+    for (final entry in _tabStripRectsByWindow.entries) {
+      if (entry.key == sourceWindowId) {
+        continue;
+      }
+      if (entry.value.inflate(8).contains(globalPosition)) {
+        targetWindowId = entry.key;
+        break;
+      }
+    }
+    if (targetWindowId == null) {
+      return;
+    }
+
+    debugPrint(
+      '[tab-merge] candidate source=$sourceWindowId target=$targetWindowId tab=$tabId pos=$globalPosition',
+    );
+
+    final merged = layoutController.mergeTabToWindow(
+      tabId: tabId,
+      fromWindowId: sourceWindowId,
+      toWindowId: targetWindowId,
+    );
+    if (!merged) {
+      debugPrint(
+        '[tab-merge] merge rejected source=$sourceWindowId target=$targetWindowId tab=$tabId',
+      );
+      return;
+    }
+
+    debugPrint(
+      '[tab-merge] merged source=$sourceWindowId target=$targetWindowId tab=$tabId',
+    );
+
+    if (targetWindowId == mainBrowserWindowId) {
+      _goToMainTabIfRouterAvailable(tabId);
+    }
+  }
+
   Widget _buildTabStripDragTarget({
     required BrowserWindowLayout layoutController,
     required List<LadybirdController> tabs,
@@ -285,9 +367,27 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar> {
                           tabId: tabs[index].viewId,
                           selected: tabs[index].viewId == resolvedCurrentViewId,
                           initialWindowId: widget.windowId,
-                          canDetachOnDrag: false,
+                          canDetachOnDrag: isDetachedWindow,
+                          hideDragFeedback: isDetachedWindow,
+                          onDraggableDragStarted: isDetachedWindow
+                              ? (globalPosition) {
+                                  _startCurrentWindowMoveDrag(
+                                    globalPosition ?? Offset.zero,
+                                  );
+                                }
+                              : null,
                           onSingleTabWindowDragStart:
                               _startCurrentWindowMoveDrag,
+                          onSingleTabWindowDragUpdate: isDetachedWindow
+                              ? (globalPosition) {
+                                  _maybeMergeSingleTabDragIntoHoveredWindow(
+                                    sourceWindowId: widget.windowId,
+                                    tabId: tabs[index].viewId,
+                                    globalPosition: globalPosition,
+                                    layoutController: layoutController,
+                                  );
+                                }
+                              : null,
                           onSelected: () {
                             layoutController.setActiveTab(
                               widget.windowId,
@@ -502,6 +602,13 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar> {
     final shouldMoveWindowInsteadOfDetaching = windowTabIds.length == 1;
     final doLeftPadding = Platform.isMacOS;
 
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      _publishTabStripRect();
+    });
+
     return Column(
       children: [
         Padding(
@@ -634,7 +741,10 @@ class _DraggableBrowserTab extends StatelessWidget {
   final bool selected;
   final int initialWindowId;
   final bool canDetachOnDrag;
+  final bool hideDragFeedback;
+  final void Function(Offset? globalPosition)? onDraggableDragStarted;
   final void Function(Offset globalPosition) onSingleTabWindowDragStart;
+  final void Function(Offset globalPosition)? onSingleTabWindowDragUpdate;
   final VoidCallback onSelected;
   final VoidCallback onClose;
   final void Function(_DraggedTabData dragData, DragUpdateDetails details)
@@ -647,7 +757,10 @@ class _DraggableBrowserTab extends StatelessWidget {
     required this.selected,
     required this.initialWindowId,
     required this.canDetachOnDrag,
+    this.hideDragFeedback = false,
+    this.onDraggableDragStarted,
     required this.onSingleTabWindowDragStart,
+    this.onSingleTabWindowDragUpdate,
     required this.onSelected,
     required this.onClose,
     required this.onDragUpdate,
@@ -677,6 +790,9 @@ class _DraggableBrowserTab extends StatelessWidget {
         onPanStart: (details) {
           onSingleTabWindowDragStart(details.globalPosition);
         },
+        onPanUpdate: (details) {
+          onSingleTabWindowDragUpdate?.call(details.globalPosition);
+        },
         child: tab,
       );
     }
@@ -686,21 +802,39 @@ class _DraggableBrowserTab extends StatelessWidget {
       return tab;
     }
 
-    return Draggable<_DraggedTabData>(
-      data: dragData,
-      rootOverlay: true,
-      dragAnchorStrategy: pointerDragAnchorStrategy,
-      feedback: Material(
-        color: Colors.transparent,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 240),
-          child: Opacity(opacity: 0.92, child: tab),
-        ),
+    final dragFeedback = hideDragFeedback
+        ? const SizedBox.shrink()
+        : Material(
+            color: Colors.transparent,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 240),
+              child: Opacity(opacity: 0.92, child: tab),
+            ),
+          );
+
+    final dragChildWhenDragging = hideDragFeedback
+        ? tab
+        : Opacity(opacity: 0.35, child: tab);
+
+    Offset? pointerDownGlobalPosition;
+
+    return Listener(
+      onPointerDown: (event) {
+        pointerDownGlobalPosition = event.position;
+      },
+      child: Draggable<_DraggedTabData>(
+        data: dragData,
+        rootOverlay: true,
+        dragAnchorStrategy: pointerDragAnchorStrategy,
+        feedback: dragFeedback,
+        childWhenDragging: dragChildWhenDragging,
+        onDragStarted: () {
+          onDraggableDragStarted?.call(pointerDownGlobalPosition);
+        },
+        onDragUpdate: (details) => onDragUpdate(dragData, details),
+        onDragEnd: (details) => onDragEnd(dragData, details),
+        child: tab,
       ),
-      childWhenDragging: Opacity(opacity: 0.35, child: tab),
-      onDragUpdate: (details) => onDragUpdate(dragData, details),
-      onDragEnd: (details) => onDragEnd(dragData, details),
-      child: tab,
     );
   }
 }

@@ -319,14 +319,18 @@ class BrowserWindowLayout extends _$BrowserWindowLayout {
     return detachedWindowId;
   }
 
-  bool mergeTabToMain({required int tabId, required int fromWindowId}) {
-    if (fromWindowId == mainBrowserWindowId) {
+  bool mergeTabToWindow({
+    required int tabId,
+    required int fromWindowId,
+    required int toWindowId,
+  }) {
+    if (fromWindowId == toWindowId) {
       return false;
     }
 
     final sourceWindow = state.windowById(fromWindowId);
-    final mainWindow = state.windowById(mainBrowserWindowId);
-    if (sourceWindow == null || mainWindow == null) {
+    final targetWindow = state.windowById(toWindowId);
+    if (sourceWindow == null || targetWindow == null) {
       return false;
     }
     if (!sourceWindow.tabIds.contains(tabId)) {
@@ -342,16 +346,20 @@ class BrowserWindowLayout extends _$BrowserWindowLayout {
               ? sourceWindow.activeViewId
               : sourceRemainingTabs.first);
 
-    final mergedMainTabs = [...mainWindow.tabIds];
-    if (!mergedMainTabs.contains(tabId)) {
-      mergedMainTabs.add(tabId);
+    if (sourceWindow.isMain && sourceRemainingTabs.isEmpty) {
+      return false;
+    }
+
+    final mergedTargetTabs = [...targetWindow.tabIds];
+    if (!mergedTargetTabs.contains(tabId)) {
+      mergedTargetTabs.add(tabId);
     }
 
     final updatedWindows = <BrowserWindowState>[];
     for (final window in state.windows) {
-      if (window.id == mainBrowserWindowId) {
+      if (window.id == toWindowId) {
         updatedWindows.add(
-          window.copyWith(tabIds: mergedMainTabs, activeViewId: tabId),
+          window.copyWith(tabIds: mergedTargetTabs, activeViewId: tabId),
         );
         continue;
       }
@@ -377,6 +385,14 @@ class BrowserWindowLayout extends _$BrowserWindowLayout {
 
     state = state.copyWith(windows: updatedWindows);
     return true;
+  }
+
+  bool mergeTabToMain({required int tabId, required int fromWindowId}) {
+    return mergeTabToWindow(
+      tabId: tabId,
+      fromWindowId: fromWindowId,
+      toWindowId: mainBrowserWindowId,
+    );
   }
 }
 
