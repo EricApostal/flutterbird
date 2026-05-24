@@ -66,7 +66,11 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar> {
     return null;
   }
 
-  void _moveDetachedWindowForDrag(int windowId, Offset globalPosition) {
+  void _moveDetachedWindowForDrag(
+    int windowId,
+    Offset globalPosition, {
+    bool allowBeginMoveFallback = false,
+  }) {
     final detachedWindow = ref.read(browserWindowStateProvider(windowId));
     final controller = detachedWindow?.nativeWindowController;
     if (controller == null) {
@@ -80,6 +84,14 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar> {
         final targetX = globalPosition.dx.round() - 140;
         final targetY = globalPosition.dy.round() - 18;
         gtkWindowMove(handle, targetX, targetY);
+        return;
+      }
+
+      if (allowBeginMoveFallback) {
+        controller.enableCustomWindow();
+        custom_window.CustomWindow.forController(
+          controller,
+        )?.startWindowMoveDrag(globalPosition);
       }
       return;
     }
@@ -160,7 +172,11 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar> {
   }
 
   void _startDetachedWindowMoveDrag(int windowId, Offset globalPosition) {
-    _moveDetachedWindowForDrag(windowId, globalPosition);
+    _moveDetachedWindowForDrag(
+      windowId,
+      globalPosition,
+      allowBeginMoveFallback: true,
+    );
   }
 
   void _startCurrentWindowMoveDrag(Offset globalPosition) {
@@ -172,11 +188,6 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar> {
     final currentWindow = ref.read(browserWindowStateProvider(widget.windowId));
     final controller = currentWindow?.nativeWindowController;
     if (controller == null) {
-      return;
-    }
-
-    if (Platform.isLinux) {
-      _moveDetachedWindowForDrag(widget.windowId, globalPosition);
       return;
     }
 
@@ -274,10 +285,7 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar> {
                           tabId: tabs[index].viewId,
                           selected: tabs[index].viewId == resolvedCurrentViewId,
                           initialWindowId: widget.windowId,
-                          canDetachOnDrag: isDetachedWindow,
-                          hideDragFeedback:
-                              shouldMoveWindowInsteadOfDetaching &&
-                              isDetachedWindow,
+                          canDetachOnDrag: false,
                           onSingleTabWindowDragStart:
                               _startCurrentWindowMoveDrag,
                           onSelected: () {
@@ -626,7 +634,6 @@ class _DraggableBrowserTab extends StatelessWidget {
   final bool selected;
   final int initialWindowId;
   final bool canDetachOnDrag;
-  final bool hideDragFeedback;
   final void Function(Offset globalPosition) onSingleTabWindowDragStart;
   final VoidCallback onSelected;
   final VoidCallback onClose;
@@ -640,7 +647,6 @@ class _DraggableBrowserTab extends StatelessWidget {
     required this.selected,
     required this.initialWindowId,
     required this.canDetachOnDrag,
-    this.hideDragFeedback = false,
     required this.onSingleTabWindowDragStart,
     required this.onSelected,
     required this.onClose,
@@ -680,26 +686,18 @@ class _DraggableBrowserTab extends StatelessWidget {
       return tab;
     }
 
-    final dragFeedback = hideDragFeedback
-        ? const SizedBox.shrink()
-        : Material(
-            color: Colors.transparent,
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 240),
-              child: Opacity(opacity: 0.92, child: tab),
-            ),
-          );
-
-    final dragChildWhenDragging = hideDragFeedback
-        ? tab
-        : Opacity(opacity: 0.35, child: tab);
-
     return Draggable<_DraggedTabData>(
       data: dragData,
       rootOverlay: true,
       dragAnchorStrategy: pointerDragAnchorStrategy,
-      feedback: dragFeedback,
-      childWhenDragging: dragChildWhenDragging,
+      feedback: Material(
+        color: Colors.transparent,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 240),
+          child: Opacity(opacity: 0.92, child: tab),
+        ),
+      ),
+      childWhenDragging: Opacity(opacity: 0.35, child: tab),
       onDragUpdate: (details) => onDragUpdate(dragData, details),
       onDragEnd: (details) => onDragEnd(dragData, details),
       child: tab,
