@@ -1,12 +1,12 @@
 import 'dart:io';
 
 import 'package:bird_core/bird_core.dart';
-import 'package:bitsdojo_window/bitsdojo_window.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutterbird/features/browser/components/tab.dart';
 import 'package:go_router/go_router.dart';
+import 'package:window_manager/window_manager.dart';
 
 class BrowserTabBar extends ConsumerStatefulWidget {
   final int currentViewId;
@@ -16,27 +16,76 @@ class BrowserTabBar extends ConsumerStatefulWidget {
   ConsumerState<ConsumerStatefulWidget> createState() => _BrowserTabBarState();
 }
 
-class _BrowserTabBarState extends ConsumerState<BrowserTabBar> {
+class _BrowserTabBarState extends ConsumerState<BrowserTabBar>
+    with WindowListener {
+  static const double _kMacControlsWidth = 78;
+  static const double _kRightControlsWidth = 138;
+
+  bool _isWindowMaximized = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (Platform.isMacOS || Platform.isLinux || Platform.isWindows) {
+      windowManager.addListener(this);
+      _refreshWindowState();
+    }
+  }
+
+  @override
+  void dispose() {
+    if (Platform.isMacOS || Platform.isLinux || Platform.isWindows) {
+      windowManager.removeListener(this);
+    }
+    super.dispose();
+  }
+
+  Future<void> _refreshWindowState() async {
+    final isMaximized = await windowManager.isMaximized();
+    if (!mounted || isMaximized == _isWindowMaximized) return;
+    setState(() {
+      _isWindowMaximized = isMaximized;
+    });
+  }
+
+  @override
+  void onWindowMaximize() => _refreshWindowState();
+
+  @override
+  void onWindowUnmaximize() => _refreshWindowState();
+
+  @override
+  void onWindowRestore() => _refreshWindowState();
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final colors = theme.colorScheme;
 
     final tabs = ref.watch(browserTabControllerProvider);
     final currentTabController = ref.watch(
       browserTabProvider(widget.currentViewId),
     );
 
-    final doLeftPadding = Platform.isMacOS;
+    final isMacOS = Platform.isMacOS;
+    final isWindows = Platform.isWindows;
+    final isLinux = Platform.isLinux;
+
+    final leftPadding = isMacOS ? _kMacControlsWidth : 8.0;
+    final rightPadding = (isWindows || isLinux) ? _kRightControlsWidth : 8.0;
 
     return Column(
       children: [
         SizedBox(
           height: 45,
-          child: Stack(
-            children: [
-              MoveWindow(),
-              Padding(
-                padding: EdgeInsets.only(left: doLeftPadding ? 80 : 8),
+          child: DragToMoveArea(
+            child: SizedBox(
+              width: .infinity,
+              child: Padding(
+                padding: EdgeInsets.only(
+                  left: leftPadding,
+                  right: rightPadding,
+                ),
                 child: ReorderableListView.builder(
                   shrinkWrap: true,
                   padding: const EdgeInsets.only(top: 4, bottom: 4),
@@ -116,7 +165,7 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar> {
                   },
                 ),
               ),
-            ],
+            ),
           ),
         ),
         Padding(

@@ -1,22 +1,31 @@
 import 'dart:io';
 
-import 'package:bitsdojo_window/bitsdojo_window.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutterbird/features/router/controller.dart';
+import 'package:window_manager/window_manager.dart';
 
-void main() {
-  runApp(ProviderScope(child: const MainApp()));
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
 
-  if (Platform.isMacOS || Platform.isLinux) {
-    doWhenWindowReady(() {
-      const initialSize = Size(800, 600);
-      appWindow.minSize = initialSize;
-      appWindow.size = initialSize;
-      appWindow.alignment = Alignment.center;
-      appWindow.show();
+  if (Platform.isMacOS || Platform.isLinux || Platform.isWindows) {
+    await windowManager.ensureInitialized();
+    const initialSize = Size(800, 600);
+    const windowOptions = WindowOptions(
+      minimumSize: initialSize,
+      size: initialSize,
+      center: true,
+      titleBarStyle: TitleBarStyle.hidden,
+      windowButtonVisibility: false,
+    );
+
+    await windowManager.waitUntilReadyToShow(windowOptions, () async {
+      await windowManager.show();
+      await windowManager.focus();
     });
   }
+
+  runApp(ProviderScope(child: const MainApp()));
 }
 
 class MainApp extends StatefulWidget {
