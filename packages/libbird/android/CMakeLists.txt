@@ -85,11 +85,83 @@ target_link_libraries(engine PRIVATE
 
 add_dependencies(engine ladybird)
 
+if(TARGET webcontentservice)
+    add_dependencies(engine webcontentservice)
+endif()
+
+if(TARGET requestserverservice)
+    add_dependencies(engine requestserverservice)
+endif()
+
+if(TARGET imagedecoderservice)
+    add_dependencies(engine imagedecoderservice)
+endif()
+
+if(TARGET compositorservice)
+    add_dependencies(engine compositorservice)
+endif()
+
 target_link_libraries(${PLUGIN_NAME} PRIVATE engine log android jnigraphics)
+
+if(TARGET webcontentservice)
+    target_link_libraries(${PLUGIN_NAME} PRIVATE webcontentservice)
+endif()
+
+if(TARGET requestserverservice)
+    target_link_libraries(${PLUGIN_NAME} PRIVATE requestserverservice)
+endif()
+
+if(TARGET imagedecoderservice)
+    target_link_libraries(${PLUGIN_NAME} PRIVATE imagedecoderservice)
+endif()
+
+if(TARGET compositorservice)
+    target_link_libraries(${PLUGIN_NAME} PRIVATE compositorservice)
+endif()
+
+if(TARGET compositorservice)
+    add_library(compositorservicebridge SHARED
+        "${LADYBIRD_DIR}/UI/Android/src/main/cpp/LadybirdServiceBaseJNI.cpp"
+        "${LADYBIRD_DIR}/UI/Android/src/main/cpp/JNIHelpers.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/main/cpp/CompositorService.cpp"
+    )
+
+    target_include_directories(compositorservicebridge PRIVATE
+        "${LADYBIRD_DIR}"
+        "${LADYBIRD_DIR}/Libraries"
+        "${LADYBIRD_DIR}/Userland/Libraries"
+        "${LADYBIRD_DIR}/Services"
+        "${LADYBIRD_BINARY_DIR}"
+        "${LADYBIRD_BINARY_DIR}/Libraries"
+        "${LADYBIRD_BINARY_DIR}/Services"
+        "${LADYBIRD_BINARY_DIR}/Lagom"
+        "${LADYBIRD_BINARY_DIR}/Lagom/Libraries"
+        "${LADYBIRD_BINARY_DIR}/Lagom/Services"
+        "${LADYBIRD_DIR}/UI/Android/src/main/cpp"
+    )
+
+    target_link_libraries(compositorservicebridge PRIVATE
+        compositorservice
+        LibCore
+        LibGfx
+        LibIPC
+        LibMain
+        LibWeb
+        LibWebView
+        android
+        log
+    )
+
+    add_dependencies(${PLUGIN_NAME} compositorservicebridge)
+
+    set_target_properties(compositorservicebridge PROPERTIES
+        CXX_STANDARD 23
+        CXX_STANDARD_REQUIRED ON
+    )
+endif()
 
 # Standard C++2b is required by Ladybird
 set_target_properties(${PLUGIN_NAME} PROPERTIES
     CXX_STANDARD 23
     CXX_STANDARD_REQUIRED ON
 )
-
