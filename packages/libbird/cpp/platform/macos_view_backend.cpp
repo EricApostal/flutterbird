@@ -101,6 +101,8 @@ bool MacOSViewBackend::on_iosurface_ready(IOSurfaceRef surface, int width,
     }
     m_pixel_buffer = new_pixel_buffer;
     has_pixel_buffer = (m_pixel_buffer != nullptr);
+    if (has_pixel_buffer)
+      ++m_generation;
   }
 
   if (has_pixel_buffer)
@@ -135,6 +137,8 @@ void MacOSViewBackend::on_bitmap_ready(AK::RefPtr<Gfx::Bitmap const> bitmap) {
       m_pixel_buffer = nullptr;
     }
     m_pixel_buffer = new_pixel_buffer;
+    if (m_pixel_buffer)
+      ++m_generation;
   }
 
   fire_frame_ready(size_changed);
@@ -149,6 +153,11 @@ void *MacOSViewBackend::pixel_data() {
   }
 
   return nullptr;
+}
+
+uint64_t MacOSViewBackend::frame_generation() const {
+  std::lock_guard lock(m_mutex);
+  return m_generation;
 }
 
 int MacOSViewBackend::width() const {

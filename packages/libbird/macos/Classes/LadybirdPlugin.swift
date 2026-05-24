@@ -1,6 +1,9 @@
 import Cocoa
 import FlutterMacOS
 
+private let generationResetThreshold: UInt64 = 256
+private let queueStallGenerationThreshold: UInt64 = 120
+
 @_silgen_name("get_latest_pixel_buffer")
 func get_latest_pixel_buffer(_ view_id: Int32) -> UnsafeMutableRawPointer?
 
@@ -38,8 +41,12 @@ class TextureContext {
   let viewId: Int32
   let stateLock = NSLock()
   var frameNotifyQueued = false
+  var queuedGeneration: UInt64 = 0
   var lastFrameGeneration: UInt64 = 0
   var isActive = true
+  var nativeFrameCallbacks: UInt64 = 0
+  var queuedDrops: UInt64 = 0
+  var deliveredFrames: UInt64 = 0
 
   init(registry: FlutterTextureRegistry, textureId: Int64, viewId: Int32) {
     self.registry = registry
@@ -144,6 +151,7 @@ public class LadybirdPlugin: NSObject, FlutterPlugin {
       let ctxPtr = Unmanaged.passRetained(ctx).toOpaque()
       contextPtrs[textureId] = ctxPtr
       activeTexturesForView[viewId] = textureId
+      print("[Ladybird][macOS] createTexture view=\(viewId) textureId=\(textureId) ctx=\(ctxPtr)")
 
       let callback: @convention(c) (UnsafeMutableRawPointer?) -> Void = { contextPtr in
         guard let contextPtr = contextPtr else { return }
@@ -152,28 +160,59 @@ public class LadybirdPlugin: NSObject, FlutterPlugin {
         let generation = get_frame_generation(ctx.viewId)
 
         ctx.stateLock.lock()
+        ctx.nativeFrameCallbacks += 1
         if !ctx.isActive {
           ctx.stateLock.unlock()
           return
         }
         if generation != 0 && generation <= ctx.lastFrameGeneration {
           if generation < ctx.lastFrameGeneration {
-            NSLog(
-              "[Ladybird][macOS] dropping out-of-order frame for view %d (generation=%llu < last=%llu)",
-              ctx.viewId,
-              generation,
-              ctx.lastFrameGeneration
+            let delta = ctx.lastFrameGeneration - generation
+            if delta > generationResetThreshold {
+              print(
+                "[Ladybird][macOS] generation reset detected for view \(ctx.viewId) (generation=\(generation) last=\(ctx.lastFrameGeneration)); accepting new sequence"
+              )
+            } else {
+              print(
+                "[Ladybird][macOS] dropping out-of-order frame for view \(ctx.viewId) (generation=\(generation) < last=\(ctx.lastFrameGeneration))"
+              )
+              ctx.stateLock.unlock()
+              return
+            }
+          } else {
+            ctx.stateLock.unlock()
+            return
+          }
+        }
+        if generation != 0 {
+          ctx.lastFrameGeneration = generation
+        }
+        if ctx.frameNotifyQueued {
+          if generation != 0 && generation > ctx.queuedGeneration + queueStallGenerationThreshold {
+            print(
+              "[Ladybird][macOS] queue stall detected for view \(ctx.viewId) (generation=\(generation) queuedAt=\(ctx.queuedGeneration)); resetting notify latch"
+            )
+            ctx.frameNotifyQueued = false
+          }
+        }
+        if ctx.frameNotifyQueued {
+          ctx.queuedDrops += 1
+          if (ctx.queuedDrops % 120) == 1 {
+            print(
+              "[Ladybird][macOS] frame callback coalesced view=\(ctx.viewId) textureId=\(ctx.textureId) queuedDrops=\(ctx.queuedDrops) generation=\(generation)"
             )
           }
           ctx.stateLock.unlock()
           return
         }
-        ctx.lastFrameGeneration = generation
-        if ctx.frameNotifyQueued {
-          ctx.stateLock.unlock()
-          return
-        }
         ctx.frameNotifyQueued = true
+        ctx.queuedGeneration = generation
+
+        if (ctx.nativeFrameCallbacks % 120) == 1 {
+          print(
+            "[Ladybird][macOS] native frame callback view=\(ctx.viewId) textureId=\(ctx.textureId) callbacks=\(ctx.nativeFrameCallbacks) generation=\(generation) queued=\(ctx.frameNotifyQueued)"
+          )
+        }
         ctx.stateLock.unlock()
 
         let textureId = ctx.textureId
@@ -183,6 +222,14 @@ public class LadybirdPlugin: NSObject, FlutterPlugin {
           ctx.stateLock.lock()
           let isActive = ctx.isActive
           ctx.frameNotifyQueued = false
+          if isActive {
+            ctx.deliveredFrames += 1
+            if (ctx.deliveredFrames % 120) == 1 {
+              print(
+                "[Ladybird][macOS] textureFrameAvailable view=\(ctx.viewId) textureId=\(ctx.textureId) delivered=\(ctx.deliveredFrames) lastGeneration=\(ctx.lastFrameGeneration)"
+              )
+            }
+          }
           ctx.stateLock.unlock()
 
           guard isActive else { return }
@@ -210,6 +257,7 @@ public class LadybirdPlugin: NSObject, FlutterPlugin {
       }
       let textureId = num.int64Value
       registry.unregisterTexture(textureId)
+      print("[Ladybird][macOS] unregisterTexture textureId=\(textureId)")
 
       if let ptr = contextPtrs.removeValue(forKey: textureId) {
         let ctx = Unmanaged<TextureContext>.fromOpaque(ptr).takeRetainedValue()
@@ -219,8 +267,16 @@ public class LadybirdPlugin: NSObject, FlutterPlugin {
         ctx.stateLock.unlock()
 
         if activeTexturesForView[ctx.viewId] == textureId {
+          print(
+            "[Ladybird][macOS] clearing frame callback for active view=\(ctx.viewId) textureId=\(textureId)"
+          )
           set_frame_callback(ctx.viewId, nil, nil)
           activeTexturesForView.removeValue(forKey: ctx.viewId)
+        } else {
+          let active = activeTexturesForView[ctx.viewId] ?? -1
+          print(
+            "[Ladybird][macOS] keeping frame callback view=\(ctx.viewId) removedTexture=\(textureId) activeTexture=\(active)"
+          )
         }
       }
 

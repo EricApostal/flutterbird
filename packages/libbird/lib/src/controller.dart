@@ -27,6 +27,14 @@ class LadybirdController {
     ffi.Void Function(ffi.Pointer<ffi.Uint8>, ffi.Int, ffi.Int)
   >
   _faviconChangeCallback;
+  late final ffi.NativeCallable<ffi.Void Function(ffi.Int)>
+  _crossSiteNavigationCallback;
+
+  late final void Function(
+    int,
+    ffi.Pointer<ffi.NativeFunction<ffi.Void Function(ffi.Int)>>,
+  )
+  _setCrossSiteNavigationCallback;
 
   static ffi.NativeCallable<DisplayDownloadConfirmationDialogCallbackFunction>?
   _displayDownloadConfirmationDialogCallback;
@@ -38,6 +46,7 @@ class LadybirdController {
   static void Function(String)? onDisplayErrorDialog;
 
   void Function()? onResize;
+  void Function()? onCrossSiteNavigation;
 
   final ValueNotifier<String> urlNotifier = ValueNotifier("");
   final ValueNotifier<String> titleNotifier = ValueNotifier("Tab");
@@ -48,6 +57,17 @@ class LadybirdController {
   LadybirdController({this.initialUrl = "https://www.duckduckgo.com/"}) {
     _lib = ffi.DynamicLibrary.process();
     _bindings = LadybirdBindings(_lib);
+    _setCrossSiteNavigationCallback = _lib
+        .lookupFunction<
+          ffi.Void Function(
+            ffi.Int,
+            ffi.Pointer<ffi.NativeFunction<ffi.Void Function(ffi.Int)>>,
+          ),
+          void Function(
+            int,
+            ffi.Pointer<ffi.NativeFunction<ffi.Void Function(ffi.Int)>>,
+          )
+        >('set_cross_site_navigation_callback');
     print("start bindings");
     if (_displayErrorDialogCallback == null) {
       _bindings.set_ask_user_for_download_path_callback(
@@ -109,6 +129,15 @@ class LadybirdController {
       _faviconChangeCallback.nativeFunction,
     );
 
+    _crossSiteNavigationCallback =
+        ffi.NativeCallable<ffi.Void Function(ffi.Int)>.listener(
+          _onCrossSiteNavigation,
+        );
+    _setCrossSiteNavigationCallback(
+      _viewId,
+      _crossSiteNavigationCallback.nativeFunction,
+    );
+
     _bindings.set_zoom(_viewId, 1.0);
     _lastDevicePixelRatio = 1.0;
     print("all things set");
@@ -164,6 +193,11 @@ class LadybirdController {
 
   void _onResize() {
     onResize?.call();
+  }
+
+  void _onCrossSiteNavigation(int viewId) {
+    if (viewId != _viewId) return;
+    onCrossSiteNavigation?.call();
   }
 
   void navigate(String url) {
@@ -269,10 +303,12 @@ class LadybirdController {
   }
 
   void dispose() {
+    _setCrossSiteNavigationCallback(_viewId, ffi.nullptr);
     _resizeCallback.close();
     _urlChangeCallback.close();
     _titleChangeCallback.close();
     _faviconChangeCallback.close();
+    _crossSiteNavigationCallback.close();
     _bindings.destroy_web_view(_viewId);
   }
 }

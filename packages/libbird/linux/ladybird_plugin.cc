@@ -55,6 +55,9 @@ struct _LadybirdTexture {
   bool logged_cpu_fallback;
 
   uint64_t last_frame_generation;
+  uint64_t native_frame_callbacks;
+  uint64_t queued_drops;
+  uint64_t delivered_frames;
 };
 
 G_DECLARE_FINAL_TYPE(LadybirdTexture, ladybird_texture, LADYBIRD, TEXTURE,
@@ -441,6 +444,9 @@ static void ladybird_texture_init(LadybirdTexture *self) {
   self->logged_dmabuf_active = false;
   self->logged_cpu_fallback = false;
   self->last_frame_generation = 0;
+  self->native_frame_callbacks = 0;
+  self->queued_drops = 0;
+  self->delivered_frames = 0;
 }
 
 static LadybirdTexture *ladybird_texture_new(int view_id,
@@ -480,6 +486,16 @@ static gboolean ladybird_dispatch_frame_available(gpointer user_data) {
   if (!texture->texture_registrar)
     return G_SOURCE_REMOVE;
 
+  texture->delivered_frames++;
+  if ((texture->delivered_frames % 120) == 1) {
+    g_message(
+        "[ladybird][linux] textureFrameAvailable view=%d delivered=%llu "
+        "lastGeneration=%llu",
+        texture->view_id,
+        static_cast<unsigned long long>(texture->delivered_frames),
+        static_cast<unsigned long long>(texture->last_frame_generation));
+  }
+
   fl_texture_registrar_mark_texture_frame_available(texture->texture_registrar,
                                                     FL_TEXTURE(texture));
   return G_SOURCE_REMOVE;
@@ -490,9 +506,29 @@ static void ladybird_frame_ready_callback(void *context) {
   if (!texture || !texture->texture_registrar)
     return;
 
+  texture->native_frame_callbacks++;
   texture->last_frame_generation = get_frame_generation(texture->view_id);
-  if (texture->frame_notify_queued)
+  if (texture->frame_notify_queued) {
+    texture->queued_drops++;
+    if ((texture->queued_drops % 120) == 1) {
+      g_message(
+          "[ladybird][linux] frame callback coalesced view=%d queuedDrops=%llu "
+          "generation=%llu",
+          texture->view_id,
+          static_cast<unsigned long long>(texture->queued_drops),
+          static_cast<unsigned long long>(texture->last_frame_generation));
+    }
     return;
+  }
+
+  if ((texture->native_frame_callbacks % 120) == 1) {
+    g_message(
+        "[ladybird][linux] native frame callback view=%d callbacks=%llu "
+        "generation=%llu",
+        texture->view_id,
+        static_cast<unsigned long long>(texture->native_frame_callbacks),
+        static_cast<unsigned long long>(texture->last_frame_generation));
+  }
 
   texture->frame_notify_queued = true;
   texture->frame_notify_source_id =
@@ -546,6 +582,9 @@ static void ladybird_plugin_handle_method_call(LadybirdPlugin *self,
       if (self->active_texture_for_view) {
         (*self->active_texture_for_view)[static_cast<int>(view_id)] = texture_id;
       }
+      g_message("[ladybird][linux] createTexture view=%d textureId=%lld tex=%p",
+                static_cast<int>(view_id),
+                static_cast<long long>(texture_id), texture);
 
       g_autoptr(FlValue) result = fl_value_new_int(texture_id);
       response = FL_METHOD_RESPONSE(fl_method_success_response_new(result));
@@ -557,6 +596,8 @@ static void ladybird_plugin_handle_method_call(LadybirdPlugin *self,
     FlValue *args = fl_method_call_get_args(method_call);
     if (fl_value_get_type(args) == FL_VALUE_TYPE_INT) {
       int64_t texture_id = fl_value_get_int(args);
+      g_message("[ladybird][linux] unregisterTexture textureId=%lld",
+                static_cast<long long>(texture_id));
 
       if (self->textures) {
         auto it = self->textures->find(texture_id);
@@ -574,10 +615,26 @@ static void ladybird_plugin_handle_method_call(LadybirdPlugin *self,
           }
 
           if (clear_view_callback) {
+            g_message(
+                "[ladybird][linux] clearing frame callback view=%d "
+                "activeTexture=%lld",
+                l_texture->view_id, static_cast<long long>(texture_id));
             set_frame_callback(l_texture->view_id, nullptr, nullptr);
             if (self->active_texture_for_view) {
               self->active_texture_for_view->erase(l_texture->view_id);
             }
+          } else if (self->active_texture_for_view) {
+            auto active_it =
+                self->active_texture_for_view->find(l_texture->view_id);
+            auto active_texture_id =
+                active_it != self->active_texture_for_view->end()
+                    ? active_it->second
+                    : static_cast<int64_t>(-1);
+            g_message(
+                "[ladybird][linux] keeping frame callback view=%d "
+                "removedTexture=%lld activeTexture=%lld",
+                l_texture->view_id, static_cast<long long>(texture_id),
+                static_cast<long long>(active_texture_id));
           }
 
           if (l_texture->frame_notify_source_id != 0) {

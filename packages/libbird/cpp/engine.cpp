@@ -99,6 +99,7 @@ public:
 
   // Platform rendering backend (LinuxViewBackend / MacOSViewBackend).
   std::unique_ptr<ViewBackend> m_backend;
+  uint64_t m_debug_paint_event_count{0};
 
 #ifdef __APPLE__
   MacFrameSource m_last_mac_frame_source{MacFrameSource::Unknown};
@@ -110,6 +111,7 @@ public:
   UrlChangeCallback m_url_change_callback = nullptr;
   TitleChangeCallback m_title_change_callback = nullptr;
   FaviconChangeCallback m_favicon_change_callback = nullptr;
+  CrossSiteNavigationCallback m_cross_site_navigation_callback = nullptr;
 
   void sync_device_pixel_ratio() { m_device_pixel_ratio = m_zoom; }
 
@@ -150,6 +152,8 @@ public:
           !m_client_state.front_bitmap.shared_image_buffer)
         return;
 
+      ++m_debug_paint_event_count;
+
       auto *shared_image_buffer =
           m_client_state.front_bitmap.shared_image_buffer.ptr();
 
@@ -182,6 +186,14 @@ public:
                              m_view_id);
                 m_last_mac_frame_source = MacFrameSource::IOSurface;
               }
+              if ((m_debug_paint_event_count % 120) == 1) {
+                std::fprintf(
+                    stderr,
+                    "[Ladybird][engine] view=%d paint#=%llu source=IOSurface size=%dx%d\n",
+                    m_view_id,
+                    static_cast<unsigned long long>(m_debug_paint_event_count),
+                    bitmap_size.width(), bitmap_size.height());
+              }
             return;
             }
         }
@@ -190,6 +202,16 @@ public:
       auto bitmap = AK::RefPtr<Gfx::Bitmap const>(
           shared_image_buffer->bitmap());
       m_backend->on_bitmap_ready(std::move(bitmap));
+
+        if ((m_debug_paint_event_count % 120) == 1) {
+        std::fprintf(
+          stderr,
+          "[Ladybird][engine] view=%d paint#=%llu source=Bitmap size=%dx%d gen=%llu\n",
+          m_view_id,
+          static_cast<unsigned long long>(m_debug_paint_event_count),
+          m_backend->width(), m_backend->height(),
+          static_cast<unsigned long long>(m_backend->frame_generation()));
+        }
 
     #ifdef __APPLE__
           if (m_last_mac_frame_source != MacFrameSource::BitmapFallback) {
@@ -206,6 +228,9 @@ public:
       std::fprintf(stderr,
                    "WebContent process changed for cross site navigation.\n");
       configure_client_process();
+      std::lock_guard lock(m_info_mutex);
+      if (m_cross_site_navigation_callback)
+        m_cross_site_navigation_callback(m_view_id);
     };
 
     on_web_content_crashed = []() {
@@ -619,6 +644,9 @@ void set_frame_callback(int view_id, FrameCallback callback, void *context) {
     std::lock_guard lock(it->second->m_backend->callback_mutex);
     it->second->m_backend->frame_callback = callback;
     it->second->m_backend->frame_callback_context = context;
+    std::fprintf(stderr,
+                 "[Ladybird][engine] set_frame_callback view=%d callback=%p context=%p\n",
+                 view_id, reinterpret_cast<void *>(callback), context);
   }
 }
 
@@ -694,6 +722,15 @@ void set_favicon_change_callback(int view_id, FaviconChangeCallback callback) {
   if (it != g_web_views.end()) {
     std::lock_guard lock(it->second->m_info_mutex);
     it->second->m_favicon_change_callback = callback;
+  }
+}
+
+void set_cross_site_navigation_callback(int view_id,
+                                        CrossSiteNavigationCallback callback) {
+  auto it = g_web_views.find(view_id);
+  if (it != g_web_views.end()) {
+    std::lock_guard lock(it->second->m_info_mutex);
+    it->second->m_cross_site_navigation_callback = callback;
   }
 }
 

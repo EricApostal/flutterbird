@@ -16,6 +16,8 @@ class LadybirdView extends StatefulWidget {
 class _LadybirdViewState extends State<LadybirdView>
     with SingleTickerProviderStateMixin {
   int? _textureId;
+  bool _textureRecreateInProgress = false;
+  bool _textureRecreateQueued = false;
   final FocusNode _focusNode = FocusNode();
 
   double _accumulatedWheelX = 0;
@@ -37,6 +39,13 @@ class _LadybirdViewState extends State<LadybirdView>
         setState(() {});
       }
     };
+    widget.controller.onCrossSiteNavigation = () {
+      if (!mounted) return;
+      print(
+        '[Ladybird][Flutter] cross-site navigation process change for view ${widget.controller.viewId}; recreating texture',
+      );
+      _recreateTextureFromCrossSiteNavigation();
+    };
     _recreateTexture();
   }
 
@@ -45,6 +54,7 @@ class _LadybirdViewState extends State<LadybirdView>
     super.didUpdateWidget(oldWidget);
     if (oldWidget.controller != widget.controller) {
       oldWidget.controller.onResize = null;
+      oldWidget.controller.onCrossSiteNavigation = null;
 
       if (_textureId != null) {
         oldWidget.controller.unregisterTexture(_textureId!);
@@ -56,27 +66,56 @@ class _LadybirdViewState extends State<LadybirdView>
           setState(() {});
         }
       };
+      widget.controller.onCrossSiteNavigation = () {
+        if (!mounted) return;
+        print(
+          '[Ladybird][Flutter] cross-site navigation process change for view ${widget.controller.viewId}; recreating texture',
+        );
+        _recreateTextureFromCrossSiteNavigation();
+      };
 
       _recreateTexture();
     }
   }
 
   Future<void> _recreateTexture() async {
-    final int? oldTextureId = _textureId;
-    final int textureId = await widget.controller.createTexture();
+    if (_textureRecreateInProgress) {
+      _textureRecreateQueued = true;
+      return;
+    }
 
+    _textureRecreateInProgress = true;
+    try {
+      do {
+        _textureRecreateQueued = false;
+        final int? oldTextureId = _textureId;
+        final int textureId = await widget.controller.createTexture();
+
+        if (mounted) {
+          setState(() {
+            _textureId = textureId;
+          });
+          if (oldTextureId != null && oldTextureId != textureId) {
+            widget.controller.unregisterTexture(oldTextureId);
+          }
+        } else {
+          await widget.controller.unregisterTexture(textureId);
+          if (oldTextureId != null) {
+            await widget.controller.unregisterTexture(oldTextureId);
+          }
+        }
+      } while (_textureRecreateQueued && mounted);
+    } finally {
+      _textureRecreateInProgress = false;
+      _textureRecreateQueued = false;
+    }
+  }
+
+  Future<void> _recreateTextureFromCrossSiteNavigation() async {
+    if (!mounted) return;
+    await _recreateTexture();
     if (mounted) {
-      setState(() {
-        _textureId = textureId;
-      });
-      if (oldTextureId != null && oldTextureId != textureId) {
-        widget.controller.unregisterTexture(oldTextureId);
-      }
-    } else {
-      await widget.controller.unregisterTexture(textureId);
-      if (oldTextureId != null) {
-        await widget.controller.unregisterTexture(oldTextureId);
-      }
+      setState(() {});
     }
   }
 
@@ -239,6 +278,7 @@ class _LadybirdViewState extends State<LadybirdView>
   @override
   void dispose() {
     widget.controller.onResize = null;
+    widget.controller.onCrossSiteNavigation = null;
     _momentumTicker?.dispose();
     _focusNode.dispose();
     print("disposing!");
