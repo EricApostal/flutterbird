@@ -1,5 +1,4 @@
 import Cocoa
-import CoreVideo
 import FlutterMacOS
 
 @_silgen_name("get_latest_pixel_buffer")
@@ -51,9 +50,12 @@ class TextureContext {
 
 public class LadybirdPlugin: NSObject, FlutterPlugin {
   var textureRegistry: FlutterTextureRegistry?
-  var tickTimer: DispatchSourceTimer?
+  var runLoopObserver: CFRunLoopObserver?
   var contextPtrs: [Int64: UnsafeMutableRawPointer] = [:]
   var activeTexturesForView: [Int32: Int64] = [:]
+  private let pumpStateLock = NSLock()
+  private var pumpInProgress = false
+  private var pumpRequested = false
 
   public static func register(with registrar: FlutterPluginRegistrar) {
     let channel = FlutterMethodChannel(name: "ladybird", binaryMessenger: registrar.messenger)
@@ -65,16 +67,58 @@ public class LadybirdPlugin: NSObject, FlutterPlugin {
   }
 
   private func startLadybirdLoop() {
-    // Linux uses a frequent timer tick; doing the same on macOS avoids
-    // display-link pacing artifacts where UI updates can appear to arrive in
-    // visibly stale bursts.
-    let timer = DispatchSource.makeTimerSource(queue: DispatchQueue.main)
-    timer.schedule(deadline: .now(), repeating: .milliseconds(1), leeway: .milliseconds(1))
-    timer.setEventHandler {
-      tick_ladybird()
+    let activities =
+      CFRunLoopActivity.beforeSources.rawValue
+      | CFRunLoopActivity.beforeWaiting.rawValue
+      | CFRunLoopActivity.afterWaiting.rawValue
+
+    let observer = CFRunLoopObserverCreateWithHandler(
+      kCFAllocatorDefault,
+      activities,
+      true,
+      0
+    ) { [weak self] _, _ in
+      self?.requestLadybirdPump()
     }
-    timer.resume()
-    tickTimer = timer
+
+    guard let observer else { return }
+    CFRunLoopAddObserver(CFRunLoopGetMain(), observer, .commonModes)
+    runLoopObserver = observer
+
+    // Prime one pass at startup.
+    requestLadybirdPump()
+  }
+
+  deinit {
+    if let observer = runLoopObserver {
+      CFRunLoopRemoveObserver(CFRunLoopGetMain(), observer, .commonModes)
+      runLoopObserver = nil
+    }
+  }
+
+  private func requestLadybirdPump() {
+    pumpStateLock.lock()
+    if pumpInProgress {
+      pumpRequested = true
+      pumpStateLock.unlock()
+      return
+    }
+    pumpInProgress = true
+    pumpStateLock.unlock()
+
+    while true {
+      tick_ladybird()
+
+      pumpStateLock.lock()
+      if pumpRequested {
+        pumpRequested = false
+        pumpStateLock.unlock()
+        continue
+      }
+      pumpInProgress = false
+      pumpStateLock.unlock()
+      break
+    }
   }
 
   public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
