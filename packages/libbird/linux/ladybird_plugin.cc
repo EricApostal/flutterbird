@@ -461,6 +461,7 @@ struct _LadybirdPlugin {
   FlPluginRegistrar *registrar;
   FlTextureRegistrar *texture_registrar;
   std::map<int64_t, LadybirdTexture *> *textures;
+  std::map<int, int64_t> *active_texture_for_view;
 };
 
 G_DEFINE_TYPE(LadybirdPlugin, ladybird_plugin, g_object_get_type())
@@ -542,6 +543,9 @@ static void ladybird_plugin_handle_method_call(LadybirdPlugin *self,
       if (self->textures) {
         self->textures->insert(std::make_pair(texture_id, texture));
       }
+      if (self->active_texture_for_view) {
+        (*self->active_texture_for_view)[static_cast<int>(view_id)] = texture_id;
+      }
 
       g_autoptr(FlValue) result = fl_value_new_int(texture_id);
       response = FL_METHOD_RESPONSE(fl_method_success_response_new(result));
@@ -560,7 +564,22 @@ static void ladybird_plugin_handle_method_call(LadybirdPlugin *self,
           LadybirdTexture *l_texture = it->second;
           FlTexture *texture = FL_TEXTURE(l_texture);
 
-          set_frame_callback(l_texture->view_id, nullptr, nullptr);
+          bool clear_view_callback = true;
+          if (self->active_texture_for_view) {
+            auto active_it = self->active_texture_for_view->find(l_texture->view_id);
+            if (active_it != self->active_texture_for_view->end() &&
+                active_it->second != texture_id) {
+              clear_view_callback = false;
+            }
+          }
+
+          if (clear_view_callback) {
+            set_frame_callback(l_texture->view_id, nullptr, nullptr);
+            if (self->active_texture_for_view) {
+              self->active_texture_for_view->erase(l_texture->view_id);
+            }
+          }
+
           if (l_texture->frame_notify_source_id != 0) {
             g_source_remove(l_texture->frame_notify_source_id);
             l_texture->frame_notify_source_id = 0;
@@ -602,6 +621,11 @@ static void ladybird_plugin_dispose(GObject *object) {
     delete self->textures;
     self->textures = nullptr;
   }
+  if (self->active_texture_for_view) {
+    self->active_texture_for_view->clear();
+    delete self->active_texture_for_view;
+    self->active_texture_for_view = nullptr;
+  }
   G_OBJECT_CLASS(ladybird_plugin_parent_class)->dispose(object);
 }
 
@@ -611,6 +635,7 @@ static void ladybird_plugin_class_init(LadybirdPluginClass *klass) {
 
 static void ladybird_plugin_init(LadybirdPlugin *self) {
   self->textures = new std::map<int64_t, LadybirdTexture *>();
+  self->active_texture_for_view = new std::map<int, int64_t>();
 }
 
 static void method_call_cb(FlMethodChannel *channel, FlMethodCall *method_call,
