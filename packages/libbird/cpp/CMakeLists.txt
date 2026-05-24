@@ -172,6 +172,7 @@ if (APPLE)
         COMMAND ${CMAKE_COMMAND} -E copy "$<TARGET_FILE:engine>" "${BUNDLE_DIR}/"
 
         COMMAND ${CMAKE_COMMAND} -E copy_directory "${LADYBIRD_OUT_DIR}/lib" "${BUNDLE_DIR}/libraries"
+        COMMAND ${CMAKE_COMMAND} -E copy_directory "${LADYBIRD_OUT_DIR}/vcpkg_installed/${VCPKG_TRIPLET}/lib" "${BUNDLE_DIR}/libraries"
 
         COMMAND ${CMAKE_COMMAND} -E copy "${LADYBIRD_OUT_DIR}/bin/Ladybird.app/Contents/MacOS/WebContent" "${BUNDLE_DIR}/binaries/"
         COMMAND ${CMAKE_COMMAND} -E copy "${LADYBIRD_OUT_DIR}/bin/Ladybird.app/Contents/MacOS/RequestServer" "${BUNDLE_DIR}/binaries/"
