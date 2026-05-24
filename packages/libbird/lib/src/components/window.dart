@@ -299,6 +299,12 @@ class _LadybirdViewState extends State<LadybirdView>
 
           final paddedWidth = widget.controller.getSurfaceWidth() / density;
           final paddedHeight = widget.controller.getSurfaceHeight() / density;
+          final displayWidth = paddedWidth > constraints.maxWidth
+              ? paddedWidth
+              : constraints.maxWidth;
+          final displayHeight = paddedHeight > constraints.maxHeight
+              ? paddedHeight
+              : constraints.maxHeight;
 
           return ClipRect(
             child: OverflowBox(
@@ -312,8 +318,8 @@ class _LadybirdViewState extends State<LadybirdView>
                   ? paddedHeight
                   : constraints.maxHeight,
               child: SizedBox(
-                width: paddedWidth,
-                height: paddedHeight,
+                width: displayWidth,
+                height: displayHeight,
                 child: MouseRegion(
                   onEnter: (_) {
                     // if (!_focusNode.hasFocus) {

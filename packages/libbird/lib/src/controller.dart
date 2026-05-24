@@ -172,7 +172,6 @@ class LadybirdController {
   }
 
   void _onResize() {
-    print("ON RESIZE!");
     onResize?.call();
   }
 
@@ -231,7 +230,7 @@ class LadybirdController {
   bool resizeWindow(Size size) {
     if (size == _lastSize) return false;
     _lastSize = size;
-    _bindings.resize_window(_viewId, size.width.toInt(), size.height.toInt());
+    _bindings.resize_window(_viewId, size.width.round(), size.height.round());
     return true;
   }
 

@@ -174,12 +174,19 @@ public:
     #else
         auto *mac_backend = static_cast<MacOSViewBackend *>(m_backend.get());
         auto *surface = static_cast<IOSurfaceRef>(
-          shared_image_buffer->iosurface_handle().core_foundation_pointer());
+            shared_image_buffer->iosurface_handle().core_foundation_pointer());
         if (surface) {
-        auto bitmap_size =
-          m_client_state.front_bitmap.last_painted_size.to_type<int>();
-            if (mac_backend->on_iosurface_ready(surface, bitmap_size.width(),
-                                                bitmap_size.height())) {
+          auto surface_width = static_cast<int>(IOSurfaceGetWidth(surface));
+          auto surface_height = static_cast<int>(IOSurfaceGetHeight(surface));
+          if (surface_width <= 0 || surface_height <= 0) {
+            auto bitmap_size =
+                m_client_state.front_bitmap.last_painted_size.to_type<int>();
+            surface_width = bitmap_size.width();
+            surface_height = bitmap_size.height();
+          }
+
+          if (mac_backend->on_iosurface_ready(surface, surface_width,
+                                              surface_height)) {
               if (m_last_mac_frame_source != MacFrameSource::IOSurface) {
                 std::fprintf(stderr,
                              "[Ladybird][macOS] View %d rendering source: IOSurface\n",
@@ -192,10 +199,10 @@ public:
                     "[Ladybird][engine] view=%d paint#=%llu source=IOSurface size=%dx%d\n",
                     m_view_id,
                     static_cast<unsigned long long>(m_debug_paint_event_count),
-                    bitmap_size.width(), bitmap_size.height());
+                    surface_width, surface_height);
               }
-            return;
-            }
+              return;
+          }
         }
 #endif
 
