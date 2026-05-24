@@ -168,56 +168,55 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar>
             ),
           ),
         ),
-        Padding(
-          padding: const EdgeInsets.only(left: 4, right: 4, bottom: 4),
-          child: Row(
-            children: [
-              IconButton(
-                icon: const Icon(Icons.arrow_back, size: 20),
-                onPressed: () {
-                  currentTabController?.goBack();
-                },
-                splashRadius: 20,
-              ),
-              IconButton(
-                icon: const Icon(Icons.arrow_forward, size: 20),
-                onPressed: () {
-                  currentTabController?.goForward();
-                },
-                splashRadius: 20,
-              ),
-              IconButton(
-                icon: const Icon(Icons.refresh, size: 20),
-                onPressed: () {
-                  currentTabController?.reload();
-                },
-                splashRadius: 20,
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: ValueListenableBuilder<String>(
-                  valueListenable: currentTabController!.urlNotifier,
-                  builder: (context, url, child) {
-                    if (currentTabController.textController.text != url &&
-                        !FocusScope.of(context).hasFocus) {
-                      currentTabController.textController.text = url;
-                    }
-                    return TextField(
-                      onSubmitted: (value) {
-                        currentTabController.navigate(value);
-                      },
-                      controller: currentTabController.textController,
-                      decoration: _buildInputDecoration(),
-                      style: theme.textTheme.bodyMedium!.copyWith(
-                        color: theme.colorScheme.onSurface,
-                        fontWeight: FontWeight.w500,
-                        fontSize: 13,
-                      ),
-                    );
+        Container(
+          color: theme.colorScheme.surfaceContainerHigh,
+          child: Padding(
+            padding: const EdgeInsets.only(left: 4, right: 4, bottom: 4),
+            child: Row(
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.arrow_back, size: 20),
+                  onPressed: () {
+                    currentTabController?.goBack();
                   },
+                  splashRadius: 20,
                 ),
-              ),
-            ],
+                IconButton(
+                  icon: const Icon(Icons.arrow_forward, size: 20),
+                  onPressed: () {
+                    currentTabController?.goForward();
+                  },
+                  splashRadius: 20,
+                ),
+                IconButton(
+                  icon: const Icon(Icons.refresh, size: 20),
+                  onPressed: () {
+                    currentTabController?.reload();
+                  },
+                  splashRadius: 20,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: ValueListenableBuilder<String>(
+                    valueListenable: currentTabController!.urlNotifier,
+                    builder: (context, url, child) {
+                      if (currentTabController.textController.text != url &&
+                          !FocusScope.of(context).hasFocus) {
+                        currentTabController.textController.text = url;
+                      }
+                      return TextField(
+                        onSubmitted: (value) {
+                          currentTabController.navigate(value);
+                        },
+                        controller: currentTabController.textController,
+                        decoration: _buildInputDecoration(),
+                        style: theme.textTheme.bodyMedium!,
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ],
@@ -226,29 +225,22 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar>
 
   InputDecoration _buildInputDecoration() {
     final theme = Theme.of(context);
-    final radius = 12.0;
+    final radius = 8.0;
 
     return InputDecoration(
       hintText: "Search",
       filled: true,
-      fillColor: theme.colorScheme.surfaceContainer,
-
+      fillColor: theme.colorScheme.surface,
       isDense: true,
-
-      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
 
       hintStyle: theme.textTheme.bodyMedium!.copyWith(
-        color: theme.colorScheme.onSurface.withAlpha(200),
-        fontWeight: .w500,
-        fontSize: 13,
+        color: theme.colorScheme.onSurface.withAlpha(150),
       ),
 
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(radius),
-        borderSide: BorderSide(
-          color: theme.colorScheme.surfaceContainerHigh,
-          width: 1,
-        ),
+        borderSide: BorderSide(color: theme.colorScheme.surface, width: 1),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(radius),

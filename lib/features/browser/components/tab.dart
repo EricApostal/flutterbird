@@ -32,7 +32,7 @@ class BrowserTab extends ConsumerWidget {
           width: 225,
           decoration: BoxDecoration(
             color: selected
-                ? theme.colorScheme.surfaceContainerHigh
+                ? theme.colorScheme.surfaceContainerHighest
                 : Colors.transparent,
             borderRadius: const BorderRadius.vertical(
               top: Radius.circular(8),
@@ -71,7 +71,7 @@ class BrowserTab extends ConsumerWidget {
                             builder: (context, title, child) {
                               return Text(
                                 title,
-                                style: theme.textTheme.bodyMedium!.copyWith(
+                                style: theme.textTheme.bodySmall!.copyWith(
                                   color: selected
                                       ? theme.colorScheme.onSurface
                                       : theme.colorScheme.onSurfaceVariant,
