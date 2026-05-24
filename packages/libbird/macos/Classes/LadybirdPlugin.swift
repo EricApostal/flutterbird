@@ -8,6 +8,9 @@ func get_latest_pixel_buffer(_ view_id: Int32) -> UnsafeMutableRawPointer?
 @_silgen_name("tick_ladybird")
 func tick_ladybird()
 
+@_silgen_name("get_frame_generation")
+func get_frame_generation(_ view_id: Int32) -> UInt64
+
 @_silgen_name("set_frame_callback")
 func set_frame_callback(
   _ view_id: Int32, _ callback: (@convention(c) (UnsafeMutableRawPointer?) -> Void)?,
@@ -34,6 +37,10 @@ class TextureContext {
   let registry: FlutterTextureRegistry
   let textureId: Int64
   let viewId: Int32
+  let stateLock = NSLock()
+  var frameNotifyQueued = false
+  var lastFrameGeneration: UInt64 = 0
+  var isActive = true
 
   init(registry: FlutterTextureRegistry, textureId: Int64, viewId: Int32) {
     self.registry = registry
@@ -44,7 +51,7 @@ class TextureContext {
 
 public class LadybirdPlugin: NSObject, FlutterPlugin {
   var textureRegistry: FlutterTextureRegistry?
-  var displayLink: CVDisplayLink?
+  var tickTimer: DispatchSourceTimer?
   var contextPtrs: [Int64: UnsafeMutableRawPointer] = [:]
   var activeTexturesForView: [Int32: Int64] = [:]
 
@@ -58,22 +65,16 @@ public class LadybirdPlugin: NSObject, FlutterPlugin {
   }
 
   private func startLadybirdLoop() {
-    var link: CVDisplayLink?
-    CVDisplayLinkCreateWithActiveCGDisplays(&link)
-
-    if let displayLink = link {
-      CVDisplayLinkSetOutputCallback(
-        displayLink,
-        { (_, _, _, _, _, _) -> CVReturn in
-          DispatchQueue.main.async {
-            tick_ladybird()
-          }
-          return kCVReturnSuccess
-        }, nil)
-
-      CVDisplayLinkStart(displayLink)
-      self.displayLink = displayLink
+    // Linux uses a frequent timer tick; doing the same on macOS avoids
+    // display-link pacing artifacts where UI updates can appear to arrive in
+    // visibly stale bursts.
+    let timer = DispatchSource.makeTimerSource(queue: DispatchQueue.main)
+    timer.schedule(deadline: .now(), repeating: .milliseconds(1), leeway: .milliseconds(1))
+    timer.setEventHandler {
+      tick_ladybird()
     }
+    timer.resume()
+    tickTimer = timer
   }
 
   public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
@@ -104,11 +105,50 @@ public class LadybirdPlugin: NSObject, FlutterPlugin {
         guard let contextPtr = contextPtr else { return }
         let ctx = Unmanaged<TextureContext>.fromOpaque(contextPtr).takeUnretainedValue()
 
+        let generation = get_frame_generation(ctx.viewId)
+
+        ctx.stateLock.lock()
+        if !ctx.isActive {
+          ctx.stateLock.unlock()
+          return
+        }
+        if generation != 0 && generation <= ctx.lastFrameGeneration {
+          if generation < ctx.lastFrameGeneration {
+            NSLog(
+              "[Ladybird][macOS] dropping out-of-order frame for view %d (generation=%llu < last=%llu)",
+              ctx.viewId,
+              generation,
+              ctx.lastFrameGeneration
+            )
+          }
+          ctx.stateLock.unlock()
+          return
+        }
+        ctx.lastFrameGeneration = generation
+        if ctx.frameNotifyQueued {
+          ctx.stateLock.unlock()
+          return
+        }
+        ctx.frameNotifyQueued = true
+        ctx.stateLock.unlock()
+
         let textureId = ctx.textureId
         let reg = ctx.registry
 
-        DispatchQueue.main.async {
+        let deliverFrameAvailable = {
+          ctx.stateLock.lock()
+          let isActive = ctx.isActive
+          ctx.frameNotifyQueued = false
+          ctx.stateLock.unlock()
+
+          guard isActive else { return }
           reg.textureFrameAvailable(textureId)
+        }
+
+        if Thread.isMainThread {
+          deliverFrameAvailable()
+        } else {
+          DispatchQueue.main.async(execute: deliverFrameAvailable)
         }
       }
 
@@ -129,6 +169,11 @@ public class LadybirdPlugin: NSObject, FlutterPlugin {
 
       if let ptr = contextPtrs.removeValue(forKey: textureId) {
         let ctx = Unmanaged<TextureContext>.fromOpaque(ptr).takeRetainedValue()
+        ctx.stateLock.lock()
+        ctx.isActive = false
+        ctx.frameNotifyQueued = false
+        ctx.stateLock.unlock()
+
         if activeTexturesForView[ctx.viewId] == textureId {
           set_frame_callback(ctx.viewId, nil, nil)
           activeTexturesForView.removeValue(forKey: ctx.viewId)
