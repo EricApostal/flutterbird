@@ -231,6 +231,7 @@ class BrowserWindowLayout extends _$BrowserWindowLayout {
 
       final filteredTabs = window.tabIds.where((id) => id != viewId).toList();
       if (!window.isMain && filteredTabs.isEmpty) {
+        window.nativeWindowController?.destroy();
         continue;
       }
 
@@ -361,6 +362,7 @@ class BrowserWindowLayout extends _$BrowserWindowLayout {
       }
 
       if (sourceRemainingTabs.isEmpty) {
+        window.nativeWindowController?.destroy();
         continue;
       }
 
