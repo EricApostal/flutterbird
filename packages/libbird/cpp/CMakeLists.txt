@@ -38,7 +38,7 @@ else()
         "PYTHONPATH=${LADYBIRD_DIR}"
     )
 
-    # libvpx in the Ladybird vcpkg graph is flaky under high parallelism on macOS.
+    # I'm pretty sure this is useless
     if (APPLE)
         list(APPEND _ladybird_build_env "VCPKG_MAX_CONCURRENCY=1")
     endif()
@@ -178,6 +178,7 @@ if (APPLE)
         COMMAND ${CMAKE_COMMAND} -E copy "${LADYBIRD_OUT_DIR}/bin/Ladybird.app/Contents/MacOS/RequestServer" "${BUNDLE_DIR}/binaries/"
         COMMAND ${CMAKE_COMMAND} -E copy "${LADYBIRD_OUT_DIR}/bin/Ladybird.app/Contents/MacOS/ImageDecoder" "${BUNDLE_DIR}/binaries/"
         COMMAND ${CMAKE_COMMAND} -E copy "${LADYBIRD_OUT_DIR}/bin/Ladybird.app/Contents/MacOS/WebWorker" "${BUNDLE_DIR}/binaries/"
+        COMMAND ${CMAKE_COMMAND} -E copy "${LADYBIRD_OUT_DIR}/bin/Ladybird.app/Contents/MacOS/Compositor" "${BUNDLE_DIR}/binaries/"
         COMMAND ${CMAKE_COMMAND} -E copy "${LADYBIRD_OUT_DIR}/bin/Ladybird.app/Contents/MacOS/Ladybird" "${BUNDLE_DIR}/binaries/"
 
         COMMAND ${CMAKE_COMMAND} -E copy_directory "${LADYBIRD_DIR}/Base/res" "${BUNDLE_DIR}/res"

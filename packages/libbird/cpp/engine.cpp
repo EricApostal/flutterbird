@@ -290,7 +290,7 @@ public:
 
   void dispatch_mouse_event(Web::MouseEvent::Type type, int x, int y,
                             int button, int buttons, int modifiers,
-                            int wheel_delta_x, int wheel_delta_y) {
+                            double wheel_delta_x, double wheel_delta_y) {
     Web::DevicePixelPoint position = {x, y};
     Web::DevicePixelPoint screen_position = {x, y};
     enqueue_input_event(
@@ -772,8 +772,8 @@ bool can_go_forward(int view_id) { return true; }
 extern "C" {
 
 void dispatch_mouse_event(int view_id, int type, int x, int y, int button,
-                          int buttons, int modifiers, int wheel_delta_x,
-                          int wheel_delta_y) {
+                          int buttons, int modifiers, double wheel_delta_x,
+                          double wheel_delta_y) {
   // std::lock_guard<std::mutex> lock(g_web_views_mutex);
   auto it = g_web_views.find(view_id);
   if (it != g_web_views.end()) {

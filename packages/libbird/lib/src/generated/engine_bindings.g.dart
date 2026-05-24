@@ -377,8 +377,8 @@ class LadybirdBindings {
     int button,
     int buttons,
     int modifiers,
-    int wheel_delta_x,
-    int wheel_delta_y,
+    double wheel_delta_x,
+    double wheel_delta_y,
   ) {
     return _dispatch_mouse_event(
       view_id,
@@ -404,13 +404,15 @@ class LadybirdBindings {
             ffi.Int,
             ffi.Int,
             ffi.Int,
-            ffi.Int,
-            ffi.Int,
+            ffi.Double,
+            ffi.Double,
           )
         >
       >('dispatch_mouse_event');
   late final _dispatch_mouse_event = _dispatch_mouse_eventPtr
-      .asFunction<void Function(int, int, int, int, int, int, int, int, int)>();
+      .asFunction<
+        void Function(int, int, int, int, int, int, int, double, double)
+      >();
 
   void dispatch_key_event(
     int view_id,

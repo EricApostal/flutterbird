@@ -172,8 +172,8 @@ class _LadybirdViewState extends State<LadybirdView>
     _accumulatedWheelX += deltaX * density;
     _accumulatedWheelY += deltaY * density;
 
-    int wheelX = _accumulatedWheelX.truncate();
-    int wheelY = _accumulatedWheelY.truncate();
+    double wheelX = _accumulatedWheelX;
+    double wheelY = _accumulatedWheelY;
 
     if (wheelX == 0 && wheelY == 0) return;
 

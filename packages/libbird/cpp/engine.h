@@ -95,7 +95,7 @@ LADYBIRD_API bool can_go_forward(int view_id);
 
 LADYBIRD_API void dispatch_mouse_event(int view_id, int type, int x, int y,
                                        int button, int buttons, int modifiers,
-                                       int wheel_delta_x, int wheel_delta_y);
+                                       double wheel_delta_x, double wheel_delta_y);
 
 LADYBIRD_API void dispatch_key_event(int view_id, int type, int keycode,
                                      int modifiers, uint32_t code_point,

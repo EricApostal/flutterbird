@@ -249,8 +249,8 @@ class LadybirdController {
     required int button,
     required int buttons,
     required int modifiers,
-    required int wheelDeltaX,
-    required int wheelDeltaY,
+    required double wheelDeltaX,
+    required double wheelDeltaY,
   }) {
     _bindings.dispatch_mouse_event(
       _viewId,
