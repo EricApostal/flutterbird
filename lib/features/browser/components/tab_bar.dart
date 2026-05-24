@@ -1,3 +1,5 @@
+// ignore_for_file: implementation_imports
+
 import 'dart:io';
 
 import 'package:bird_core/bird_core.dart';
@@ -9,6 +11,7 @@ import 'package:go_router/go_router.dart';
 import 'package:ladybird/ladybird.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:window_toolbox/window_toolbox.dart';
+import 'package:window_toolbox/src/custom_window.dart' as custom_window;
 
 class BrowserTabBar extends ConsumerStatefulWidget {
   final int windowId;
@@ -44,10 +47,7 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar> {
     required DragUpdateDetails details,
     required BrowserWindowLayout layoutController,
   }) {
-    if (widget.windowId != mainBrowserWindowId) {
-      return;
-    }
-    if (dragData.currentWindowId != mainBrowserWindowId) {
+    if (dragData.currentWindowId != widget.windowId) {
       return;
     }
     if (_isPointerInsideTabStrip(details.globalPosition)) {
@@ -56,7 +56,7 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar> {
 
     final detachedWindowId = layoutController.detachTab(
       tabId: dragData.tabId,
-      fromWindowId: mainBrowserWindowId,
+      fromWindowId: widget.windowId,
     );
     if (detachedWindowId == null) {
       return;
@@ -64,13 +64,48 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar> {
 
     dragData.currentWindowId = detachedWindowId;
 
-    final activeMainTab = ref
-        .read(browserWindowLayoutProvider)
-        .windowById(mainBrowserWindowId)
-        ?.activeViewId;
-    if (activeMainTab != null) {
-      context.go('/browser/tab/$activeMainTab');
+    _startDetachedWindowMoveDrag(detachedWindowId, details.globalPosition);
+
+    if (widget.windowId == mainBrowserWindowId) {
+      final activeMainTab = ref
+          .read(browserWindowLayoutProvider)
+          .windowById(mainBrowserWindowId)
+          ?.activeViewId;
+      if (activeMainTab != null) {
+        context.go('/browser/tab/$activeMainTab');
+      }
     }
+  }
+
+  void _startDetachedWindowMoveDrag(int windowId, Offset globalPosition) {
+    final detachedWindow = ref.read(browserWindowStateProvider(windowId));
+    final controller = detachedWindow?.nativeWindowController;
+    if (controller == null) {
+      return;
+    }
+
+    controller.enableCustomWindow();
+    custom_window.CustomWindow.forController(
+      controller,
+    )?.startWindowMoveDrag(globalPosition);
+  }
+
+  void _startCurrentWindowMoveDrag(Offset globalPosition) {
+    if (widget.windowId == mainBrowserWindowId) {
+      windowManager.startDragging();
+      return;
+    }
+
+    final currentWindow = ref.read(browserWindowStateProvider(widget.windowId));
+    final controller = currentWindow?.nativeWindowController;
+    if (controller == null) {
+      return;
+    }
+
+    controller.enableCustomWindow();
+    custom_window.CustomWindow.forController(
+      controller,
+    )?.startWindowMoveDrag(globalPosition);
   }
 
   void _handleMergeOnMainStripHover({
@@ -104,6 +139,7 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar> {
     required int resolvedCurrentViewId,
     required bool isDetachedWindow,
     required List<LadybirdController> allTabs,
+    required bool shouldMoveWindowInsteadOfDetaching,
   }) {
     final strip = DragTarget<_DraggedTabData>(
       key: _tabStripKey,
@@ -139,6 +175,8 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar> {
                       tabId: tabs[index].viewId,
                       selected: tabs[index].viewId == resolvedCurrentViewId,
                       initialWindowId: widget.windowId,
+                      canDetachOnDrag: !shouldMoveWindowInsteadOfDetaching,
+                      onSingleTabWindowDragStart: _startCurrentWindowMoveDrag,
                       onSelected: () {
                         layoutController.setActiveTab(
                           widget.windowId,
@@ -259,41 +297,38 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar> {
     );
 
     final isDetachedWindow = widget.windowId != mainBrowserWindowId;
+    final shouldMoveWindowInsteadOfDetaching = windowTabIds.length == 1;
     final doLeftPadding = Platform.isMacOS;
 
     return Column(
       children: [
-        if (isDetachedWindow)
-          Container(
-            width: double.infinity,
-            color: theme.colorScheme.surfaceContainerHigh,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-            child: Text(
-              'Drag tabs out to detach. Drag back over the main tab strip to merge.',
-              style: theme.textTheme.bodySmall,
-            ),
-          ),
-        SizedBox(
-          height: 45,
-          child: Stack(
-            children: [
-              Positioned.fill(
-                child: widget.windowId == mainBrowserWindowId
-                    ? const DragToMoveArea(child: SizedBox.expand())
-                    : const WindowDragArea(child: SizedBox.expand()),
-              ),
-              Padding(
-                padding: EdgeInsets.only(left: doLeftPadding ? 80 : 8),
-                child: _buildTabStripDragTarget(
-                  layoutController: layoutController,
-                  tabs: tabs,
-                  windowTabIds: windowTabIds,
-                  resolvedCurrentViewId: resolvedCurrentViewId,
-                  isDetachedWindow: isDetachedWindow,
-                  allTabs: allTabs,
+        Padding(
+          padding: const EdgeInsets.all(4.0),
+          child: SizedBox(
+            height: 45,
+            child: Stack(
+              children: [
+                SizedBox(width: .infinity),
+                Positioned.fill(
+                  child: widget.windowId == mainBrowserWindowId
+                      ? const DragToMoveArea(child: SizedBox.expand())
+                      : const WindowDragArea(child: SizedBox.expand()),
                 ),
-              ),
-            ],
+                Padding(
+                  padding: EdgeInsets.only(left: doLeftPadding ? 80 : 0),
+                  child: _buildTabStripDragTarget(
+                    layoutController: layoutController,
+                    tabs: tabs,
+                    windowTabIds: windowTabIds,
+                    resolvedCurrentViewId: resolvedCurrentViewId,
+                    isDetachedWindow: isDetachedWindow,
+                    allTabs: allTabs,
+                    shouldMoveWindowInsteadOfDetaching:
+                        shouldMoveWindowInsteadOfDetaching,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
         Padding(
@@ -388,6 +423,8 @@ class _DraggableBrowserTab extends StatelessWidget {
   final int tabId;
   final bool selected;
   final int initialWindowId;
+  final bool canDetachOnDrag;
+  final void Function(Offset globalPosition) onSingleTabWindowDragStart;
   final VoidCallback onSelected;
   final VoidCallback onClose;
   final void Function(_DraggedTabData dragData, DragUpdateDetails details)
@@ -397,6 +434,8 @@ class _DraggableBrowserTab extends StatelessWidget {
     required this.tabId,
     required this.selected,
     required this.initialWindowId,
+    required this.canDetachOnDrag,
+    required this.onSingleTabWindowDragStart,
     required this.onSelected,
     required this.onClose,
     required this.onDragUpdate,
@@ -416,8 +455,23 @@ class _DraggableBrowserTab extends StatelessWidget {
       onTabClosed: onClose,
     );
 
+    if (!canDetachOnDrag) {
+      return GestureDetector(
+        onPanStart: (details) {
+          onSingleTabWindowDragStart(details.globalPosition);
+        },
+        child: tab,
+      );
+    }
+
+    final hasOverlay = Overlay.maybeOf(context, rootOverlay: true) != null;
+    if (!hasOverlay) {
+      return tab;
+    }
+
     return Draggable<_DraggedTabData>(
       data: dragData,
+      rootOverlay: true,
       dragAnchorStrategy: pointerDragAnchorStrategy,
       feedback: Material(
         color: Colors.transparent,
