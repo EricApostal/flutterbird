@@ -30,12 +30,6 @@ class LadybirdController {
   late final ffi.NativeCallable<ffi.Void Function(ffi.Int)>
   _crossSiteNavigationCallback;
 
-  late final void Function(
-    int,
-    ffi.Pointer<ffi.NativeFunction<ffi.Void Function(ffi.Int)>>,
-  )
-  _setCrossSiteNavigationCallback;
-
   static ffi.NativeCallable<DisplayDownloadConfirmationDialogCallbackFunction>?
   _displayDownloadConfirmationDialogCallback;
   static ffi.NativeCallable<DisplayErrorDialogCallbackFunction>?
@@ -57,17 +51,6 @@ class LadybirdController {
   LadybirdController({this.initialUrl = "https://www.duckduckgo.com/"}) {
     _lib = ffi.DynamicLibrary.process();
     _bindings = LadybirdBindings(_lib);
-    _setCrossSiteNavigationCallback = _lib
-        .lookupFunction<
-          ffi.Void Function(
-            ffi.Int,
-            ffi.Pointer<ffi.NativeFunction<ffi.Void Function(ffi.Int)>>,
-          ),
-          void Function(
-            int,
-            ffi.Pointer<ffi.NativeFunction<ffi.Void Function(ffi.Int)>>,
-          )
-        >('set_cross_site_navigation_callback');
     print("start bindings");
     if (_displayErrorDialogCallback == null) {
       _bindings.set_ask_user_for_download_path_callback(
@@ -133,7 +116,7 @@ class LadybirdController {
         ffi.NativeCallable<ffi.Void Function(ffi.Int)>.listener(
           _onCrossSiteNavigation,
         );
-    _setCrossSiteNavigationCallback(
+    _bindings.set_cross_site_navigation_callback(
       _viewId,
       _crossSiteNavigationCallback.nativeFunction,
     );
@@ -303,7 +286,7 @@ class LadybirdController {
   }
 
   void dispose() {
-    _setCrossSiteNavigationCallback(_viewId, ffi.nullptr);
+    _bindings.set_cross_site_navigation_callback(_viewId, ffi.nullptr);
     _resizeCallback.close();
     _urlChangeCallback.close();
     _titleChangeCallback.close();

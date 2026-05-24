@@ -58,6 +58,133 @@ class LadybirdBindings {
   late final _get_latest_pixel_buffer = _get_latest_pixel_bufferPtr
       .asFunction<ffi.Pointer<ffi.Void> Function(int)>();
 
+  bool copy_latest_pixel_buffer(
+    int view_id,
+    ffi.Pointer<ffi.Uint8> out_buffer,
+    int out_capacity,
+    ffi.Pointer<ffi.Int> out_width,
+    ffi.Pointer<ffi.Int> out_height,
+  ) {
+    return _copy_latest_pixel_buffer(
+      view_id,
+      out_buffer,
+      out_capacity,
+      out_width,
+      out_height,
+    );
+  }
+
+  late final _copy_latest_pixel_bufferPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.Bool Function(
+            ffi.Int,
+            ffi.Pointer<ffi.Uint8>,
+            ffi.Int,
+            ffi.Pointer<ffi.Int>,
+            ffi.Pointer<ffi.Int>,
+          )
+        >
+      >('copy_latest_pixel_buffer');
+  late final _copy_latest_pixel_buffer = _copy_latest_pixel_bufferPtr
+      .asFunction<
+        bool Function(
+          int,
+          ffi.Pointer<ffi.Uint8>,
+          int,
+          ffi.Pointer<ffi.Int>,
+          ffi.Pointer<ffi.Int>,
+        )
+      >();
+
+  int get_frame_generation(int view_id) {
+    return _get_frame_generation(view_id);
+  }
+
+  late final _get_frame_generationPtr =
+      _lookup<ffi.NativeFunction<ffi.Uint64 Function(ffi.Int)>>(
+        'get_frame_generation',
+      );
+  late final _get_frame_generation = _get_frame_generationPtr
+      .asFunction<int Function(int)>();
+
+  bool acquire_latest_frame(
+    int view_id,
+    ffi.Pointer<ffi.Pointer<ffi.Uint8>> out_pixels,
+    ffi.Pointer<ffi.Int> out_width,
+    ffi.Pointer<ffi.Int> out_height,
+    ffi.Pointer<ffi.Int> out_pitch,
+    ffi.Pointer<ffi.Uint64> out_generation,
+    ffi.Pointer<ffi.Pointer<ffi.Void>> out_frame_handle,
+  ) {
+    return _acquire_latest_frame(
+      view_id,
+      out_pixels,
+      out_width,
+      out_height,
+      out_pitch,
+      out_generation,
+      out_frame_handle,
+    );
+  }
+
+  late final _acquire_latest_framePtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.Bool Function(
+            ffi.Int,
+            ffi.Pointer<ffi.Pointer<ffi.Uint8>>,
+            ffi.Pointer<ffi.Int>,
+            ffi.Pointer<ffi.Int>,
+            ffi.Pointer<ffi.Int>,
+            ffi.Pointer<ffi.Uint64>,
+            ffi.Pointer<ffi.Pointer<ffi.Void>>,
+          )
+        >
+      >('acquire_latest_frame');
+  late final _acquire_latest_frame = _acquire_latest_framePtr
+      .asFunction<
+        bool Function(
+          int,
+          ffi.Pointer<ffi.Pointer<ffi.Uint8>>,
+          ffi.Pointer<ffi.Int>,
+          ffi.Pointer<ffi.Int>,
+          ffi.Pointer<ffi.Int>,
+          ffi.Pointer<ffi.Uint64>,
+          ffi.Pointer<ffi.Pointer<ffi.Void>>,
+        )
+      >();
+
+  void release_latest_frame(ffi.Pointer<ffi.Void> frame_handle) {
+    return _release_latest_frame(frame_handle);
+  }
+
+  late final _release_latest_framePtr =
+      _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Pointer<ffi.Void>)>>(
+        'release_latest_frame',
+      );
+  late final _release_latest_frame = _release_latest_framePtr
+      .asFunction<void Function(ffi.Pointer<ffi.Void>)>();
+
+  bool acquire_latest_linux_dmabuf_frame(
+    int view_id,
+    ffi.Pointer<LadybirdLinuxDmaBufFrame> out_frame,
+  ) {
+    return _acquire_latest_linux_dmabuf_frame(view_id, out_frame);
+  }
+
+  late final _acquire_latest_linux_dmabuf_framePtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.Bool Function(ffi.Int, ffi.Pointer<LadybirdLinuxDmaBufFrame>)
+        >
+      >('acquire_latest_linux_dmabuf_frame');
+  late final _acquire_latest_linux_dmabuf_frame =
+      _acquire_latest_linux_dmabuf_framePtr
+          .asFunction<
+            bool Function(int, ffi.Pointer<LadybirdLinuxDmaBufFrame>)
+          >();
+
   void set_frame_callback(
     int view_id,
     FrameCallback callback,
@@ -175,6 +302,23 @@ class LadybirdBindings {
       >('set_favicon_change_callback');
   late final _set_favicon_change_callback = _set_favicon_change_callbackPtr
       .asFunction<void Function(int, FaviconChangeCallback)>();
+
+  void set_cross_site_navigation_callback(
+    int view_id,
+    CrossSiteNavigationCallback callback,
+  ) {
+    return _set_cross_site_navigation_callback(view_id, callback);
+  }
+
+  late final _set_cross_site_navigation_callbackPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.Void Function(ffi.Int, CrossSiteNavigationCallback)
+        >
+      >('set_cross_site_navigation_callback');
+  late final _set_cross_site_navigation_callback =
+      _set_cross_site_navigation_callbackPtr
+          .asFunction<void Function(int, CrossSiteNavigationCallback)>();
 
   void tick_ladybird() {
     return _tick_ladybird();
@@ -347,9 +491,123 @@ class LadybirdBindings {
           .asFunction<void Function(DisplayErrorDialogCallback)>();
 }
 
-final class __fsid_t extends ffi.Struct {
-  @ffi.Array.multi([2])
-  external ffi.Array<ffi.Int> __val;
+final class __mbstate_t extends ffi.Union {
+  @ffi.Array.multi([128])
+  external ffi.Array<ffi.Char> __mbstate8;
+
+  @ffi.LongLong()
+  external int _mbstateL;
+}
+
+final class __darwin_pthread_handler_rec extends ffi.Struct {
+  external ffi.Pointer<
+    ffi.NativeFunction<ffi.Void Function(ffi.Pointer<ffi.Void>)>
+  >
+  __routine;
+
+  external ffi.Pointer<ffi.Void> __arg;
+
+  external ffi.Pointer<__darwin_pthread_handler_rec> __next;
+}
+
+final class _opaque_pthread_attr_t extends ffi.Struct {
+  @ffi.Long()
+  external int __sig;
+
+  @ffi.Array.multi([56])
+  external ffi.Array<ffi.Char> __opaque;
+}
+
+final class _opaque_pthread_cond_t extends ffi.Struct {
+  @ffi.Long()
+  external int __sig;
+
+  @ffi.Array.multi([40])
+  external ffi.Array<ffi.Char> __opaque;
+}
+
+final class _opaque_pthread_condattr_t extends ffi.Struct {
+  @ffi.Long()
+  external int __sig;
+
+  @ffi.Array.multi([8])
+  external ffi.Array<ffi.Char> __opaque;
+}
+
+final class _opaque_pthread_mutex_t extends ffi.Struct {
+  @ffi.Long()
+  external int __sig;
+
+  @ffi.Array.multi([56])
+  external ffi.Array<ffi.Char> __opaque;
+}
+
+final class _opaque_pthread_mutexattr_t extends ffi.Struct {
+  @ffi.Long()
+  external int __sig;
+
+  @ffi.Array.multi([8])
+  external ffi.Array<ffi.Char> __opaque;
+}
+
+final class _opaque_pthread_once_t extends ffi.Struct {
+  @ffi.Long()
+  external int __sig;
+
+  @ffi.Array.multi([8])
+  external ffi.Array<ffi.Char> __opaque;
+}
+
+final class _opaque_pthread_rwlock_t extends ffi.Struct {
+  @ffi.Long()
+  external int __sig;
+
+  @ffi.Array.multi([192])
+  external ffi.Array<ffi.Char> __opaque;
+}
+
+final class _opaque_pthread_rwlockattr_t extends ffi.Struct {
+  @ffi.Long()
+  external int __sig;
+
+  @ffi.Array.multi([16])
+  external ffi.Array<ffi.Char> __opaque;
+}
+
+final class _opaque_pthread_t extends ffi.Struct {
+  @ffi.Long()
+  external int __sig;
+
+  external ffi.Pointer<__darwin_pthread_handler_rec> __cleanup_stack;
+
+  @ffi.Array.multi([8176])
+  external ffi.Array<ffi.Char> __opaque;
+}
+
+final class LadybirdLinuxDmaBufFrame extends ffi.Struct {
+  @ffi.Int()
+  external int fd;
+
+  @ffi.Int()
+  external int width;
+
+  @ffi.Int()
+  external int height;
+
+  @ffi.Int()
+  external int pitch;
+
+  @ffi.Uint32()
+  external int drm_format;
+
+  @ffi.Uint64()
+  external int modifier;
+
+  @ffi.Bool()
+  external bool premultiplied;
+
+  @ffi.Uint64()
+  external int generation;
 }
 
 typedef FrameCallback = ffi.Pointer<ffi.NativeFunction<FrameCallbackFunction>>;
@@ -373,6 +631,11 @@ typedef FaviconChangeCallbackFunction =
     ffi.Void Function(ffi.Pointer<ffi.Uint8>, ffi.Int, ffi.Int);
 typedef DartFaviconChangeCallbackFunction =
     void Function(ffi.Pointer<ffi.Uint8>, int, int);
+typedef CrossSiteNavigationCallback =
+    ffi.Pointer<ffi.NativeFunction<CrossSiteNavigationCallbackFunction>>;
+typedef CrossSiteNavigationCallbackFunction =
+    ffi.Void Function(ffi.Int view_id);
+typedef DartCrossSiteNavigationCallbackFunction = void Function(int view_id);
 typedef AskUserForDownloadPathCallback =
     ffi.Pointer<ffi.NativeFunction<AskUserForDownloadPathCallbackFunction>>;
 typedef AskUserForDownloadPathCallbackFunction =
@@ -395,145 +658,69 @@ typedef DisplayErrorDialogCallbackFunction =
 typedef DartDisplayErrorDialogCallbackFunction =
     void Function(ffi.Pointer<ffi.Char> message);
 
-const int _STDINT_H = 1;
-
-const int _FEATURES_H = 1;
-
-const int _DEFAULT_SOURCE = 1;
-
-const int __GLIBC_USE_ISOC2Y = 1;
-
-const int __GLIBC_USE_ISOC23 = 1;
-
-const int __USE_ISOC11 = 1;
-
-const int __USE_ISOC99 = 1;
-
-const int __USE_ISOC95 = 1;
-
-const int _POSIX_SOURCE = 1;
-
-const int _POSIX_C_SOURCE = 202405;
-
-const int __USE_POSIX = 1;
-
-const int __USE_POSIX2 = 1;
-
-const int __USE_POSIX199309 = 1;
-
-const int __USE_POSIX199506 = 1;
-
-const int __USE_XOPEN2K = 1;
-
-const int __USE_XOPEN2K8 = 1;
-
-const int _ATFILE_SOURCE = 1;
-
-const int __USE_XOPEN2K24 = 1;
-
 const int __WORDSIZE = 64;
 
-const int __WORDSIZE_TIME64_COMPAT32 = 1;
+const int __has_safe_buffers = 1;
 
-const int __SYSCALL_WORDSIZE = 64;
+const int __DARWIN_ONLY_64_BIT_INO_T = 1;
 
-const int __TIMESIZE = 64;
+const int __DARWIN_ONLY_UNIX_CONFORMANCE = 1;
 
-const int __USE_TIME_BITS64 = 1;
+const int __DARWIN_ONLY_VERS_1050 = 1;
 
-const int __USE_MISC = 1;
+const int __DARWIN_UNIX03 = 1;
 
-const int __USE_ATFILE = 1;
+const int __DARWIN_64_BIT_INO_T = 1;
 
-const int __USE_FORTIFY_LEVEL = 0;
+const int __DARWIN_VERS_1050 = 1;
 
-const int __GLIBC_USE_DEPRECATED_GETS = 0;
+const int __DARWIN_NON_CANCELABLE = 0;
 
-const int __GLIBC_USE_DEPRECATED_SCANF = 0;
+const String __DARWIN_SUF_EXTSN = '\$DARWIN_EXTSN';
 
-const int __GLIBC_USE_C23_STRTOL = 1;
+const int __DARWIN_C_ANSI = 4096;
 
-const int _STDC_PREDEF_H = 1;
+const int __DARWIN_C_FULL = 900000;
 
-const int __STDC_IEC_559__ = 1;
+const int __DARWIN_C_LEVEL = 900000;
 
-const int __STDC_IEC_60559_BFP__ = 201404;
+const int __STDC_WANT_LIB_EXT1__ = 1;
 
-const int __STDC_IEC_559_COMPLEX__ = 1;
+const int __DARWIN_NO_LONG_LONG = 0;
 
-const int __STDC_IEC_60559_COMPLEX__ = 201404;
+const int _DARWIN_FEATURE_64_BIT_INODE = 1;
 
-const int __STDC_ISO_10646__ = 201706;
+const int _DARWIN_FEATURE_ONLY_64_BIT_INODE = 1;
 
-const int __GNU_LIBRARY__ = 6;
+const int _DARWIN_FEATURE_ONLY_VERS_1050 = 1;
 
-const int __GLIBC__ = 2;
+const int _DARWIN_FEATURE_ONLY_UNIX_CONFORMANCE = 1;
 
-const int __GLIBC_MINOR__ = 43;
+const int _DARWIN_FEATURE_UNIX_CONFORMANCE = 3;
 
-const int _SYS_CDEFS_H = 1;
+const int __has_ptrcheck = 0;
 
-const int __THROW = 1;
+const int __has_bounds_safety_attributes = 0;
 
-const int __THROWNL = 1;
+const int __DARWIN_NULL = 0;
 
-const int __glibc_c99_flexarr_available = 1;
+const int __PTHREAD_SIZE__ = 8176;
 
-const int __LDOUBLE_REDIRECTS_TO_FLOAT128_ABI = 0;
+const int __PTHREAD_ATTR_SIZE__ = 56;
 
-const int __HAVE_GENERIC_SELECTION = 0;
+const int __PTHREAD_MUTEXATTR_SIZE__ = 8;
 
-const int __GLIBC_USE_LIB_EXT2 = 1;
+const int __PTHREAD_MUTEX_SIZE__ = 56;
 
-const int __GLIBC_USE_IEC_60559_BFP_EXT = 1;
+const int __PTHREAD_CONDATTR_SIZE__ = 8;
 
-const int __GLIBC_USE_IEC_60559_BFP_EXT_C23 = 1;
+const int __PTHREAD_COND_SIZE__ = 40;
 
-const int __GLIBC_USE_IEC_60559_EXT = 1;
+const int __PTHREAD_ONCE_SIZE__ = 8;
 
-const int __GLIBC_USE_IEC_60559_FUNCS_EXT = 1;
+const int __PTHREAD_RWLOCK_SIZE__ = 192;
 
-const int __GLIBC_USE_IEC_60559_FUNCS_EXT_C23 = 1;
-
-const int __GLIBC_USE_IEC_60559_TYPES_EXT = 1;
-
-const int _BITS_TYPES_H = 1;
-
-const int _BITS_TYPESIZES_H = 1;
-
-const int __OFF_T_MATCHES_OFF64_T = 1;
-
-const int __INO_T_MATCHES_INO64_T = 1;
-
-const int __RLIM_T_MATCHES_RLIM64_T = 1;
-
-const int __STATFS_MATCHES_STATFS64 = 1;
-
-const int __KERNEL_OLD_TIMEVAL_MATCHES_TIMEVAL64 = 1;
-
-const int __FD_SETSIZE = 1024;
-
-const int _BITS_TIME64_H = 1;
-
-const int _BITS_WCHAR_H = 1;
-
-const int __WCHAR_MAX = 2147483647;
-
-const int __WCHAR_MIN = -2147483648;
-
-const int _BITS_STDINT_INTN_H = 1;
-
-const int _BITS_STDINT_UINTN_H = 1;
-
-const int _BITS_STDINT_LEAST_H = 1;
-
-const int INT8_MIN = -128;
-
-const int INT16_MIN = -32768;
-
-const int INT32_MIN = -2147483648;
-
-const int INT64_MIN = -9223372036854775808;
+const int __PTHREAD_RWLOCKATTR_SIZE__ = 16;
 
 const int INT8_MAX = 127;
 
@@ -542,6 +729,14 @@ const int INT16_MAX = 32767;
 const int INT32_MAX = 2147483647;
 
 const int INT64_MAX = 9223372036854775807;
+
+const int INT8_MIN = -128;
+
+const int INT16_MIN = -32768;
+
+const int INT32_MIN = -2147483648;
+
+const int INT64_MIN = -9223372036854775808;
 
 const int UINT8_MAX = 255;
 
@@ -577,57 +772,59 @@ const int UINT_LEAST64_MAX = -1;
 
 const int INT_FAST8_MIN = -128;
 
-const int INT_FAST16_MIN = -9223372036854775808;
+const int INT_FAST16_MIN = -32768;
 
-const int INT_FAST32_MIN = -9223372036854775808;
+const int INT_FAST32_MIN = -2147483648;
 
 const int INT_FAST64_MIN = -9223372036854775808;
 
 const int INT_FAST8_MAX = 127;
 
-const int INT_FAST16_MAX = 9223372036854775807;
+const int INT_FAST16_MAX = 32767;
 
-const int INT_FAST32_MAX = 9223372036854775807;
+const int INT_FAST32_MAX = 2147483647;
 
 const int INT_FAST64_MAX = 9223372036854775807;
 
 const int UINT_FAST8_MAX = 255;
 
-const int UINT_FAST16_MAX = -1;
+const int UINT_FAST16_MAX = 65535;
 
-const int UINT_FAST32_MAX = -1;
+const int UINT_FAST32_MAX = 4294967295;
 
 const int UINT_FAST64_MAX = -1;
 
-const int INTPTR_MIN = -9223372036854775808;
-
 const int INTPTR_MAX = 9223372036854775807;
 
-const int UINTPTR_MAX = -1;
+const int INTPTR_MIN = -9223372036854775808;
 
-const int INTMAX_MIN = -9223372036854775808;
+const int UINTPTR_MAX = -1;
 
 const int INTMAX_MAX = 9223372036854775807;
 
 const int UINTMAX_MAX = -1;
 
+const int INTMAX_MIN = -9223372036854775808;
+
 const int PTRDIFF_MIN = -9223372036854775808;
 
 const int PTRDIFF_MAX = 9223372036854775807;
 
-const int SIG_ATOMIC_MIN = -2147483648;
-
-const int SIG_ATOMIC_MAX = 2147483647;
-
 const int SIZE_MAX = -1;
 
-const int WCHAR_MIN = -2147483648;
+const int RSIZE_MAX = 9223372036854775807;
 
 const int WCHAR_MAX = 2147483647;
 
-const int WINT_MIN = 0;
+const int WCHAR_MIN = -2147483648;
 
-const int WINT_MAX = 4294967295;
+const int WINT_MIN = -2147483648;
+
+const int WINT_MAX = 2147483647;
+
+const int SIG_ATOMIC_MIN = -2147483648;
+
+const int SIG_ATOMIC_MAX = 2147483647;
 
 const int true1 = 1;
 
