@@ -38,12 +38,6 @@ class _LadybirdViewState extends State<LadybirdView>
       }
     };
     _recreateTexture();
-    if (!widget.controller.hasNavigatedInitial) {
-      widget.controller.hasNavigatedInitial = true;
-      WidgetsBinding.instance.addPostFrameCallback(
-        (_) => widget.controller.navigate(widget.controller.initialUrl),
-      );
-    }
   }
 
   @override
@@ -64,13 +58,6 @@ class _LadybirdViewState extends State<LadybirdView>
       };
 
       _recreateTexture();
-
-      if (!widget.controller.hasNavigatedInitial) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          widget.controller.hasNavigatedInitial = true;
-          widget.controller.navigate(widget.controller.initialUrl);
-        });
-      }
     }
   }
 
@@ -95,8 +82,18 @@ class _LadybirdViewState extends State<LadybirdView>
 
   void _onSizeChanged(Size size, double density) {
     if (size.width <= 0 || size.height <= 0) return;
+    final physicalSize = Size(size.width * density, size.height * density);
     widget.controller.updateDevicePixelRatio(density);
-    widget.controller.resizeWindow(size);
+    widget.controller.resizeWindow(physicalSize);
+
+    // Ensure first navigation happens only after the native viewport has been
+    // sized with the current Flutter constraints and DPR.
+    if (!widget.controller.hasNavigatedInitial) {
+      widget.controller.hasNavigatedInitial = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        widget.controller.navigate(widget.controller.initialUrl);
+      });
+    }
   }
 
   void _onPointerEvent(PointerEvent event, int type) {
@@ -260,11 +257,7 @@ class _LadybirdViewState extends State<LadybirdView>
       child: LayoutBuilder(
         builder: (context, constraints) {
           final density = MediaQuery.devicePixelRatioOf(context);
-          final size = Size(
-            constraints.maxWidth * density,
-            constraints.maxHeight * density,
-          );
-          _onSizeChanged(size, density);
+          _onSizeChanged(constraints.biggest, density);
 
           final paddedWidth = widget.controller.getSurfaceWidth() / density;
           final paddedHeight = widget.controller.getSurfaceHeight() / density;
