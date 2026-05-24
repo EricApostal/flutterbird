@@ -97,6 +97,140 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar> {
     context.go('/browser/tab/${dragData.tabId}');
   }
 
+  Widget _buildTabStripDragTarget({
+    required BrowserWindowLayout layoutController,
+    required List<LadybirdController> tabs,
+    required List<int> windowTabIds,
+    required int resolvedCurrentViewId,
+    required bool isDetachedWindow,
+    required List<LadybirdController> allTabs,
+  }) {
+    final strip = DragTarget<_DraggedTabData>(
+      key: _tabStripKey,
+      onMove: (details) {
+        _handleMergeOnMainStripHover(
+          dragData: details.data,
+          layoutController: layoutController,
+        );
+      },
+      builder: (context, candidateData, rejectedData) {
+        return SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              for (int index = 0; index < tabs.length; index++)
+                _TabDropTarget(
+                  windowId: widget.windowId,
+                  targetTabId: tabs[index].viewId,
+                  onReorderAccepted: (dragData) {
+                    final oldIndex = windowTabIds.indexOf(dragData.tabId);
+                    if (oldIndex == -1 || oldIndex == index) {
+                      return;
+                    }
+                    layoutController.reorderTab(
+                      widget.windowId,
+                      oldIndex,
+                      index,
+                    );
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.only(right: 2),
+                    child: _DraggableBrowserTab(
+                      tabId: tabs[index].viewId,
+                      selected: tabs[index].viewId == resolvedCurrentViewId,
+                      initialWindowId: widget.windowId,
+                      onSelected: () {
+                        layoutController.setActiveTab(
+                          widget.windowId,
+                          tabs[index].viewId,
+                        );
+                        if (!isDetachedWindow) {
+                          context.go('/browser/tab/${tabs[index].viewId}');
+                        }
+                      },
+                      onClose: () {
+                        HapticFeedback.lightImpact();
+                        if (allTabs.length == 1) {
+                          exit(0);
+                        }
+
+                        final fallbackTab = layoutController
+                            .fallbackTabAfterClose(
+                              widget.windowId,
+                              tabs[index].viewId,
+                            );
+
+                        if (tabs[index].viewId == resolvedCurrentViewId &&
+                            fallbackTab != null) {
+                          if (isDetachedWindow) {
+                            layoutController.setActiveTab(
+                              widget.windowId,
+                              fallbackTab,
+                            );
+                          } else {
+                            context.go('/browser/tab/$fallbackTab');
+                          }
+                        }
+
+                        layoutController.removeTab(tabs[index].viewId);
+                        ref
+                            .read(browserTabControllerProvider.notifier)
+                            .remove(tabs[index].viewId);
+                      },
+                      onDragUpdate: (dragData, details) {
+                        _handleDetachOnDragOut(
+                          dragData: dragData,
+                          details: details,
+                          layoutController: layoutController,
+                        );
+                      },
+                    ),
+                  ),
+                ),
+              _TabEndDropTarget(
+                windowId: widget.windowId,
+                onReorderAccepted: (dragData) {
+                  final oldIndex = windowTabIds.indexOf(dragData.tabId);
+                  if (oldIndex == -1) {
+                    return;
+                  }
+                  layoutController.reorderTab(
+                    widget.windowId,
+                    oldIndex,
+                    tabs.length - 1,
+                  );
+                },
+              ),
+              IconButton(
+                icon: const Icon(Icons.add, size: 20),
+                onPressed: () {
+                  final controller = ref
+                      .read(browserTabControllerProvider.notifier)
+                      .add();
+
+                  layoutController.addTabToWindow(
+                    widget.windowId,
+                    controller.viewId,
+                    makeActive: true,
+                  );
+
+                  if (!isDetachedWindow) {
+                    context.go('/browser/tab/${controller.viewId}');
+                  }
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+
+    if (isDetachedWindow) {
+      return WindowDragExcludeArea(child: strip);
+    }
+    return strip;
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -150,147 +284,13 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar> {
               ),
               Padding(
                 padding: EdgeInsets.only(left: doLeftPadding ? 80 : 8),
-                child: WindowDragExcludeArea(
-                  child: DragTarget<_DraggedTabData>(
-                    key: _tabStripKey,
-                    onMove: (details) {
-                      _handleMergeOnMainStripHover(
-                        dragData: details.data,
-                        layoutController: layoutController,
-                      );
-                    },
-                    builder: (context, candidateData, rejectedData) {
-                      return SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: Row(
-                          children: [
-                            for (int index = 0; index < tabs.length; index++)
-                              _TabDropTarget(
-                                windowId: widget.windowId,
-                                targetTabId: tabs[index].viewId,
-                                windowTabIds: windowTabIds,
-                                onReorderAccepted: (dragData) {
-                                  final oldIndex = windowTabIds.indexOf(
-                                    dragData.tabId,
-                                  );
-                                  if (oldIndex == -1 || oldIndex == index) {
-                                    return;
-                                  }
-                                  layoutController.reorderTab(
-                                    widget.windowId,
-                                    oldIndex,
-                                    index,
-                                  );
-                                },
-                                child: Padding(
-                                  padding: const EdgeInsets.only(right: 2),
-                                  child: _DraggableBrowserTab(
-                                    tabId: tabs[index].viewId,
-                                    title: tabs[index].titleNotifier.value,
-                                    selected:
-                                        tabs[index].viewId ==
-                                        resolvedCurrentViewId,
-                                    initialWindowId: widget.windowId,
-                                    onSelected: () {
-                                      layoutController.setActiveTab(
-                                        widget.windowId,
-                                        tabs[index].viewId,
-                                      );
-                                      if (!isDetachedWindow) {
-                                        context.go(
-                                          '/browser/tab/${tabs[index].viewId}',
-                                        );
-                                      }
-                                    },
-                                    onClose: () {
-                                      HapticFeedback.lightImpact();
-                                      if (allTabs.length == 1) {
-                                        exit(0);
-                                      }
-
-                                      final fallbackTab = layoutController
-                                          .fallbackTabAfterClose(
-                                            widget.windowId,
-                                            tabs[index].viewId,
-                                          );
-
-                                      if (tabs[index].viewId ==
-                                              resolvedCurrentViewId &&
-                                          fallbackTab != null) {
-                                        if (isDetachedWindow) {
-                                          layoutController.setActiveTab(
-                                            widget.windowId,
-                                            fallbackTab,
-                                          );
-                                        } else {
-                                          context.go(
-                                            '/browser/tab/$fallbackTab',
-                                          );
-                                        }
-                                      }
-
-                                      layoutController.removeTab(
-                                        tabs[index].viewId,
-                                      );
-                                      ref
-                                          .read(
-                                            browserTabControllerProvider
-                                                .notifier,
-                                          )
-                                          .remove(tabs[index].viewId);
-                                    },
-                                    onDragUpdate: (dragData, details) {
-                                      _handleDetachOnDragOut(
-                                        dragData: dragData,
-                                        details: details,
-                                        layoutController: layoutController,
-                                      );
-                                    },
-                                  ),
-                                ),
-                              ),
-                            _TabEndDropTarget(
-                              windowId: widget.windowId,
-                              windowTabIds: windowTabIds,
-                              onReorderAccepted: (dragData) {
-                                final oldIndex = windowTabIds.indexOf(
-                                  dragData.tabId,
-                                );
-                                if (oldIndex == -1) {
-                                  return;
-                                }
-                                layoutController.reorderTab(
-                                  widget.windowId,
-                                  oldIndex,
-                                  tabs.length - 1,
-                                );
-                              },
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.add, size: 20),
-                              onPressed: () {
-                                final controller = ref
-                                    .read(browserTabControllerProvider.notifier)
-                                    .add();
-
-                                layoutController.addTabToWindow(
-                                  widget.windowId,
-                                  controller.viewId,
-                                  makeActive: true,
-                                );
-
-                                if (!isDetachedWindow) {
-                                  context.go(
-                                    '/browser/tab/${controller.viewId}',
-                                  );
-                                }
-                              },
-                            ),
-                          ],
-                        ),
-                      );
-                    },
-                  ),
+                child: _buildTabStripDragTarget(
+                  layoutController: layoutController,
+                  tabs: tabs,
+                  windowTabIds: windowTabIds,
+                  resolvedCurrentViewId: resolvedCurrentViewId,
+                  isDetachedWindow: isDetachedWindow,
+                  allTabs: allTabs,
                 ),
               ),
             ],
@@ -386,7 +386,6 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar> {
 
 class _DraggableBrowserTab extends StatelessWidget {
   final int tabId;
-  final String title;
   final bool selected;
   final int initialWindowId;
   final VoidCallback onSelected;
@@ -396,7 +395,6 @@ class _DraggableBrowserTab extends StatelessWidget {
 
   const _DraggableBrowserTab({
     required this.tabId,
-    required this.title,
     required this.selected,
     required this.initialWindowId,
     required this.onSelected,
@@ -438,14 +436,12 @@ class _DraggableBrowserTab extends StatelessWidget {
 class _TabDropTarget extends StatelessWidget {
   final int windowId;
   final int targetTabId;
-  final List<int> windowTabIds;
   final void Function(_DraggedTabData dragData) onReorderAccepted;
   final Widget child;
 
   const _TabDropTarget({
     required this.windowId,
     required this.targetTabId,
-    required this.windowTabIds,
     required this.onReorderAccepted,
     required this.child,
   });
@@ -484,12 +480,10 @@ class _TabDropTarget extends StatelessWidget {
 
 class _TabEndDropTarget extends StatelessWidget {
   final int windowId;
-  final List<int> windowTabIds;
   final void Function(_DraggedTabData dragData) onReorderAccepted;
 
   const _TabEndDropTarget({
     required this.windowId,
-    required this.windowTabIds,
     required this.onReorderAccepted,
   });
 

@@ -43,7 +43,11 @@ class _BrowserWindowAnchorState extends ConsumerState<BrowserWindowAnchor> {
 
           return RegularWindow(
             controller: window.nativeWindowController!,
-            child: BrowserWindowScreen(windowId: window.id),
+            child: MaterialApp(
+              debugShowCheckedModeBanner: false,
+              theme: Theme.of(context),
+              home: BrowserWindowScreen(windowId: window.id),
+            ),
           );
         })
         .toList();
