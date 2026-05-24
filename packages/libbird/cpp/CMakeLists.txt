@@ -32,10 +32,28 @@ if (ANDROID)
     message(FATAL_ERROR "Android builds moved to packages/libbird/android/CMakeLists.txt")
 else()
     set(LADYBIRD_OUT_DIR "${LADYBIRD_DIR}/Build/release")
-    execute_process(
-        COMMAND ${CMAKE_COMMAND} -E env "CC=${CMAKE_C_COMPILER}" "CXX=${CMAKE_CXX_COMPILER}" "PYTHONPATH=${LADYBIRD_DIR}" python3 "Meta/ladybird.py" build
-        WORKING_DIRECTORY "${LADYBIRD_DIR}"
+    set(_ladybird_build_env
+        "CC=${CMAKE_C_COMPILER}"
+        "CXX=${CMAKE_CXX_COMPILER}"
+        "PYTHONPATH=${LADYBIRD_DIR}"
     )
+
+    # libvpx in the Ladybird vcpkg graph is flaky under high parallelism on macOS.
+    if (APPLE)
+        list(APPEND _ladybird_build_env "VCPKG_MAX_CONCURRENCY=1")
+    endif()
+
+    execute_process(
+        COMMAND ${CMAKE_COMMAND} -E env ${_ladybird_build_env} python3 "Meta/ladybird.py" build
+        WORKING_DIRECTORY "${LADYBIRD_DIR}"
+        RESULT_VARIABLE LADYBIRD_BUILD_RESULT
+        OUTPUT_VARIABLE LADYBIRD_BUILD_STDOUT
+        ERROR_VARIABLE LADYBIRD_BUILD_STDERR
+    )
+
+    if (NOT LADYBIRD_BUILD_RESULT EQUAL 0)
+        message(FATAL_ERROR "Failed to build Ladybird.\n${LADYBIRD_BUILD_STDOUT}\n${LADYBIRD_BUILD_STDERR}")
+    endif()
 endif()
 
 set(LADYBIRD_USE_VULKAN_DMABUF_IMAGES OFF)
@@ -59,6 +77,7 @@ add_library(engine SHARED
     engine.cpp
     platform/view_backend.cpp
     platform/linux_view_backend.cpp
+    platform/macos_view_backend.cpp
 )
 
 # The Ladybird headers intentionally use unqualified std casts and literal

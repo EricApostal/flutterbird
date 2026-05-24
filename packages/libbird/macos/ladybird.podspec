@@ -1,55 +1,20 @@
 #
 # ladybird.podspec
 #
+# Build strategy mirrors the Linux CMakeLists.txt:
+#   - A before_compile script phase drives cmake in packages/libbird/cpp/build
+#     (cpp/CMakeLists.txt runs ensure_ladybird_source.sh, builds Ladybird via
+#     python3 Meta/ladybird.py, and produces LadybirdBundle/)
+#   - An after_compile script phase deploys the bundle into the app.
+#
+# LadybirdBundle layout (produced by cpp/CMakeLists.txt on Apple):
+#   LadybirdBundle/
+#     libengine.dylib          (RPATH: @loader_path/ladybird_libs)
+#     libraries/               all Ladybird dylibs from Build/release/lib
+#     binaries/                WebContent, RequestServer, ImageDecoder, WebWorker, Ladybird
+#     res/                     Ladybird Base/res resources
 
 plugin_root = File.expand_path('..', __dir__)
-ladybird_build_dir = File.join(plugin_root, 'third_party', 'ladybird', 'Build')
-
-puts "Preparing ladybird resources and building C++ engine..."
-system(<<-'CMD')
-  cd "${PODS_TARGET_SRCROOT:-.}"
-
-  bash ../tool/ensure_ladybird_source.sh
-  
-  # Remove the old Classes/cpp_generated if it exists
-  rm -rf Classes/cpp_generated
-  
-  # Build engine.dylib
-  cd ../cpp
-  mkdir -p build
-  cd build
-  cmake -DCMAKE_BUILD_TYPE=Release ..
-  make -j$(sysctl -n hw.ncpu)
-  cd ../../macos
-
-  mkdir -p Bundled
-  
-  # Copy ladybird generated dylibs
-  find ../third_party/ladybird/Build/release -name "*.dylib" -exec cp {} Bundled/ \; 2>/dev/null || true
-  
-  # Copy our engine dylib
-  cp ../cpp/build/libengine.dylib Bundled/ || true
-  
-  # Protect the loop in case the directory is empty
-  for f in Bundled/*.dylib; do
-    if [ -f "$f" ]; then
-      bn=$(basename "$f")
-      chmod +w "$f"
-      install_name_tool -id "@rpath/$bn" "$f" || true
-    fi
-  done
-CMD
-
-found_library_paths = ['$(inherited)']
-found_library_paths << '"${PODS_TARGET_SRCROOT}/Bundled"'
-if Dir.exist?(ladybird_build_dir)
-  Dir.glob("#{ladybird_build_dir}/**/*.{a,dylib}").each do |file|
-    dir_path = File.dirname(file)
-    rel_dir = dir_path.sub(plugin_root, '${PODS_TARGET_SRCROOT}/..')
-    found_library_paths << "\"#{rel_dir}\""
-  end
-end
-found_library_paths.uniq!
 
 Pod::Spec.new do |s|
   s.name             = 'ladybird'
@@ -60,50 +25,44 @@ Pod::Spec.new do |s|
   s.author           = { 'Eric Apostal' => 'eric@rubiscoapp.com' }
   s.source           = { :git => 'https://github.com/LadybirdBrowser/ladybird.git', :tag => s.version.to_s }
 
-  s.source_files     = 'Classes/**/*'
+  s.source_files        = 'Classes/**/*'
   s.public_header_files = 'Classes/**/*.h'
-  
-  s.platform = :osx, '11.0'
+
+  s.platform     = :osx, '11.0'
   s.swift_version = '5.0'
   s.dependency 'FlutterMacOS'
 
-  s.frameworks = 'Cocoa', 'Metal', 'QuartzCore', 'UniformTypeIdentifiers'
-
-
-  s.resources = ['Bundled/*']
+  s.frameworks = 'Cocoa', 'CoreFoundation', 'CoreVideo', 'Foundation',
+                 'IOSurface', 'Metal', 'QuartzCore', 'UniformTypeIdentifiers'
 
   s.pod_target_xcconfig = {
-    'DEFINES_MODULE' => 'YES',
+    'DEFINES_MODULE'           => 'YES',
     'CLANG_CXX_LANGUAGE_STANDARD' => 'c++2b',
-    'CLANG_CXX_LIBRARY' => 'libc++',
-    'OTHER_CPLUSPLUSFLAGS' => '-fobjc-arc -Wno-deprecated-anon-enum-enum-conversion',
-    
-    'VALID_ARCHS' => 'arm64',
-    'EXCLUDED_ARCHS[sdk=macosx*]' => 'x86_64',
+    'CLANG_CXX_LIBRARY'        => 'libc++',
+    'OTHER_CPLUSPLUSFLAGS'     => '-fobjc-arc -Wno-deprecated-anon-enum-enum-conversion',
 
-    'LIBRARY_SEARCH_PATHS' => found_library_paths.join(' '),
-    
+    'VALID_ARCHS'                    => 'arm64',
+    'EXCLUDED_ARCHS[sdk=macosx*]'    => 'x86_64',
+
+    # libengine.dylib lives in LadybirdBundle/ after the cmake build.
+    'LIBRARY_SEARCH_PATHS' => [
+      '$(inherited)',
+      '"${PODS_TARGET_SRCROOT}/../cpp/build/LadybirdBundle"'
+    ].join(' '),
+
+    # At runtime the engine is deployed to Contents/Resources/; helpers
+    # in Contents/MacOS/ also need to reach Contents/Resources/ladybird_libs/.
     'LD_RUNPATH_SEARCH_PATHS' => [
       '$(inherited)',
-      '@executable_path/../Resources', 
-      '@loader_path/../../Resources' 
+      '@executable_path/../Resources',
+      '@loader_path/../../Resources'
     ].join(' '),
-    
+
+    # Only link to -lengine; it already pulls in all lagom + skia deps.
     'OTHER_LDFLAGS' => [
       '$(inherited)',
       '-framework Cocoa -framework Metal -framework QuartzCore -framework UniformTypeIdentifiers',
-      
-      '-Wl,-force_load,"${PODS_TARGET_SRCROOT}/../third_party/ladybird/Build/release/lib/libladybird_impl.a"',
-      
-      '-Wl,-rpath,@loader_path/../Resources',
-      
-      '-lengine',
-      '-llagom-webview', '-llagom-web', '-llagom-requests', 
-      '-llagom-js', '-llagom-gfx', '-llagom-ipc', '-llagom-url', 
-      '-llagom-filesystem', '-llagom-crypto', '-llagom-database',
-      '-llagom-core','-llagom-ak', 
-      '-llagom-unicode', '-llagom-main',
-      '-lskia', '-lz'
+      '-lengine'
     ].join(' '),
 
     'HEADER_SEARCH_PATHS' => [
@@ -121,13 +80,31 @@ Pod::Spec.new do |s|
   }
 
   s.script_phases = [
+    # ── Phase 1: build engine (mirrors Linux add_subdirectory(../cpp)) ──────
     {
-      :name => 'Copy Ladybird Executables and Resources to MacOS Bundle',
+      :name               => 'Build Ladybird Engine',
+      :execution_position => :before_compile,
+      :script             => <<~SCRIPT
+        set -e
+        CPP_DIR="${PODS_TARGET_SRCROOT}/../cpp"
+        mkdir -p "${CPP_DIR}/build"
+        cd "${CPP_DIR}/build"
+        cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES=arm64 ..
+        make -j$(sysctl -n hw.ncpu)
+      SCRIPT
+    },
+
+    # ── Phase 2: deploy bundle into the app ────────────────────────────────
+    {
+      :name               => 'Deploy Ladybird Bundle into App',
       :execution_position => :after_compile,
-      :script => <<-CMD
+      :script             => <<~SCRIPT
+        set -e
+        BUNDLE_DIR="${PODS_TARGET_SRCROOT}/../cpp/build/LadybirdBundle"
+
         APP_BUILD_DIR=$(dirname "${BUILT_PRODUCTS_DIR}")
         APP_NAME_FILE="${PODS_ROOT}/../Flutter/ephemeral/.app_filename"
-        
+
         if [ -f "$APP_NAME_FILE" ]; then
           APP_NAME=$(cat "$APP_NAME_FILE")
         else
@@ -138,26 +115,33 @@ Pod::Spec.new do |s|
             APP_NAME="Runner.app"
           fi
         fi
-        
+
         APP_PATH="${APP_BUILD_DIR}/${APP_NAME}"
         DEST_BIN_DIR="${APP_PATH}/Contents/MacOS"
         DEST_RES_DIR="${APP_PATH}/Contents/Resources"
-        
-        mkdir -p "${DEST_BIN_DIR}"
-        mkdir -p "${DEST_RES_DIR}"
-        
-        LADYBIRD_APP_DIR="${PODS_TARGET_SRCROOT}/../third_party/ladybird/Build/release/bin/Ladybird.app"
-        
-        cp -af "${LADYBIRD_APP_DIR}/Contents/MacOS/"* "${DEST_BIN_DIR}/" || true
-        cp -af "${LADYBIRD_APP_DIR}/Contents/Resources/"* "${DEST_RES_DIR}/" || true
 
-        for helper in "${DEST_BIN_DIR}"/*; do
-          if [ -f "$helper" ] && [ ! -L "$helper" ]; then
-            chmod +w "$helper"
-            install_name_tool -add_rpath "@executable_path/../Resources" "$helper" 2>/dev/null || true
-          fi
+        mkdir -p "${DEST_BIN_DIR}"
+        mkdir -p "${DEST_RES_DIR}/ladybird_libs"
+
+        # Engine dylib — engine's RPATH is @loader_path/ladybird_libs, so
+        # ladybird_libs/ must sit next to libengine.dylib in Resources/.
+        cp -af "${BUNDLE_DIR}/libengine.dylib" "${DEST_RES_DIR}/" || true
+        cp -af "${BUNDLE_DIR}/libraries/." "${DEST_RES_DIR}/ladybird_libs/" || true
+
+        # Helper processes (WebContent, RequestServer, ImageDecoder, etc.)
+        for helper in "${BUNDLE_DIR}/binaries/"*; do
+          [ -f "$helper" ] || continue
+          cp -af "$helper" "${DEST_BIN_DIR}/"
+          chmod +w "${DEST_BIN_DIR}/$(basename "$helper")"
+          install_name_tool -add_rpath "@executable_path/../Resources/ladybird_libs" \
+            "${DEST_BIN_DIR}/$(basename "$helper")" 2>/dev/null || true
         done
-      CMD
+
+        # Ladybird data resources (Base/res)
+        if [ -d "${BUNDLE_DIR}/res" ]; then
+          cp -af "${BUNDLE_DIR}/res" "${DEST_RES_DIR}/"
+        fi
+      SCRIPT
     }
   ]
 end

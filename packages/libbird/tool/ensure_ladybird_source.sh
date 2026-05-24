@@ -18,7 +18,20 @@ source "${VERSION_FILE}"
 : "${LADYBIRD_REF:?Missing LADYBIRD_REF in ${VERSION_FILE}}"
 : "${LADYBIRD_REVISION:?Missing LADYBIRD_REVISION in ${VERSION_FILE}}"
 
+current_status=""
+
 mkdir -p "${PACKAGE_ROOT}/third_party"
+
+# If the directory exists but has no .git of its own it is either an empty
+# placeholder inside a parent git repo or was never cloned.  Remove it so the
+# clone step below can proceed cleanly.
+if [[ -d "${LADYBIRD_DIR}" && ! -e "${LADYBIRD_DIR}/.git" ]]; then
+  rmdir "${LADYBIRD_DIR}" 2>/dev/null || {
+    echo "Ladybird directory exists but is not a git checkout and is not empty: ${LADYBIRD_DIR}" >&2
+    echo "Remove it and rerun the build so libbird can clone a fresh checkout." >&2
+    exit 1
+  }
+fi
 
 if [[ -d "${LADYBIRD_DIR}" ]]; then
   if ! git -C "${LADYBIRD_DIR}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
@@ -52,6 +65,23 @@ if ! git -C "${LADYBIRD_DIR}" cat-file -e "${LADYBIRD_REVISION}^{commit}" 2>/dev
 fi
 
 current_revision="$(git -C "${LADYBIRD_DIR}" rev-parse HEAD)"
+needs_checkout=0
+
 if [[ "${current_revision}" != "${LADYBIRD_REVISION}" ]]; then
+  needs_checkout=1
+fi
+
+# Some interrupted/partial checkouts can leave only .git metadata present.
+# Ensure expected source files are materialized before native builds continue.
+if [[ ! -f "${LADYBIRD_DIR}/Meta/ladybird.py" ]]; then
+  if [[ -n "${current_status}" ]]; then
+    echo "Ladybird checkout is missing expected files and has local changes: ${LADYBIRD_DIR}" >&2
+    echo "Clean or recreate the checkout before retrying the build." >&2
+    exit 1
+  fi
+  needs_checkout=1
+fi
+
+if [[ "${needs_checkout}" -eq 1 ]]; then
   git -C "${LADYBIRD_DIR}" checkout --detach "${LADYBIRD_REVISION}"
 fi

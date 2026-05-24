@@ -3,7 +3,6 @@
 #include <cstdio>
 #include <memory>
 #include <mutex>
-#include <print>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -170,12 +169,13 @@ public:
     };
 
     on_web_content_process_change_for_cross_site_navigation = [this]() {
-      std::println("WebContent process changed for cross site navigation.");
+      std::fprintf(stderr,
+                   "WebContent process changed for cross site navigation.\n");
       configure_client_process();
     };
 
     on_web_content_crashed = []() {
-      std::println("WebContent process crashed.");
+      std::fprintf(stderr, "WebContent process crashed.\n");
     };
 
     on_url_change = [this](URL::URL const &url) {
@@ -405,7 +405,7 @@ void init_ladybird() {
 
   auto app = FlutterApplication::create(arguments, lib_path);
   if (app.is_error()) {
-    std::println("Failed to construct Ladybird Engine Application");
+    std::fprintf(stderr, "Failed to construct Ladybird Engine Application\n");
     return;
   }
   s_app = app.release_value();
@@ -421,7 +421,7 @@ void init_ladybird() {
       if (!disposition.is_error() &&
           disposition.value() ==
               WebView::BrowserProcess::ProcessDisposition::ExitProcess) {
-        std::println("Opening in existing process");
+        std::fprintf(stderr, "Opening in existing process\n");
         return;
       }
     }
