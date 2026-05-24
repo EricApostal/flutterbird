@@ -34,8 +34,6 @@ class _LadybirdViewState extends State<LadybirdView>
     _momentumTicker = createTicker(_onMomentumTick);
     widget.controller.onResize = () {
       if (mounted) {
-        // Keep the same texture and only refresh layout metrics when
-        // the native surface dimensions change.
         setState(() {});
       }
     };
@@ -281,7 +279,7 @@ class _LadybirdViewState extends State<LadybirdView>
     widget.controller.onCrossSiteNavigation = null;
     _momentumTicker?.dispose();
     _focusNode.dispose();
-    print("disposing!");
+
     if (_textureId != null) {
       widget.controller.unregisterTexture(_textureId!);
     }

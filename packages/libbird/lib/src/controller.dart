@@ -51,7 +51,7 @@ class LadybirdController {
   LadybirdController({this.initialUrl = "https://www.duckduckgo.com/"}) {
     _lib = ffi.DynamicLibrary.process();
     _bindings = LadybirdBindings(_lib);
-    print("start bindings");
+
     if (_displayErrorDialogCallback == null) {
       _bindings.set_ask_user_for_download_path_callback(
         ffi.Pointer.fromFunction(_onAskUserForDownloadPath),
@@ -75,10 +75,8 @@ class LadybirdController {
     }
 
     _bindings.init_ladybird();
-    print("init ladybird");
+
     _viewId = _bindings.create_web_view();
-    print("created webview");
-    print("view id: $viewId");
 
     _resizeCallback = ffi.NativeCallable<ffi.Void Function()>.listener(
       _onResize,
@@ -121,9 +119,8 @@ class LadybirdController {
       _crossSiteNavigationCallback.nativeFunction,
     );
 
-    _bindings.set_zoom(_viewId, 1.0);
-    _lastDevicePixelRatio = 1.0;
-    print("all things set");
+    // _bindings.set_zoom(_viewId, 1.0);
+    // _lastDevicePixelRatio = 1.0;
   }
 
   void _onUrlChange(ffi.Pointer<ffi.Char> urlPointer) {
@@ -175,6 +172,7 @@ class LadybirdController {
   }
 
   void _onResize() {
+    print("ON RESIZE!");
     onResize?.call();
   }
 
