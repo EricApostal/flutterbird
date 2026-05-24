@@ -1,5 +1,6 @@
 // ignore_for_file: implementation_imports
 
+import 'dart:ffi' as ffi;
 import 'dart:io';
 
 import 'package:bird_core/bird_core.dart';
@@ -29,6 +30,65 @@ class BrowserTabBar extends ConsumerStatefulWidget {
 
 class _BrowserTabBarState extends ConsumerState<BrowserTabBar> {
   final GlobalKey _tabStripKey = GlobalKey();
+  _GtkWindowMoveDart? _gtkWindowMove;
+
+  _GtkWindowMoveDart? _resolveGtkWindowMove() {
+    if (!Platform.isLinux) {
+      return null;
+    }
+    if (_gtkWindowMove != null) {
+      return _gtkWindowMove;
+    }
+
+    try {
+      final lib = ffi.DynamicLibrary.open('libgtk-3.so.0');
+      _gtkWindowMove = lib
+          .lookupFunction<_GtkWindowMoveNative, _GtkWindowMoveDart>(
+            'gtk_window_move',
+          );
+    } catch (_) {
+      _gtkWindowMove = null;
+    }
+
+    return _gtkWindowMove;
+  }
+
+  ffi.Pointer<ffi.Void>? _windowHandleOf(dynamic controller) {
+    try {
+      final dynamic handle = controller.windowHandle;
+      if (handle is ffi.Pointer<ffi.Void>) {
+        return handle;
+      }
+      if (handle is ffi.Pointer) {
+        return handle.cast<ffi.Void>();
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  void _moveDetachedWindowForDrag(int windowId, Offset globalPosition) {
+    final detachedWindow = ref.read(browserWindowStateProvider(windowId));
+    final controller = detachedWindow?.nativeWindowController;
+    if (controller == null) {
+      return;
+    }
+
+    if (Platform.isLinux) {
+      final gtkWindowMove = _resolveGtkWindowMove();
+      final handle = _windowHandleOf(controller);
+      if (gtkWindowMove != null && handle != null && handle.address != 0) {
+        final targetX = globalPosition.dx.round() - 140;
+        final targetY = globalPosition.dy.round() - 18;
+        gtkWindowMove(handle, targetX, targetY);
+      }
+      return;
+    }
+
+    controller.enableCustomWindow();
+    custom_window.CustomWindow.forController(
+      controller,
+    )?.startWindowMoveDrag(globalPosition);
+  }
 
   void _goToMainTabIfRouterAvailable(int viewId) {
     GoRouter.maybeOf(context)?.go('/browser/tab/$viewId');
@@ -52,8 +112,26 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar> {
     required BrowserWindowLayout layoutController,
   }) {
     if (dragData.currentWindowId != widget.windowId) {
+      _moveDetachedWindowForDrag(
+        dragData.currentWindowId,
+        details.globalPosition,
+      );
       return;
     }
+
+    final currentWindow = ref.read(
+      browserWindowStateProvider(dragData.currentWindowId),
+    );
+    if (currentWindow != null &&
+        !currentWindow.isMain &&
+        currentWindow.tabIds.length == 1) {
+      _moveDetachedWindowForDrag(
+        dragData.currentWindowId,
+        details.globalPosition,
+      );
+      return;
+    }
+
     if (_isPointerInsideTabStrip(details.globalPosition)) {
       return;
     }
@@ -82,16 +160,7 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar> {
   }
 
   void _startDetachedWindowMoveDrag(int windowId, Offset globalPosition) {
-    final detachedWindow = ref.read(browserWindowStateProvider(windowId));
-    final controller = detachedWindow?.nativeWindowController;
-    if (controller == null) {
-      return;
-    }
-
-    controller.enableCustomWindow();
-    custom_window.CustomWindow.forController(
-      controller,
-    )?.startWindowMoveDrag(globalPosition);
+    _moveDetachedWindowForDrag(windowId, globalPosition);
   }
 
   void _startCurrentWindowMoveDrag(Offset globalPosition) {
@@ -103,6 +172,11 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar> {
     final currentWindow = ref.read(browserWindowStateProvider(widget.windowId));
     final controller = currentWindow?.nativeWindowController;
     if (controller == null) {
+      return;
+    }
+
+    if (Platform.isLinux) {
+      _moveDetachedWindowForDrag(widget.windowId, globalPosition);
       return;
     }
 
@@ -187,6 +261,9 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar> {
       builder: (context, candidateData, rejectedData) {
         return SingleChildScrollView(
           scrollDirection: Axis.horizontal,
+          physics: shouldMoveWindowInsteadOfDetaching
+              ? const NeverScrollableScrollPhysics()
+              : null,
           child: Row(
             children: [
               for (int index = 0; index < tabs.length; index++)
@@ -198,6 +275,9 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar> {
                           selected: tabs[index].viewId == resolvedCurrentViewId,
                           initialWindowId: widget.windowId,
                           canDetachOnDrag: isDetachedWindow,
+                          hideDragFeedback:
+                              shouldMoveWindowInsteadOfDetaching &&
+                              isDetachedWindow,
                           onSingleTabWindowDragStart:
                               _startCurrentWindowMoveDrag,
                           onSelected: () {
@@ -546,6 +626,7 @@ class _DraggableBrowserTab extends StatelessWidget {
   final bool selected;
   final int initialWindowId;
   final bool canDetachOnDrag;
+  final bool hideDragFeedback;
   final void Function(Offset globalPosition) onSingleTabWindowDragStart;
   final VoidCallback onSelected;
   final VoidCallback onClose;
@@ -559,6 +640,7 @@ class _DraggableBrowserTab extends StatelessWidget {
     required this.selected,
     required this.initialWindowId,
     required this.canDetachOnDrag,
+    this.hideDragFeedback = false,
     required this.onSingleTabWindowDragStart,
     required this.onSelected,
     required this.onClose,
@@ -582,6 +664,10 @@ class _DraggableBrowserTab extends StatelessWidget {
 
     if (!canDetachOnDrag) {
       return GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onPanDown: (details) {
+          onSingleTabWindowDragStart(details.globalPosition);
+        },
         onPanStart: (details) {
           onSingleTabWindowDragStart(details.globalPosition);
         },
@@ -594,18 +680,26 @@ class _DraggableBrowserTab extends StatelessWidget {
       return tab;
     }
 
+    final dragFeedback = hideDragFeedback
+        ? const SizedBox.shrink()
+        : Material(
+            color: Colors.transparent,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 240),
+              child: Opacity(opacity: 0.92, child: tab),
+            ),
+          );
+
+    final dragChildWhenDragging = hideDragFeedback
+        ? tab
+        : Opacity(opacity: 0.35, child: tab);
+
     return Draggable<_DraggedTabData>(
       data: dragData,
       rootOverlay: true,
       dragAnchorStrategy: pointerDragAnchorStrategy,
-      feedback: Material(
-        color: Colors.transparent,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 240),
-          child: Opacity(opacity: 0.92, child: tab),
-        ),
-      ),
-      childWhenDragging: Opacity(opacity: 0.35, child: tab),
+      feedback: dragFeedback,
+      childWhenDragging: dragChildWhenDragging,
       onDragUpdate: (details) => onDragUpdate(dragData, details),
       onDragEnd: (details) => onDragEnd(dragData, details),
       child: tab,
@@ -702,3 +796,7 @@ class _DraggedTabData {
 
   _DraggedTabData({required this.tabId, required this.currentWindowId});
 }
+
+typedef _GtkWindowMoveNative =
+    ffi.Void Function(ffi.Pointer<ffi.Void>, ffi.Int32, ffi.Int32);
+typedef _GtkWindowMoveDart = void Function(ffi.Pointer<ffi.Void>, int, int);
