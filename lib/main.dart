@@ -7,8 +7,9 @@ import 'package:window_manager/window_manager.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  final isDesktop = Platform.isMacOS || Platform.isLinux || Platform.isWindows;
 
-  if (Platform.isMacOS || Platform.isLinux || Platform.isWindows) {
+  if (isDesktop) {
     await windowManager.ensureInitialized();
     const initialSize = Size(800, 600);
     const windowOptions = WindowOptions(
@@ -20,6 +21,9 @@ void main() async {
     );
 
     await windowManager.waitUntilReadyToShow(windowOptions, () async {
+      if (isDesktop) {
+        await windowManager.setMovable(false);
+      }
       await windowManager.show();
       await windowManager.focus();
     });
