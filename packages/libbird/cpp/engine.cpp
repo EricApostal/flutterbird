@@ -78,6 +78,12 @@ static std::unique_ptr<ViewBackend> create_view_backend() {
 
 class FlutterViewImpl final : public WebView::ViewImplementation {
 public:
+  enum class MacFrameSource {
+    Unknown,
+    IOSurface,
+    BitmapFallback,
+  };
+
   static ErrorOr<NonnullOwnPtr<FlutterViewImpl>> create(int view_id) {
     return adopt_nonnull_own_or_enomem(new (std::nothrow)
                                            FlutterViewImpl(view_id));
@@ -93,6 +99,10 @@ public:
 
   // Platform rendering backend (LinuxViewBackend / MacOSViewBackend).
   std::unique_ptr<ViewBackend> m_backend;
+
+#ifdef __APPLE__
+  MacFrameSource m_last_mac_frame_source{MacFrameSource::Unknown};
+#endif
 
   // Mutex for the non-frame callbacks (URL, title, favicon).
   std::mutex m_info_mutex;
@@ -164,15 +174,32 @@ public:
         if (surface) {
         auto bitmap_size =
           m_client_state.front_bitmap.last_painted_size.to_type<int>();
-          if (mac_backend->on_iosurface_ready(surface, bitmap_size.width(),
-                            bitmap_size.height()))
+            if (mac_backend->on_iosurface_ready(surface, bitmap_size.width(),
+                                                bitmap_size.height())) {
+              if (m_last_mac_frame_source != MacFrameSource::IOSurface) {
+                std::fprintf(stderr,
+                             "[Ladybird][macOS] View %d rendering source: IOSurface\n",
+                             m_view_id);
+                m_last_mac_frame_source = MacFrameSource::IOSurface;
+              }
             return;
+            }
         }
 #endif
 
       auto bitmap = AK::RefPtr<Gfx::Bitmap const>(
           shared_image_buffer->bitmap());
       m_backend->on_bitmap_ready(std::move(bitmap));
+
+    #ifdef __APPLE__
+          if (m_last_mac_frame_source != MacFrameSource::BitmapFallback) {
+            std::fprintf(
+                stderr,
+                "[Ladybird][macOS] View %d rendering source: Bitmap fallback\n",
+                m_view_id);
+            m_last_mac_frame_source = MacFrameSource::BitmapFallback;
+          }
+    #endif
     };
 
     on_web_content_process_change_for_cross_site_navigation = [this]() {
