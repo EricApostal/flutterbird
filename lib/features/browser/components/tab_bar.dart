@@ -30,21 +30,43 @@ class BrowserTabBar extends ConsumerStatefulWidget {
 
 class _BrowserTabBarState extends ConsumerState<BrowserTabBar> {
   static final Map<int, Rect> _tabStripRectsByWindow = <int, Rect>{};
+  static final Map<int, Offset> _detachedWindowScreenOriginById =
+      <int, Offset>{};
+  static Offset? _mainWindowScreenOrigin;
+  static const bool _enableOverlapMergeFallback = true;
+  static const bool _mergeDebugLogs = true;
+  static int _lastMergeDebugLogMs = 0;
 
   final GlobalKey _tabStripKey = GlobalKey();
   _GtkWindowMoveDart? _gtkWindowMove;
+
+  void _logMergeDebug(String message, {bool throttle = false}) {
+    if (!_mergeDebugLogs) {
+      return;
+    }
+    if (throttle) {
+      final now = DateTime.now().millisecondsSinceEpoch;
+      if (now - _lastMergeDebugLogMs < 120) {
+        return;
+      }
+      _lastMergeDebugLogMs = now;
+    }
+    debugPrint('[tab-merge] w${widget.windowId}: $message');
+  }
 
   @override
   void didUpdateWidget(covariant BrowserTabBar oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.windowId != widget.windowId) {
       _tabStripRectsByWindow.remove(oldWidget.windowId);
+      _detachedWindowScreenOriginById.remove(oldWidget.windowId);
     }
   }
 
   @override
   void dispose() {
     _tabStripRectsByWindow.remove(widget.windowId);
+    _detachedWindowScreenOriginById.remove(widget.windowId);
     super.dispose();
   }
 
@@ -56,7 +78,28 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar> {
     }
 
     final topLeft = renderObject.localToGlobal(Offset.zero);
-    _tabStripRectsByWindow[widget.windowId] = topLeft & renderObject.size;
+    final rect = topLeft & renderObject.size;
+    final oldRect = _tabStripRectsByWindow[widget.windowId];
+    if (oldRect != rect) {
+      _logMergeDebug('publish-strip window=${widget.windowId} rect=$rect');
+    }
+    _tabStripRectsByWindow[widget.windowId] = rect;
+  }
+
+  Future<void> _refreshMainWindowScreenOrigin() async {
+    if (widget.windowId != mainBrowserWindowId) {
+      return;
+    }
+
+    final pos = await windowManager.getPosition();
+    if (!mounted) {
+      return;
+    }
+    final newOrigin = Offset(pos.dx, pos.dy);
+    if (_mainWindowScreenOrigin != newOrigin) {
+      _logMergeDebug('main-origin $newOrigin');
+    }
+    _mainWindowScreenOrigin = newOrigin;
   }
 
   _GtkWindowMoveDart? _resolveGtkWindowMove() {
@@ -93,6 +136,152 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar> {
     return null;
   }
 
+  Offset? _windowScreenOrigin(int windowId) {
+    if (windowId == mainBrowserWindowId) {
+      return _mainWindowScreenOrigin;
+    }
+    return _detachedWindowScreenOriginById[windowId];
+  }
+
+  Offset _normalizePointerToScreen({
+    required int sourceWindowId,
+    required Offset pointerPosition,
+  }) {
+    final sourceOrigin = _windowScreenOrigin(sourceWindowId);
+    final sourceRect = _tabStripRectsByWindow[sourceWindowId];
+    if (sourceOrigin == null || sourceRect == null) {
+      return pointerPosition;
+    }
+
+    final likelyWindowLocal =
+        pointerPosition.dx >= -80 &&
+        pointerPosition.dy >= -80 &&
+        pointerPosition.dx <= sourceRect.width + 220 &&
+        pointerPosition.dy <= sourceRect.height + 220;
+    if (!likelyWindowLocal) {
+      return pointerPosition;
+    }
+
+    return sourceOrigin + pointerPosition;
+  }
+
+  Rect _normalizeStripRectToScreen({
+    required int windowId,
+    required Rect stripRect,
+  }) {
+    final windowOrigin = _windowScreenOrigin(windowId);
+    if (windowOrigin == null) {
+      return stripRect;
+    }
+
+    final likelyWindowLocal =
+        stripRect.left >= -80 &&
+        stripRect.top >= -80 &&
+        stripRect.left <= 520 &&
+        stripRect.top <= 240;
+    if (!likelyWindowLocal) {
+      return stripRect;
+    }
+
+    return stripRect.shift(windowOrigin);
+  }
+
+  int? _maybeMergeDetachedSingleTabByOverlap({
+    required int sourceWindowId,
+    required int tabId,
+    required Offset localPointerPosition,
+    required BrowserWindowLayout layoutController,
+  }) {
+    if (!_enableOverlapMergeFallback) {
+      _logMergeDebug(
+        'overlap-disabled tab=$tabId source=$sourceWindowId '
+        'pointer=$localPointerPosition',
+        throttle: true,
+      );
+      return null;
+    }
+
+    if (sourceWindowId == mainBrowserWindowId) {
+      _logMergeDebug(
+        'overlap-skip source-main tab=$tabId pointer=$localPointerPosition',
+        throttle: true,
+      );
+      return null;
+    }
+
+    final sourceOrigin = _windowScreenOrigin(sourceWindowId);
+    if (sourceOrigin == null) {
+      _logMergeDebug(
+        'overlap-skip no-source-origin tab=$tabId source=$sourceWindowId',
+        throttle: true,
+      );
+      return null;
+    }
+
+    final pointerOnScreen = _normalizePointerToScreen(
+      sourceWindowId: sourceWindowId,
+      pointerPosition: localPointerPosition,
+    );
+
+    _logMergeDebug(
+      'overlap-check tab=$tabId source=$sourceWindowId raw=$localPointerPosition '
+      'screen=$pointerOnScreen sourceOrigin=${_windowScreenOrigin(sourceWindowId)}',
+      throttle: true,
+    );
+
+    int? targetWindowId;
+    for (final entry in _tabStripRectsByWindow.entries) {
+      final candidateWindowId = entry.key;
+      if (candidateWindowId == sourceWindowId) {
+        continue;
+      }
+
+      final targetRectOnScreen = _normalizeStripRectToScreen(
+        windowId: candidateWindowId,
+        stripRect: entry.value,
+      );
+      _logMergeDebug(
+        'candidate window=$candidateWindowId rect=$targetRectOnScreen '
+        'contains=${targetRectOnScreen.contains(pointerOnScreen)} '
+        'origin=${_windowScreenOrigin(candidateWindowId)}',
+        throttle: true,
+      );
+      if (targetRectOnScreen.contains(pointerOnScreen)) {
+        targetWindowId = candidateWindowId;
+        break;
+      }
+    }
+
+    if (targetWindowId == null) {
+      _logMergeDebug('overlap-no-target tab=$tabId', throttle: true);
+      return null;
+    }
+
+    final merged = layoutController.mergeTabToWindow(
+      tabId: tabId,
+      fromWindowId: sourceWindowId,
+      toWindowId: targetWindowId,
+    );
+    if (!merged) {
+      _logMergeDebug(
+        'overlap-merge-rejected tab=$tabId source=$sourceWindowId target=$targetWindowId',
+      );
+      return null;
+    }
+
+    _logMergeDebug(
+      'overlap-merged tab=$tabId source=$sourceWindowId target=$targetWindowId',
+    );
+
+    layoutController.setActiveTab(targetWindowId, tabId);
+
+    if (targetWindowId == mainBrowserWindowId) {
+      _goToMainTabIfRouterAvailable(tabId);
+    }
+
+    return targetWindowId;
+  }
+
   void _moveDetachedWindowForDrag(
     int windowId,
     Offset globalPosition, {
@@ -111,6 +300,10 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar> {
         final targetX = globalPosition.dx.round() - 140;
         final targetY = globalPosition.dy.round() - 18;
         gtkWindowMove(handle, targetX, targetY);
+        _detachedWindowScreenOriginById[windowId] = Offset(
+          targetX.toDouble(),
+          targetY.toDouble(),
+        );
         return;
       }
 
@@ -164,12 +357,6 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar> {
     if (currentWindow != null &&
         !currentWindow.isMain &&
         currentWindow.tabIds.length == 1) {
-      _maybeMergeSingleTabDragIntoHoveredWindow(
-        sourceWindowId: dragData.currentWindowId,
-        tabId: dragData.tabId,
-        globalPosition: details.globalPosition,
-        layoutController: layoutController,
-      );
       _moveDetachedWindowForDrag(
         dragData.currentWindowId,
         details.globalPosition,
@@ -230,28 +417,55 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar> {
     )?.startWindowMoveDrag(globalPosition);
   }
 
-  void _handleMergeOnMainStripHover({
+  void _handleMergeOnStripHover({
     required _DraggedTabData dragData,
+    required Offset pointerGlobalPosition,
     required BrowserWindowLayout layoutController,
   }) {
-    if (widget.windowId != mainBrowserWindowId) {
+    if (dragData.currentWindowId == widget.windowId) {
+      _logMergeDebug(
+        'hover-skip same-window tab=${dragData.tabId}',
+        throttle: true,
+      );
       return;
     }
-    if (dragData.currentWindowId == mainBrowserWindowId) {
+    if (!_isPointerInsideTabStrip(pointerGlobalPosition)) {
+      _logMergeDebug(
+        'hover-skip outside-strip tab=${dragData.tabId} pointer=$pointerGlobalPosition',
+        throttle: true,
+      );
       return;
     }
 
-    final merged = layoutController.mergeTabToMain(
+    _logMergeDebug(
+      'hover-merge-attempt tab=${dragData.tabId} from=${dragData.currentWindowId} '
+      'to=${widget.windowId} pointer=$pointerGlobalPosition',
+      throttle: true,
+    );
+
+    final merged = layoutController.mergeTabToWindow(
       tabId: dragData.tabId,
       fromWindowId: dragData.currentWindowId,
+      toWindowId: widget.windowId,
     );
     if (!merged) {
+      _logMergeDebug(
+        'hover-merge-rejected tab=${dragData.tabId} from=${dragData.currentWindowId} '
+        'to=${widget.windowId}',
+      );
       return;
     }
 
-    dragData.currentWindowId = mainBrowserWindowId;
-    layoutController.setActiveTab(mainBrowserWindowId, dragData.tabId);
-    _goToMainTabIfRouterAvailable(dragData.tabId);
+    _logMergeDebug(
+      'hover-merged tab=${dragData.tabId} from=${dragData.currentWindowId} '
+      'to=${widget.windowId}',
+    );
+
+    dragData.currentWindowId = widget.windowId;
+    layoutController.setActiveTab(widget.windowId, dragData.tabId);
+    if (widget.windowId == mainBrowserWindowId) {
+      _goToMainTabIfRouterAvailable(dragData.tabId);
+    }
   }
 
   void _handleDetachedTabDragEnd({
@@ -260,78 +474,53 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar> {
     required BrowserWindowLayout layoutController,
     required int dragOriginWindowId,
   }) {
-    // Cross-window DragTarget handoff can be flaky on Linux, so detached-origin
-    // drags merge on release if they weren't accepted by an in-window drop target.
+    _logMergeDebug(
+      'drag-end entry tab=${dragData.tabId} origin=$dragOriginWindowId '
+      'current=${dragData.currentWindowId} accepted=${details.wasAccepted} '
+      'offset=${details.offset}',
+    );
+
     if (details.wasAccepted) {
-      return;
+      if (dragData.currentWindowId != dragOriginWindowId) {
+        _logMergeDebug(
+          'drag-end accepted-to-other tab=${dragData.tabId} '
+          'current=${dragData.currentWindowId}',
+        );
+        return;
+      }
+      _logMergeDebug(
+        'drag-end accepted-same-window tab=${dragData.tabId} '
+        'continuing-overlap-check',
+      );
     }
     if (dragOriginWindowId == mainBrowserWindowId) {
+      _logMergeDebug('drag-end skip origin-main tab=${dragData.tabId}');
       return;
     }
     if (dragData.currentWindowId == mainBrowserWindowId) {
+      _logMergeDebug('drag-end skip already-main tab=${dragData.tabId}');
       return;
     }
 
-    final merged = layoutController.mergeTabToMain(
+    _logMergeDebug(
+      'drag-end overlap-check tab=${dragData.tabId} current=${dragData.currentWindowId} '
+      'offset=${details.offset}',
+    );
+
+    final mergedIntoWindowId = _maybeMergeDetachedSingleTabByOverlap(
+      sourceWindowId: dragData.currentWindowId,
       tabId: dragData.tabId,
-      fromWindowId: dragData.currentWindowId,
+      localPointerPosition: details.offset,
+      layoutController: layoutController,
     );
-    if (!merged) {
-      return;
-    }
-
-    dragData.currentWindowId = mainBrowserWindowId;
-    layoutController.setActiveTab(mainBrowserWindowId, dragData.tabId);
-    _goToMainTabIfRouterAvailable(dragData.tabId);
-  }
-
-  void _maybeMergeSingleTabDragIntoHoveredWindow({
-    required int sourceWindowId,
-    required int tabId,
-    required Offset globalPosition,
-    required BrowserWindowLayout layoutController,
-  }) {
-    if (sourceWindowId == mainBrowserWindowId) {
-      return;
-    }
-
-    int? targetWindowId;
-    for (final entry in _tabStripRectsByWindow.entries) {
-      if (entry.key == sourceWindowId) {
-        continue;
-      }
-      if (entry.value.inflate(8).contains(globalPosition)) {
-        targetWindowId = entry.key;
-        break;
-      }
-    }
-    if (targetWindowId == null) {
-      return;
-    }
-
-    debugPrint(
-      '[tab-merge] candidate source=$sourceWindowId target=$targetWindowId tab=$tabId pos=$globalPosition',
-    );
-
-    final merged = layoutController.mergeTabToWindow(
-      tabId: tabId,
-      fromWindowId: sourceWindowId,
-      toWindowId: targetWindowId,
-    );
-    if (!merged) {
-      debugPrint(
-        '[tab-merge] merge rejected source=$sourceWindowId target=$targetWindowId tab=$tabId',
+    if (mergedIntoWindowId == null) {
+      _logMergeDebug(
+        'drag-end no-merge tab=${dragData.tabId} current=${dragData.currentWindowId}',
       );
       return;
     }
 
-    debugPrint(
-      '[tab-merge] merged source=$sourceWindowId target=$targetWindowId tab=$tabId',
-    );
-
-    if (targetWindowId == mainBrowserWindowId) {
-      _goToMainTabIfRouterAvailable(tabId);
-    }
+    dragData.currentWindowId = mergedIntoWindowId;
   }
 
   Widget _buildTabStripDragTarget({
@@ -346,8 +535,9 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar> {
     final strip = DragTarget<_DraggedTabData>(
       key: _tabStripKey,
       onMove: (details) {
-        _handleMergeOnMainStripHover(
+        _handleMergeOnStripHover(
           dragData: details.data,
+          pointerGlobalPosition: details.offset,
           layoutController: layoutController,
         );
       },
@@ -378,16 +568,7 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar> {
                               : null,
                           onSingleTabWindowDragStart:
                               _startCurrentWindowMoveDrag,
-                          onSingleTabWindowDragUpdate: isDetachedWindow
-                              ? (globalPosition) {
-                                  _maybeMergeSingleTabDragIntoHoveredWindow(
-                                    sourceWindowId: widget.windowId,
-                                    tabId: tabs[index].viewId,
-                                    globalPosition: globalPosition,
-                                    layoutController: layoutController,
-                                  );
-                                }
-                              : null,
+                          onSingleTabWindowDragUpdate: null,
                           onSelected: () {
                             layoutController.setActiveTab(
                               widget.windowId,
@@ -607,6 +788,7 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar> {
         return;
       }
       _publishTabStripRect();
+      _refreshMainWindowScreenOrigin();
     });
 
     return Column(
