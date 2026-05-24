@@ -23,7 +23,7 @@ Pod::Spec.new do |s|
   s.homepage         = 'https://github.com/EricApostal/flutterbird'
   s.license          = { :type => 'BSD', :file => '../LICENSE' }
   s.author           = { 'Eric Apostal' => 'eric@rubiscoapp.com' }
-  s.source           = { :git => 'https://github.com/LadybirdBrowser/ladybird.git', :tag => s.version.to_s }
+  s.source           = { :git => 'https://github.com/EricApostal/flutterbird.git', :tag => s.version.to_s }
 
   s.source_files        = 'Classes/**/*'
   s.public_header_files = 'Classes/**/*.h'
