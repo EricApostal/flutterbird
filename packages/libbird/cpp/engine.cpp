@@ -11,6 +11,7 @@
 // in the on_ready_to_paint lambda — nowhere else in this file.
 #ifdef __APPLE__
 #include "platform/macos_view_backend.h"
+#include <IOSurface/IOSurface.h>
 #else
 #include "platform/linux_view_backend.h"
 #endif
@@ -35,7 +36,6 @@
 #include <LibWebView/BrowserProcess.h>
 #include <LibWebView/Utilities.h>
 #include <LibWebView/ViewImplementation.h>
-#include <string>
 #ifndef __APPLE__
 #include <unistd.h>
 #endif
@@ -132,25 +132,21 @@ public:
     // -----------------------------------------------------------------------
     // on_ready_to_paint — modelled after Qt's WebContentView pattern.
     //
-    // Extract the Gfx::Bitmap from the front shared-image buffer and pass it
-    // to the backend.  The backend stores it, detects size changes, and fires
-    // the Flutter FrameCallback / ResizeCallback.
-    //
-    // macOS NOTE: SharedImageBuffer::iosurface_handle() gives the IOSurface
-    // for zero-copy GPU texture upload.  Wire that into MacOSViewBackend once
-    // on_iosurface_ready() is implemented; until then the bitmap CPU path
-    // below works as a functional fallback on both platforms.
+    // Linux path consumes bitmap/dmabuf. macOS first tries IOSurface for the
+    // zero-copy external-texture path, then falls back to bitmap conversion.
     // -----------------------------------------------------------------------
     on_ready_to_paint = [this]() {
       if (!m_client_state.has_usable_bitmap ||
           !m_client_state.front_bitmap.shared_image_buffer)
         return;
 
+      auto *shared_image_buffer =
+          m_client_state.front_bitmap.shared_image_buffer.ptr();
+
 #ifndef __APPLE__
 #ifdef USE_VULKAN_DMABUF_IMAGES
       auto *linux_backend = static_cast<LinuxViewBackend *>(m_backend.get());
-      if (auto const &dmabuf = m_client_state.front_bitmap.shared_image_buffer
-                                   ->linux_dmabuf_handle();
+      if (auto const &dmabuf = shared_image_buffer->linux_dmabuf_handle();
           dmabuf.has_value()) {
         linux_backend->set_linux_dmabuf_frame(
             dmabuf->file.fd(), dmabuf->size.width(), dmabuf->size.height(),
@@ -161,10 +157,21 @@ public:
         linux_backend->clear_linux_dmabuf_frame();
       }
 #endif
+    #else
+        auto *mac_backend = static_cast<MacOSViewBackend *>(m_backend.get());
+        auto *surface = static_cast<IOSurfaceRef>(
+          shared_image_buffer->iosurface_handle().core_foundation_pointer());
+        if (surface) {
+        auto bitmap_size =
+          m_client_state.front_bitmap.last_painted_size.to_type<int>();
+          if (mac_backend->on_iosurface_ready(surface, bitmap_size.width(),
+                            bitmap_size.height()))
+            return;
+        }
 #endif
 
       auto bitmap = AK::RefPtr<Gfx::Bitmap const>(
-          m_client_state.front_bitmap.shared_image_buffer->bitmap());
+          shared_image_buffer->bitmap());
       m_backend->on_bitmap_ready(std::move(bitmap));
     };
 

@@ -27,21 +27,25 @@
 #include "view_backend.h"
 
 #include <CoreVideo/CoreVideo.h>
+#include <IOSurface/IOSurface.h>
 
 class MacOSViewBackend final : public ViewBackend {
 public:
   MacOSViewBackend() = default;
   ~MacOSViewBackend() override;
 
-  // CPU fallback: store the bitmap and expose its raw pixels.
-  // TODO: replace with on_iosurface_ready() for the GPU texture path.
+  // Primary macOS path: wrap Ladybird's IOSurface into CVPixelBuffer.
+  bool on_iosurface_ready(IOSurfaceRef surface, int width, int height);
+
+  // CPU fallback: store bitmap and materialize CVPixelBuffer when surface is
+  // not available.
   void on_bitmap_ready(AK::RefPtr<Gfx::Bitmap const> bitmap) override;
 
   // Future GPU path: CVPixelBufferRef wrapping the rendered IOSurface.
   // void on_iosurface_ready(IOSurfaceRef surface, int width, int height);
 
-  // pixel_data() returns CVPixelBufferRef (retained) once the IOSurface
-  // path is implemented.  For now returns raw bitmap bytes.
+  // Returns a retained CVPixelBufferRef (caller releases).
+  // Never returns raw bitmap bytes on macOS.
   void *pixel_data() override;
   int width() const override;
   int height() const override;
