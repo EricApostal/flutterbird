@@ -75,6 +75,7 @@ typedef void (*UrlChangeCallback)(const char *);
 typedef void (*TitleChangeCallback)(const char *);
 typedef void (*FaviconChangeCallback)(const uint8_t *, int, int);
 typedef void (*CrossSiteNavigationCallback)(int view_id);
+typedef void (*LoadingStateChangeCallback)(bool is_loading);
 
 LADYBIRD_API void set_url_change_callback(int view_id,
                                           UrlChangeCallback callback);
@@ -82,8 +83,13 @@ LADYBIRD_API void set_title_change_callback(int view_id,
                                             TitleChangeCallback callback);
 LADYBIRD_API void set_favicon_change_callback(int view_id,
                                               FaviconChangeCallback callback);
-LADYBIRD_API void set_cross_site_navigation_callback(
-  int view_id, CrossSiteNavigationCallback callback);
+LADYBIRD_API void
+set_cross_site_navigation_callback(int view_id,
+                                   CrossSiteNavigationCallback callback);
+LADYBIRD_API void
+set_loading_state_change_callback(int view_id,
+                                  LoadingStateChangeCallback callback);
+LADYBIRD_API bool is_tab_loading(int view_id);
 
 LADYBIRD_API void tick_ladybird();
 
@@ -95,7 +101,8 @@ LADYBIRD_API bool can_go_forward(int view_id);
 
 LADYBIRD_API void dispatch_mouse_event(int view_id, int type, int x, int y,
                                        int button, int buttons, int modifiers,
-                                       double wheel_delta_x, double wheel_delta_y);
+                                       double wheel_delta_x,
+                                       double wheel_delta_y);
 
 LADYBIRD_API void dispatch_key_event(int view_id, int type, int keycode,
                                      int modifiers, uint32_t code_point,

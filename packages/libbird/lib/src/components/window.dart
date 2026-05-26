@@ -34,7 +34,7 @@ class _LadybirdViewState extends State<LadybirdView>
     _momentumTicker = createTicker(_onMomentumTick);
     widget.controller.onResize = () {
       if (mounted) {
-        setState(() {});
+        _recreateTexture();
       }
     };
     widget.controller.onCrossSiteNavigation = () {
@@ -44,6 +44,13 @@ class _LadybirdViewState extends State<LadybirdView>
       );
       _recreateTextureFromCrossSiteNavigation();
     };
+
+    widget.controller.isLoadingNotifier.addListener(() {
+      if (mounted) {
+        _recreateTexture();
+      }
+    });
+
     _recreateTexture();
   }
 
@@ -61,9 +68,10 @@ class _LadybirdViewState extends State<LadybirdView>
 
       widget.controller.onResize = () {
         if (mounted) {
-          setState(() {});
+          _recreateTexture();
         }
       };
+
       widget.controller.onCrossSiteNavigation = () {
         if (!mounted) return;
         print(
@@ -120,6 +128,7 @@ class _LadybirdViewState extends State<LadybirdView>
   void _onSizeChanged(Size size, double density) {
     if (size.width <= 0 || size.height <= 0) return;
     final physicalSize = Size(size.width * density, size.height * density);
+    print("setting size to ${physicalSize.width}");
     widget.controller.updateDevicePixelRatio(density);
     widget.controller.resizeWindow(physicalSize);
 
@@ -305,6 +314,9 @@ class _LadybirdViewState extends State<LadybirdView>
           final displayHeight = paddedHeight > constraints.maxHeight
               ? paddedHeight
               : constraints.maxHeight;
+
+          print("BUILDING WITH WIDTH: $displayWidth");
+          print("padded width = $paddedWidth");
 
           return ClipRect(
             child: OverflowBox(

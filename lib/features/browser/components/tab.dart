@@ -48,21 +48,39 @@ class BrowserTab extends ConsumerWidget {
                     padding: const EdgeInsets.only(left: 12),
                     child: Row(
                       children: [
-                        ValueListenableBuilder<dynamic>(
-                          valueListenable: browserTab.faviconNotifier,
-                          builder: (context, image, child) {
-                            if (image != null) {
-                              return Padding(
-                                padding: const EdgeInsets.only(right: 8.0),
-                                child: RawImage(
-                                  image: image,
+                        ValueListenableBuilder<bool>(
+                          valueListenable: browserTab.isLoadingNotifier,
+                          builder: (context, isLoading, child) {
+                            if (isLoading) {
+                              return const Padding(
+                                padding: EdgeInsets.only(right: 8.0),
+                                child: SizedBox(
                                   width: 16,
                                   height: 16,
-                                  filterQuality: FilterQuality.high,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
                                 ),
                               );
                             }
-                            return const SizedBox.shrink();
+
+                            return ValueListenableBuilder<dynamic>(
+                              valueListenable: browserTab.faviconNotifier,
+                              builder: (context, image, child) {
+                                if (image != null) {
+                                  return Padding(
+                                    padding: const EdgeInsets.only(right: 8.0),
+                                    child: RawImage(
+                                      image: image,
+                                      width: 16,
+                                      height: 16,
+                                      filterQuality: FilterQuality.high,
+                                    ),
+                                  );
+                                }
+                                return const SizedBox.shrink();
+                              },
+                            );
                           },
                         ),
                         Expanded(

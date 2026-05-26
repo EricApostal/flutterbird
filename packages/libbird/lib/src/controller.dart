@@ -29,6 +29,8 @@ class LadybirdController {
   _faviconChangeCallback;
   late final ffi.NativeCallable<ffi.Void Function(ffi.Int)>
   _crossSiteNavigationCallback;
+  late final ffi.NativeCallable<ffi.Void Function(ffi.Bool)>
+  _loadingStateChangeCallback;
 
   static ffi.NativeCallable<DisplayDownloadConfirmationDialogCallbackFunction>?
   _displayDownloadConfirmationDialogCallback;
@@ -45,6 +47,7 @@ class LadybirdController {
   final ValueNotifier<String> urlNotifier = ValueNotifier("");
   final ValueNotifier<String> titleNotifier = ValueNotifier("Tab");
   final ValueNotifier<dynamic> faviconNotifier = ValueNotifier(null);
+  final ValueNotifier<bool> isLoadingNotifier = ValueNotifier(false);
 
   int get viewId => _viewId;
 
@@ -119,6 +122,15 @@ class LadybirdController {
       _crossSiteNavigationCallback.nativeFunction,
     );
 
+    _loadingStateChangeCallback =
+        ffi.NativeCallable<ffi.Void Function(ffi.Bool)>.listener(
+          _onLoadingStateChange,
+        );
+    _bindings.set_loading_state_change_callback(
+      _viewId,
+      _loadingStateChangeCallback.nativeFunction,
+    );
+
     // _bindings.set_zoom(_viewId, 1.0);
     // _lastDevicePixelRatio = 1.0;
   }
@@ -180,6 +192,10 @@ class LadybirdController {
     onCrossSiteNavigation?.call();
   }
 
+  void _onLoadingStateChange(bool isLoading) {
+    isLoadingNotifier.value = isLoading;
+  }
+
   void navigate(String url) {
     String parsedUrl = url;
     // todo: more reliable system for other formats, such as file://
@@ -217,6 +233,10 @@ class LadybirdController {
 
   bool canGoForward() {
     return _bindings.can_go_forward(_viewId);
+  }
+
+  bool isLoading() {
+    return _bindings.is_tab_loading(_viewId);
   }
 
   Future<int> createTexture() async {
@@ -284,11 +304,13 @@ class LadybirdController {
 
   void dispose() {
     _bindings.set_cross_site_navigation_callback(_viewId, ffi.nullptr);
+    _bindings.set_loading_state_change_callback(_viewId, ffi.nullptr);
     _resizeCallback.close();
     _urlChangeCallback.close();
     _titleChangeCallback.close();
     _faviconChangeCallback.close();
     _crossSiteNavigationCallback.close();
+    _loadingStateChangeCallback.close();
     _bindings.destroy_web_view(_viewId);
   }
 }

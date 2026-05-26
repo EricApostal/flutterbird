@@ -34,6 +34,7 @@
 #include <LibWeb/Page/InputEvent.h>
 #include <LibWeb/PixelUnits.h>
 #include <LibWebView/BrowserProcess.h>
+#include <LibWebView/Menu.h>
 #include <LibWebView/Utilities.h>
 #include <LibWebView/ViewImplementation.h>
 #ifndef __APPLE__
@@ -105,13 +106,26 @@ public:
   MacFrameSource m_last_mac_frame_source{MacFrameSource::Unknown};
 #endif
 
-  // Mutex for the non-frame callbacks (URL, title, favicon).
+  // Mutex for the non-frame callbacks (URL, title, favicon, loading state).
   std::mutex m_info_mutex;
 
   UrlChangeCallback m_url_change_callback = nullptr;
   TitleChangeCallback m_title_change_callback = nullptr;
   FaviconChangeCallback m_favicon_change_callback = nullptr;
   CrossSiteNavigationCallback m_cross_site_navigation_callback = nullptr;
+  LoadingStateChangeCallback m_loading_state_change_callback = nullptr;
+  bool m_is_loading{false};
+
+  void update_loading_state(bool is_loading) {
+    if (m_is_loading == is_loading)
+      return;
+
+    m_is_loading = is_loading;
+
+    std::lock_guard lock(m_info_mutex);
+    if (m_loading_state_change_callback)
+      m_loading_state_change_callback(m_is_loading);
+  }
 
   void sync_device_pixel_ratio() { m_device_pixel_ratio = m_zoom; }
 
@@ -171,64 +185,67 @@ public:
         linux_backend->clear_linux_dmabuf_frame();
       }
 #endif
-    #else
-        auto *mac_backend = static_cast<MacOSViewBackend *>(m_backend.get());
-        auto *surface = static_cast<IOSurfaceRef>(
-            shared_image_buffer->iosurface_handle().core_foundation_pointer());
-        if (surface) {
-          auto surface_width = static_cast<int>(IOSurfaceGetWidth(surface));
-          auto surface_height = static_cast<int>(IOSurfaceGetHeight(surface));
-          if (surface_width <= 0 || surface_height <= 0) {
-            auto bitmap_size =
-                m_client_state.front_bitmap.last_painted_size.to_type<int>();
-            surface_width = bitmap_size.width();
-            surface_height = bitmap_size.height();
-          }
-
-          if (mac_backend->on_iosurface_ready(surface, surface_width,
-                                              surface_height)) {
-              if (m_last_mac_frame_source != MacFrameSource::IOSurface) {
-                std::fprintf(stderr,
-                             "[Ladybird][macOS] View %d rendering source: IOSurface\n",
-                             m_view_id);
-                m_last_mac_frame_source = MacFrameSource::IOSurface;
-              }
-              if ((m_debug_paint_event_count % 120) == 1) {
-                std::fprintf(
-                    stderr,
-                    "[Ladybird][engine] view=%d paint#=%llu source=IOSurface size=%dx%d\n",
-                    m_view_id,
-                    static_cast<unsigned long long>(m_debug_paint_event_count),
-                    surface_width, surface_height);
-              }
-              return;
-          }
-        }
-#endif
-
-      auto bitmap = AK::RefPtr<Gfx::Bitmap const>(
-          shared_image_buffer->bitmap());
-      m_backend->on_bitmap_ready(std::move(bitmap));
-
-        if ((m_debug_paint_event_count % 120) == 1) {
-        std::fprintf(
-          stderr,
-          "[Ladybird][engine] view=%d paint#=%llu source=Bitmap size=%dx%d gen=%llu\n",
-          m_view_id,
-          static_cast<unsigned long long>(m_debug_paint_event_count),
-          m_backend->width(), m_backend->height(),
-          static_cast<unsigned long long>(m_backend->frame_generation()));
+#else
+      auto *mac_backend = static_cast<MacOSViewBackend *>(m_backend.get());
+      auto *surface = static_cast<IOSurfaceRef>(
+          shared_image_buffer->iosurface_handle().core_foundation_pointer());
+      if (surface) {
+        auto surface_width = static_cast<int>(IOSurfaceGetWidth(surface));
+        auto surface_height = static_cast<int>(IOSurfaceGetHeight(surface));
+        if (surface_width <= 0 || surface_height <= 0) {
+          auto bitmap_size =
+              m_client_state.front_bitmap.last_painted_size.to_type<int>();
+          surface_width = bitmap_size.width();
+          surface_height = bitmap_size.height();
         }
 
-    #ifdef __APPLE__
-          if (m_last_mac_frame_source != MacFrameSource::BitmapFallback) {
+        if (mac_backend->on_iosurface_ready(surface, surface_width,
+                                            surface_height)) {
+          if (m_last_mac_frame_source != MacFrameSource::IOSurface) {
             std::fprintf(
                 stderr,
-                "[Ladybird][macOS] View %d rendering source: Bitmap fallback\n",
+                "[Ladybird][macOS] View %d rendering source: IOSurface\n",
                 m_view_id);
-            m_last_mac_frame_source = MacFrameSource::BitmapFallback;
+            m_last_mac_frame_source = MacFrameSource::IOSurface;
           }
-    #endif
+          if ((m_debug_paint_event_count % 120) == 1) {
+            std::fprintf(
+                stderr,
+                "[Ladybird][engine] view=%d paint#=%llu source=IOSurface "
+                "size=%dx%d\n",
+                m_view_id,
+                static_cast<unsigned long long>(m_debug_paint_event_count),
+                surface_width, surface_height);
+          }
+          return;
+        }
+      }
+#endif
+
+      auto bitmap =
+          AK::RefPtr<Gfx::Bitmap const>(shared_image_buffer->bitmap());
+      m_backend->on_bitmap_ready(std::move(bitmap));
+
+      if ((m_debug_paint_event_count % 120) == 1) {
+        std::fprintf(
+            stderr,
+            "[Ladybird][engine] view=%d paint#=%llu source=Bitmap size=%dx%d "
+            "gen=%llu\n",
+            m_view_id,
+            static_cast<unsigned long long>(m_debug_paint_event_count),
+            m_backend->width(), m_backend->height(),
+            static_cast<unsigned long long>(m_backend->frame_generation()));
+      }
+
+#ifdef __APPLE__
+      if (m_last_mac_frame_source != MacFrameSource::BitmapFallback) {
+        std::fprintf(
+            stderr,
+            "[Ladybird][macOS] View %d rendering source: Bitmap fallback\n",
+            m_view_id);
+        m_last_mac_frame_source = MacFrameSource::BitmapFallback;
+      }
+#endif
     };
 
     on_web_content_process_change_for_cross_site_navigation = [this]() {
@@ -240,9 +257,16 @@ public:
         m_cross_site_navigation_callback(m_view_id);
     };
 
-    on_web_content_crashed = []() {
+    on_web_content_crashed = [this]() {
       std::fprintf(stderr, "WebContent process crashed.\n");
+      update_loading_state(false);
     };
+
+    on_load_start = [this](URL::URL const &, bool) {
+      update_loading_state(true);
+    };
+
+    on_load_finish = [this](URL::URL const &) { update_loading_state(false); };
 
     on_url_change = [this](URL::URL const &url) {
       std::lock_guard lock(m_info_mutex);
@@ -652,7 +676,8 @@ void set_frame_callback(int view_id, FrameCallback callback, void *context) {
     it->second->m_backend->frame_callback = callback;
     it->second->m_backend->frame_callback_context = context;
     std::fprintf(stderr,
-                 "[Ladybird][engine] set_frame_callback view=%d callback=%p context=%p\n",
+                 "[Ladybird][engine] set_frame_callback view=%d callback=%p "
+                 "context=%p\n",
                  view_id, reinterpret_cast<void *>(callback), context);
   }
 }
@@ -765,9 +790,37 @@ void go_forward(int view_id) {
   }
 }
 
-bool can_go_back(int view_id) { return true; }
+bool can_go_back(int view_id) {
+  auto it = g_web_views.find(view_id);
+  if (it == g_web_views.end())
+    return false;
+  return it->second->navigate_back_action().enabled();
+}
 
-bool can_go_forward(int view_id) { return true; }
+bool can_go_forward(int view_id) {
+  auto it = g_web_views.find(view_id);
+  if (it == g_web_views.end())
+    return false;
+  return it->second->navigate_forward_action().enabled();
+}
+
+void set_loading_state_change_callback(int view_id,
+                                       LoadingStateChangeCallback callback) {
+  auto it = g_web_views.find(view_id);
+  if (it != g_web_views.end()) {
+    std::lock_guard lock(it->second->m_info_mutex);
+    it->second->m_loading_state_change_callback = callback;
+    if (callback)
+      callback(it->second->m_is_loading);
+  }
+}
+
+bool is_tab_loading(int view_id) {
+  auto it = g_web_views.find(view_id);
+  if (it == g_web_views.end())
+    return false;
+  return it->second->m_is_loading;
+}
 
 extern "C" {
 
