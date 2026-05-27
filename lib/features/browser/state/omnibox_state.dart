@@ -10,8 +10,9 @@ enum OmniboxSuggestionType { bookmark, history, searchQuery, searchAction }
 class BrowserBookmark {
   final String url;
   final String title;
+  final String? favicon;
 
-  const BrowserBookmark({required this.url, required this.title});
+  const BrowserBookmark({required this.url, required this.title, this.favicon});
 }
 
 class OmniboxSuggestion {
@@ -19,12 +20,14 @@ class OmniboxSuggestion {
   final String title;
   final String value;
   final String? subtitle;
+  final String? favicon;
 
   const OmniboxSuggestion({
     required this.type,
     required this.title,
     required this.value,
     this.subtitle,
+    this.favicon,
   });
 }
 
@@ -113,6 +116,23 @@ class BrowserOmnibox extends _$BrowserOmnibox {
     refreshBookmarksFromEngine(controller);
   }
 
+  String? _readFavicon(Map<String, dynamic> item) {
+    final candidates = [
+      item['favicon'],
+      item['favicon_base64_png'],
+      item['icon'],
+      item['icon_url'],
+    ];
+
+    for (final candidate in candidates) {
+      if (candidate is String && candidate.trim().isNotEmpty) {
+        return candidate.trim();
+      }
+    }
+
+    return null;
+  }
+
   List<BrowserBookmark> _parseBookmarksJson(String rawJson) {
     if (rawJson.trim().isEmpty) return const [];
 
@@ -131,7 +151,13 @@ class BrowserOmnibox extends _$BrowserOmnibox {
         final title = (rawTitle is String && rawTitle.trim().isNotEmpty)
             ? rawTitle.trim()
             : rawUrl;
-        bookmarks.add(BrowserBookmark(url: rawUrl, title: title));
+        bookmarks.add(
+          BrowserBookmark(
+            url: rawUrl,
+            title: title,
+            favicon: _readFavicon(item),
+          ),
+        );
         return;
       }
 
@@ -176,6 +202,7 @@ class BrowserOmnibox extends _$BrowserOmnibox {
           title: title,
           value: rawUrl,
           subtitle: rawUrl,
+          favicon: _readFavicon(entry),
         ),
       );
     }
@@ -213,6 +240,7 @@ class BrowserOmnibox extends _$BrowserOmnibox {
           title: bookmark.title,
           value: bookmark.url,
           subtitle: bookmark.url,
+          favicon: bookmark.favicon,
         ),
       );
     }

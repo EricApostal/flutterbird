@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:bird_core/bird_core.dart';
@@ -96,6 +97,51 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar>
     currentTabController.navigate(url);
   }
 
+  Widget _faviconOrIcon({
+    required String? favicon,
+    required IconData fallback,
+    required double size,
+    Color? color,
+  }) {
+    if (favicon == null || favicon.isEmpty) {
+      return Icon(fallback, size: size, color: color);
+    }
+
+    if (favicon.startsWith('http://') || favicon.startsWith('https://')) {
+      return Image.network(
+        favicon,
+        width: size,
+        height: size,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) {
+          return Icon(fallback, size: size, color: color);
+        },
+      );
+    }
+
+    try {
+      final base64Payload = favicon.startsWith('data:')
+          ? favicon.substring(favicon.indexOf(',') + 1)
+          : favicon;
+      final bytes = base64Decode(base64Payload);
+      if (bytes.isEmpty) {
+        return Icon(fallback, size: size, color: color);
+      }
+
+      return Image.memory(
+        bytes,
+        width: size,
+        height: size,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) {
+          return Icon(fallback, size: size, color: color);
+        },
+      );
+    } catch (_) {
+      return Icon(fallback, size: size, color: color);
+    }
+  }
+
   Widget _buildBookmarksToolbar(
     ThemeData theme,
     BrowserOmniboxState omniboxState,
@@ -148,7 +194,11 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar>
                       ),
                       child: Row(
                         children: [
-                          const Icon(Icons.bookmark, size: 14),
+                          _faviconOrIcon(
+                            favicon: bookmark.favicon,
+                            fallback: Icons.bookmark,
+                            size: 14,
+                          ),
                           const SizedBox(width: 6),
                           Expanded(
                             child: Text(
@@ -182,10 +232,22 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar>
                               crossAxisAlignment: CrossAxisAlignment.start,
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                Text(
-                                  bookmark.title,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
+                                Row(
+                                  children: [
+                                    _faviconOrIcon(
+                                      favicon: bookmark.favicon,
+                                      fallback: Icons.bookmark,
+                                      size: 14,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        bookmark.title,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ],
                                 ),
                                 Text(
                                   bookmark.url,
@@ -249,6 +311,16 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar>
       case OmniboxSuggestionType.searchAction:
         return Icons.search;
     }
+  }
+
+  Widget _suggestionLeading(ThemeData theme, OmniboxSuggestion option) {
+    final fallback = _suggestionIconFor(option.type);
+    return _faviconOrIcon(
+      favicon: option.favicon,
+      fallback: fallback,
+      size: 18,
+      color: theme.colorScheme.onSurfaceVariant,
+    );
   }
 
   Future<void> _refreshWindowState() async {
@@ -556,14 +628,9 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar>
                                             ),
                                             child: Row(
                                               children: [
-                                                Icon(
-                                                  _suggestionIconFor(
-                                                    option.type,
-                                                  ),
-                                                  size: 18,
-                                                  color: theme
-                                                      .colorScheme
-                                                      .onSurfaceVariant,
+                                                _suggestionLeading(
+                                                  theme,
+                                                  option,
                                                 ),
                                                 const SizedBox(width: 10),
                                                 Expanded(
