@@ -48,6 +48,8 @@ class LadybirdController {
   final ValueNotifier<String> titleNotifier = ValueNotifier("Tab");
   final ValueNotifier<dynamic> faviconNotifier = ValueNotifier(null);
   final ValueNotifier<bool> isLoadingNotifier = ValueNotifier(false);
+  final ValueNotifier<bool> canGoBackNotifier = ValueNotifier(false);
+  final ValueNotifier<bool> canGoForwardNotifier = ValueNotifier(false);
 
   int get viewId => _viewId;
 
@@ -131,6 +133,8 @@ class LadybirdController {
       _loadingStateChangeCallback.nativeFunction,
     );
 
+    _refreshNavigationState();
+
     // _bindings.set_zoom(_viewId, 1.0);
     // _lastDevicePixelRatio = 1.0;
   }
@@ -140,6 +144,7 @@ class LadybirdController {
       final url = urlPointer.cast<Utf8>().toDartString();
       textController.text = url;
       urlNotifier.value = url;
+      _refreshNavigationState();
       malloc.free(urlPointer);
     }
   }
@@ -194,6 +199,12 @@ class LadybirdController {
 
   void _onLoadingStateChange(bool isLoading) {
     isLoadingNotifier.value = isLoading;
+    _refreshNavigationState();
+  }
+
+  void _refreshNavigationState() {
+    canGoBackNotifier.value = _bindings.can_go_back(_viewId);
+    canGoForwardNotifier.value = _bindings.can_go_forward(_viewId);
   }
 
   void navigate(String url) {
@@ -206,6 +217,7 @@ class LadybirdController {
     final ffi.Pointer<Utf8> charPointer = parsedUrl.toNativeUtf8();
     _bindings.navigate_to(_viewId, charPointer.cast<ffi.Char>());
     malloc.free(charPointer);
+    _refreshNavigationState();
   }
 
   void updateDevicePixelRatio(double ratio) {
@@ -217,22 +229,25 @@ class LadybirdController {
 
   void reload() {
     _bindings.reload_tab(_viewId);
+    _refreshNavigationState();
   }
 
   void goBack() {
     _bindings.go_back(_viewId);
+    _refreshNavigationState();
   }
 
   void goForward() {
     _bindings.go_forward(_viewId);
+    _refreshNavigationState();
   }
 
   bool canGoBack() {
-    return _bindings.can_go_back(_viewId);
+    return canGoBackNotifier.value;
   }
 
   bool canGoForward() {
-    return _bindings.can_go_forward(_viewId);
+    return canGoForwardNotifier.value;
   }
 
   bool isLoading() {
@@ -305,6 +320,13 @@ class LadybirdController {
   void dispose() {
     _bindings.set_cross_site_navigation_callback(_viewId, ffi.nullptr);
     _bindings.set_loading_state_change_callback(_viewId, ffi.nullptr);
+    textController.dispose();
+    urlNotifier.dispose();
+    titleNotifier.dispose();
+    faviconNotifier.dispose();
+    isLoadingNotifier.dispose();
+    canGoBackNotifier.dispose();
+    canGoForwardNotifier.dispose();
     _resizeCallback.close();
     _urlChangeCallback.close();
     _titleChangeCallback.close();

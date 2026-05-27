@@ -60,12 +60,14 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar>
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final colors = theme.colorScheme;
 
     final tabs = ref.watch(browserTabControllerProvider);
     final currentTabController = ref.watch(
       browserTabProvider(widget.currentViewId),
     );
+    if (currentTabController == null) {
+      return const SizedBox.shrink();
+    }
 
     final isMacOS = Platform.isMacOS;
     final isWindows = Platform.isWindows;
@@ -174,31 +176,45 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar>
             padding: const EdgeInsets.only(left: 4, right: 4, bottom: 4),
             child: Row(
               children: [
-                IconButton(
-                  icon: const Icon(Icons.arrow_back, size: 20),
-                  onPressed: () {
-                    currentTabController?.goBack();
+                ValueListenableBuilder<bool>(
+                  valueListenable: currentTabController.canGoBackNotifier,
+                  builder: (context, canGoBack, child) {
+                    return IconButton(
+                      icon: const Icon(Icons.arrow_back, size: 20),
+                      onPressed: canGoBack
+                          ? () {
+                              currentTabController.goBack();
+                            }
+                          : null,
+                      splashRadius: 20,
+                    );
                   },
-                  splashRadius: 20,
                 ),
-                IconButton(
-                  icon: const Icon(Icons.arrow_forward, size: 20),
-                  onPressed: () {
-                    currentTabController?.goForward();
+                ValueListenableBuilder<bool>(
+                  valueListenable: currentTabController.canGoForwardNotifier,
+                  builder: (context, canGoForward, child) {
+                    return IconButton(
+                      icon: const Icon(Icons.arrow_forward, size: 20),
+                      onPressed: canGoForward
+                          ? () {
+                              currentTabController.goForward();
+                            }
+                          : null,
+                      splashRadius: 20,
+                    );
                   },
-                  splashRadius: 20,
                 ),
                 IconButton(
                   icon: const Icon(Icons.refresh, size: 20),
                   onPressed: () {
-                    currentTabController?.reload();
+                    currentTabController.reload();
                   },
                   splashRadius: 20,
                 ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: ValueListenableBuilder<String>(
-                    valueListenable: currentTabController!.urlNotifier,
+                    valueListenable: currentTabController.urlNotifier,
                     builder: (context, url, child) {
                       if (currentTabController.textController.text != url &&
                           !FocusScope.of(context).hasFocus) {
