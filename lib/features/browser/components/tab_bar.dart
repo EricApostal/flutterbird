@@ -75,20 +75,18 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar>
     final isLinux = Platform.isLinux;
 
     final leftPadding = isMacOS ? _kMacControlsWidth : 8.0;
-    final rightPadding = (isWindows || isLinux) ? _kRightControlsWidth : 8.0;
 
     return Column(
       children: [
         SizedBox(
           height: 45,
-          child: DragToMoveArea(
-            child: SizedBox(
-              width: double.infinity,
-              child: Padding(
-                padding: EdgeInsets.only(
-                  left: leftPadding,
-                  right: rightPadding,
-                ),
+          child: Row(
+            children: [
+              DragToMoveArea(
+                child: SizedBox(height: .infinity, width: leftPadding),
+              ),
+              Padding(
+                padding: EdgeInsets.only(left: leftPadding),
                 child: ReorderableListView.builder(
                   shrinkWrap: true,
                   padding: const EdgeInsets.only(top: 4, bottom: 4),
@@ -168,7 +166,12 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar>
                   },
                 ),
               ),
-            ),
+              Expanded(
+                child: DragToMoveArea(
+                  child: SizedBox(height: .infinity, width: double.infinity),
+                ),
+              ),
+            ],
           ),
         ),
         BrowserOmniboxBar(currentTabController: currentTabController),
