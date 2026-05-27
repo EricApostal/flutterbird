@@ -8,7 +8,6 @@ import 'dart:ui' as ui;
 
 class LadybirdController {
   final MethodChannel _channel = MethodChannel('ladybird');
-  late final ffi.DynamicLibrary _lib;
   late final LadybirdBindings _bindings;
   // int? _textureId;
   Size? _lastSize;
@@ -31,6 +30,8 @@ class LadybirdController {
   _crossSiteNavigationCallback;
   late final ffi.NativeCallable<ffi.Void Function(ffi.Bool)>
   _loadingStateChangeCallback;
+  late final ffi.NativeCallable<ffi.Void Function(ffi.Int)>
+  _cursorChangeCallback;
 
   static ffi.NativeCallable<DisplayDownloadConfirmationDialogCallbackFunction>?
   _displayDownloadConfirmationDialogCallback;
@@ -50,12 +51,14 @@ class LadybirdController {
   final ValueNotifier<bool> isLoadingNotifier = ValueNotifier(false);
   final ValueNotifier<bool> canGoBackNotifier = ValueNotifier(false);
   final ValueNotifier<bool> canGoForwardNotifier = ValueNotifier(false);
+  final ValueNotifier<MouseCursor> mouseCursorNotifier = ValueNotifier(
+    SystemMouseCursors.basic,
+  );
 
   int get viewId => _viewId;
 
   LadybirdController({this.initialUrl = "https://www.duckduckgo.com/"}) {
-    _lib = ffi.DynamicLibrary.process();
-    _bindings = LadybirdBindings(_lib);
+    _bindings = LadybirdBindings(ffi.DynamicLibrary.process());
 
     if (_displayErrorDialogCallback == null) {
       _bindings.set_ask_user_for_download_path_callback(
@@ -133,6 +136,15 @@ class LadybirdController {
       _loadingStateChangeCallback.nativeFunction,
     );
 
+    _cursorChangeCallback =
+        ffi.NativeCallable<ffi.Void Function(ffi.Int)>.listener(
+          _onCursorChange,
+        );
+    _bindings.set_cursor_change_callback(
+      _viewId,
+      _cursorChangeCallback.nativeFunction,
+    );
+
     _refreshNavigationState();
 
     // _bindings.set_zoom(_viewId, 1.0);
@@ -200,6 +212,61 @@ class LadybirdController {
   void _onLoadingStateChange(bool isLoading) {
     isLoadingNotifier.value = isLoading;
     _refreshNavigationState();
+  }
+
+  void _onCursorChange(int cursorType) {
+    final nextCursor = _mapNativeCursor(cursorType);
+    if (mouseCursorNotifier.value != nextCursor) {
+      mouseCursorNotifier.value = nextCursor;
+    }
+  }
+
+  MouseCursor _mapNativeCursor(int cursorType) {
+    switch (cursorType) {
+      case 0: // None
+      case 1: // Hidden
+        return SystemMouseCursors.none;
+      case 2: // Arrow
+        return SystemMouseCursors.basic;
+      case 3: // Crosshair
+        return SystemMouseCursors.precise;
+      case 4: // IBeam
+        return SystemMouseCursors.text;
+      case 5: // ResizeHorizontal
+        return SystemMouseCursors.resizeLeftRight;
+      case 6: // ResizeVertical
+        return SystemMouseCursors.resizeUpDown;
+      case 7: // ResizeDiagonalTLBR
+        return SystemMouseCursors.resizeUpLeftDownRight;
+      case 8: // ResizeDiagonalBLTR
+        return SystemMouseCursors.resizeUpRightDownLeft;
+      case 9: // ResizeColumn
+        return SystemMouseCursors.resizeColumn;
+      case 10: // ResizeRow
+        return SystemMouseCursors.resizeRow;
+      case 11: // Hand
+        return SystemMouseCursors.click;
+      case 12: // Help
+        return SystemMouseCursors.help;
+      case 13: // OpenHand
+        return SystemMouseCursors.grab;
+      case 14: // Drag
+        return SystemMouseCursors.grabbing;
+      case 15: // DragCopy
+        return SystemMouseCursors.copy;
+      case 16: // Move
+        return SystemMouseCursors.move;
+      case 17: // Wait
+        return SystemMouseCursors.progress;
+      case 18: // Disallowed
+        return SystemMouseCursors.forbidden;
+      case 19: // Eyedropper
+        return SystemMouseCursors.precise;
+      case 20: // Zoom
+        return SystemMouseCursors.zoomIn;
+      default:
+        return SystemMouseCursors.basic;
+    }
   }
 
   void _refreshNavigationState() {
@@ -347,6 +414,7 @@ class LadybirdController {
   }
 
   void dispose() {
+    _bindings.set_cursor_change_callback(_viewId, ffi.nullptr);
     _bindings.set_cross_site_navigation_callback(_viewId, ffi.nullptr);
     _bindings.set_loading_state_change_callback(_viewId, ffi.nullptr);
     textController.dispose();
@@ -356,12 +424,14 @@ class LadybirdController {
     isLoadingNotifier.dispose();
     canGoBackNotifier.dispose();
     canGoForwardNotifier.dispose();
+    mouseCursorNotifier.dispose();
     _resizeCallback.close();
     _urlChangeCallback.close();
     _titleChangeCallback.close();
     _faviconChangeCallback.close();
     _crossSiteNavigationCallback.close();
     _loadingStateChangeCallback.close();
+    _cursorChangeCallback.close();
     _bindings.destroy_web_view(_viewId);
   }
 }

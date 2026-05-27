@@ -28,6 +28,12 @@ class _LadybirdViewState extends State<LadybirdView>
   Offset _lastPointerPos = Offset.zero;
   int _lastPanTime = 0;
 
+  void _onCursorChanged() {
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -50,6 +56,7 @@ class _LadybirdViewState extends State<LadybirdView>
         _recreateTexture();
       }
     });
+    widget.controller.mouseCursorNotifier.addListener(_onCursorChanged);
 
     _recreateTexture();
   }
@@ -58,6 +65,7 @@ class _LadybirdViewState extends State<LadybirdView>
   void didUpdateWidget(LadybirdView oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.controller != widget.controller) {
+      oldWidget.controller.mouseCursorNotifier.removeListener(_onCursorChanged);
       oldWidget.controller.onResize = null;
       oldWidget.controller.onCrossSiteNavigation = null;
 
@@ -79,6 +87,8 @@ class _LadybirdViewState extends State<LadybirdView>
         );
         _recreateTextureFromCrossSiteNavigation();
       };
+
+      widget.controller.mouseCursorNotifier.addListener(_onCursorChanged);
 
       _recreateTexture();
     }
@@ -284,6 +294,7 @@ class _LadybirdViewState extends State<LadybirdView>
 
   @override
   void dispose() {
+    widget.controller.mouseCursorNotifier.removeListener(_onCursorChanged);
     widget.controller.onResize = null;
     widget.controller.onCrossSiteNavigation = null;
     _momentumTicker?.dispose();
@@ -333,6 +344,7 @@ class _LadybirdViewState extends State<LadybirdView>
                 width: displayWidth,
                 height: displayHeight,
                 child: MouseRegion(
+                  cursor: widget.controller.mouseCursorNotifier.value,
                   onEnter: (_) {
                     // if (!_focusNode.hasFocus) {
                     //   _focusNode.requestFocus();

@@ -117,7 +117,20 @@ public:
   FaviconChangeCallback m_favicon_change_callback = nullptr;
   CrossSiteNavigationCallback m_cross_site_navigation_callback = nullptr;
   LoadingStateChangeCallback m_loading_state_change_callback = nullptr;
+  CursorChangeCallback m_cursor_change_callback = nullptr;
   bool m_is_loading{false};
+
+  static int to_cursor_type_for_flutter(Gfx::Cursor const &cursor) {
+    return cursor.visit(
+        [](Gfx::StandardCursor standard) {
+          return static_cast<int>(standard);
+        },
+        [](Gfx::ImageCursor const &) {
+          // Flutter cannot consume custom pixel cursors via this API, so use
+          // a standard fallback.
+          return static_cast<int>(Gfx::StandardCursor::Arrow);
+        });
+  }
 
   void update_loading_state(bool is_loading) {
     if (m_is_loading == is_loading)
@@ -296,6 +309,12 @@ public:
                length);
         m_favicon_change_callback(buffer, bitmap.width(), bitmap.height());
       }
+    };
+
+    on_cursor_change = [this](Gfx::Cursor const &cursor) {
+      std::lock_guard lock(m_info_mutex);
+      if (m_cursor_change_callback)
+        m_cursor_change_callback(to_cursor_type_for_flutter(cursor));
     };
   }
 
@@ -884,6 +903,14 @@ void set_loading_state_change_callback(int view_id,
     it->second->m_loading_state_change_callback = callback;
     if (callback)
       callback(it->second->m_is_loading);
+  }
+}
+
+void set_cursor_change_callback(int view_id, CursorChangeCallback callback) {
+  auto it = g_web_views.find(view_id);
+  if (it != g_web_views.end()) {
+    std::lock_guard lock(it->second->m_info_mutex);
+    it->second->m_cursor_change_callback = callback;
   }
 }
 
