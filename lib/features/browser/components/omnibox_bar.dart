@@ -22,6 +22,7 @@ class _BrowserOmniboxBarState extends ConsumerState<BrowserOmniboxBar> {
   @override
   void initState() {
     super.initState();
+    _omniboxFocusNode.addListener(_onOmniboxFocusChanged);
     _syncTrackedTabController(widget.currentTabController);
   }
 
@@ -36,8 +37,14 @@ class _BrowserOmniboxBarState extends ConsumerState<BrowserOmniboxBar> {
   @override
   void dispose() {
     _syncTrackedTabController(null);
+    _omniboxFocusNode.removeListener(_onOmniboxFocusChanged);
     _omniboxFocusNode.dispose();
     super.dispose();
+  }
+
+  void _onOmniboxFocusChanged() {
+    if (!mounted) return;
+    setState(() {});
   }
 
   void _syncTrackedTabController(LadybirdController? controller) {
@@ -260,6 +267,106 @@ class _BrowserOmniboxBarState extends ConsumerState<BrowserOmniboxBar> {
     );
   }
 
+  TextSpan _styledUrlSpan(ThemeData theme, String rawUrl) {
+    final baseStyle = theme.textTheme.bodyMedium!;
+    final primary = baseStyle.copyWith(color: theme.colorScheme.onSurface);
+    final secondary = baseStyle.copyWith(
+      color: theme.colorScheme.onSurface.withAlpha(140),
+    );
+
+    final url = rawUrl.trim();
+    if (url.isEmpty) {
+      return TextSpan(text: '', style: primary);
+    }
+
+    final schemeSeparatorIndex = url.indexOf('://');
+    final authorityStart = schemeSeparatorIndex >= 0
+        ? schemeSeparatorIndex + 3
+        : 0;
+    if (authorityStart >= url.length) {
+      return TextSpan(text: url, style: primary);
+    }
+
+    final delimiters = ['/', '?', '#'];
+    var authorityEnd = url.length;
+    for (final delimiter in delimiters) {
+      final index = url.indexOf(delimiter, authorityStart);
+      if (index >= 0 && index < authorityEnd) {
+        authorityEnd = index;
+      }
+    }
+
+    final authority = url.substring(authorityStart, authorityEnd);
+    if (authority.isEmpty) {
+      return TextSpan(text: url, style: primary);
+    }
+
+    var hostCandidate = authority;
+    final userInfoSeparator = hostCandidate.lastIndexOf('@');
+    if (userInfoSeparator >= 0 &&
+        userInfoSeparator + 1 < hostCandidate.length) {
+      hostCandidate = hostCandidate.substring(userInfoSeparator + 1);
+    }
+
+    if (hostCandidate.startsWith('[')) {
+      final closingBracket = hostCandidate.indexOf(']');
+      if (closingBracket > 0) {
+        hostCandidate = hostCandidate.substring(0, closingBracket + 1);
+      }
+    } else {
+      final colonIndex = hostCandidate.lastIndexOf(':');
+      if (colonIndex > 0 && hostCandidate.indexOf(':') == colonIndex) {
+        hostCandidate = hostCandidate.substring(0, colonIndex);
+      }
+    }
+
+    if (hostCandidate.isEmpty) {
+      return TextSpan(text: url, style: primary);
+    }
+
+    final hostStart = url.indexOf(hostCandidate, authorityStart);
+    if (hostStart < 0) {
+      return TextSpan(text: url, style: primary);
+    }
+
+    final hostEnd = hostStart + hostCandidate.length;
+    final prefix = url.substring(0, hostStart);
+    final suffix = url.substring(hostEnd);
+
+    return TextSpan(
+      style: secondary,
+      children: [
+        if (prefix.isNotEmpty) TextSpan(text: prefix),
+        TextSpan(text: url.substring(hostStart, hostEnd), style: primary),
+        if (suffix.isNotEmpty) TextSpan(text: suffix),
+      ],
+    );
+  }
+
+  Widget _buildStyledOmniboxOverlay(ThemeData theme, String text) {
+    return Positioned.fill(
+      child: IgnorePointer(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: Text.rich(
+              _styledUrlSpan(theme, text),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              strutStyle: StrutStyle.fromTextStyle(theme.textTheme.bodyMedium!),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  bool _isUrlSuggestion(OmniboxSuggestion option) {
+    return option.type == OmniboxSuggestionType.bookmark ||
+        option.type == OmniboxSuggestionType.history;
+  }
+
   InputDecoration _buildInputDecoration() {
     final theme = Theme.of(context);
     final radius = 8.0;
@@ -405,19 +512,39 @@ class _BrowserOmniboxBarState extends ConsumerState<BrowserOmniboxBar> {
                               focusNode,
                               onFieldSubmitted,
                             ) {
-                              return TextField(
-                                onSubmitted: (value) {
-                                  _submitOmniboxInput(
-                                    omniboxController,
-                                    currentTabController,
-                                    value,
+                              return ValueListenableBuilder<TextEditingValue>(
+                                valueListenable: textEditingController,
+                                builder: (context, editingValue, child) {
+                                  final isFocused = focusNode.hasFocus;
+                                  return Stack(
+                                    children: [
+                                      TextField(
+                                        onSubmitted: (value) {
+                                          _submitOmniboxInput(
+                                            omniboxController,
+                                            currentTabController,
+                                            value,
+                                          );
+                                          onFieldSubmitted();
+                                        },
+                                        controller: textEditingController,
+                                        focusNode: focusNode,
+                                        decoration: _buildInputDecoration(),
+                                        style: theme.textTheme.bodyMedium!
+                                            .copyWith(
+                                              color: isFocused
+                                                  ? theme.colorScheme.onSurface
+                                                  : Colors.transparent,
+                                            ),
+                                      ),
+                                      if (!isFocused)
+                                        _buildStyledOmniboxOverlay(
+                                          theme,
+                                          editingValue.text,
+                                        ),
+                                    ],
                                   );
-                                  onFieldSubmitted();
                                 },
-                                controller: textEditingController,
-                                focusNode: focusNode,
-                                decoration: _buildInputDecoration(),
-                                style: theme.textTheme.bodyMedium!,
                               );
                             },
                         optionsViewBuilder: (context, onSelected, options) {
@@ -452,6 +579,19 @@ class _BrowserOmniboxBarState extends ConsumerState<BrowserOmniboxBar> {
                                   },
                                   itemBuilder: (context, index) {
                                     final option = optionList[index];
+                                    final isUrlSuggestion = _isUrlSuggestion(
+                                      option,
+                                    );
+                                    final urlText = option.subtitle?.trim();
+                                    final hasUrlText =
+                                        isUrlSuggestion &&
+                                        urlText != null &&
+                                        urlText.isNotEmpty;
+                                    final title = option.title.trim();
+                                    final showTitle =
+                                        title.isNotEmpty &&
+                                        (!hasUrlText || title != urlText);
+
                                     return InkWell(
                                       onTap: () => onSelected(option),
                                       child: Padding(
@@ -469,13 +609,35 @@ class _BrowserOmniboxBarState extends ConsumerState<BrowserOmniboxBar> {
                                                     CrossAxisAlignment.start,
                                                 mainAxisSize: MainAxisSize.min,
                                                 children: [
-                                                  Text(
-                                                    option.title,
-                                                    maxLines: 1,
-                                                    overflow:
-                                                        TextOverflow.ellipsis,
-                                                  ),
-                                                  if (option.subtitle != null)
+                                                  if (hasUrlText)
+                                                    Text.rich(
+                                                      _styledUrlSpan(
+                                                        theme,
+                                                        urlText,
+                                                      ),
+                                                      maxLines: 1,
+                                                      overflow:
+                                                          TextOverflow.ellipsis,
+                                                    ),
+                                                  if (showTitle)
+                                                    Text(
+                                                      title,
+                                                      maxLines: 1,
+                                                      overflow:
+                                                          TextOverflow.ellipsis,
+                                                      style: hasUrlText
+                                                          ? theme
+                                                                .textTheme
+                                                                .bodySmall
+                                                                ?.copyWith(
+                                                                  color: theme
+                                                                      .colorScheme
+                                                                      .onSurfaceVariant,
+                                                                )
+                                                          : null,
+                                                    ),
+                                                  if (!hasUrlText &&
+                                                      option.subtitle != null)
                                                     Text(
                                                       option.subtitle!,
                                                       maxLines: 1,
