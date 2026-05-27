@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutterbird/features/browser/components/omnibox_bar.dart';
 import 'package:flutterbird/features/browser/components/tab.dart';
 import 'package:go_router/go_router.dart';
+import 'package:ladybird/ladybird.dart';
 import 'package:window_manager/window_manager.dart';
 
 class BrowserTabBar extends ConsumerStatefulWidget {
@@ -21,7 +22,6 @@ class BrowserTabBar extends ConsumerStatefulWidget {
 class _BrowserTabBarState extends ConsumerState<BrowserTabBar>
     with WindowListener {
   static const double _kMacControlsWidth = 78;
-  static const double _kRightControlsWidth = 138;
 
   bool _isWindowMaximized = false;
 
@@ -59,6 +59,33 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar>
   @override
   void onWindowRestore() => _refreshWindowState();
 
+  void _openNewTab(BuildContext context) {
+    final controller = ref.read(browserTabControllerProvider.notifier).add();
+    context.go('/browser/tab/${controller.viewId}');
+  }
+
+  void _closeTab(
+    BuildContext context,
+    int viewId,
+    List<LadybirdController> tabs,
+  ) {
+    final index = tabs.indexWhere((tab) => tab.viewId == viewId);
+    if (index < 0) return;
+
+    if (viewId == widget.currentViewId) {
+      if (tabs.length == 1) {
+        exit(0);
+      }
+      if (index == 0) {
+        context.go('/browser/tab/${tabs[1].viewId}');
+      } else {
+        context.go('/browser/tab/${tabs[index - 1].viewId}');
+      }
+    }
+
+    ref.read(browserTabControllerProvider.notifier).remove(viewId);
+  }
+
   @override
   Widget build(BuildContext context) {
     final tabs = ref.watch(browserTabControllerProvider);
@@ -71,8 +98,6 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar>
     }
 
     final isMacOS = Platform.isMacOS;
-    final isWindows = Platform.isWindows;
-    final isLinux = Platform.isLinux;
 
     final leftPadding = isMacOS ? _kMacControlsWidth : 8.0;
 
@@ -100,13 +125,7 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar>
                         enabled: false,
                         child: IconButton(
                           icon: const Icon(Icons.add, size: 20),
-                          onPressed: () {
-                            final controller = ref
-                                .read(browserTabControllerProvider.notifier)
-                                .add();
-
-                            context.go('/browser/tab/${controller.viewId}');
-                          },
+                          onPressed: () => _openNewTab(context),
                         ),
                       );
                     }
@@ -122,22 +141,7 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar>
                           selected: id == widget.currentViewId,
                           onTabClosed: () {
                             HapticFeedback.lightImpact();
-                            if (id == widget.currentViewId) {
-                              if (tabs.length == 1) {
-                                exit(0);
-                              }
-                              if (index == 0) {
-                                context.go('/browser/tab/${tabs[1].viewId}');
-                              } else {
-                                context.go(
-                                  '/browser/tab/${tabs[index - 1].viewId}',
-                                );
-                              }
-                            }
-
-                            ref
-                                .read(browserTabControllerProvider.notifier)
-                                .remove(id);
+                            _closeTab(context, id, tabs);
                           },
                         ),
                       ),
