@@ -15,9 +15,6 @@ class BrowserOmniboxBar extends ConsumerStatefulWidget {
 }
 
 class _BrowserOmniboxBarState extends ConsumerState<BrowserOmniboxBar> {
-  static const double _kBookmarkItemWidth = 170;
-  static const double _kBookmarkOverflowButtonWidth = 40;
-
   final FocusNode _omniboxFocusNode = FocusNode();
   LadybirdController? _trackedTabController;
   bool _suppressTrackedTextSync = false;
@@ -160,118 +157,54 @@ class _BrowserOmniboxBarState extends ConsumerState<BrowserOmniboxBar> {
       return const SizedBox.shrink();
     }
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final maxWidth = constraints.maxWidth;
-
-        var visibleCount = (maxWidth / _kBookmarkItemWidth).floor();
-        if (visibleCount < 0) visibleCount = 0;
-        if (visibleCount > bookmarks.length) visibleCount = bookmarks.length;
-
-        if (bookmarks.length > visibleCount) {
-          final adjustedCount =
-              ((maxWidth - _kBookmarkOverflowButtonWidth) / _kBookmarkItemWidth)
-                  .floor();
-          visibleCount = adjustedCount.clamp(0, bookmarks.length);
-        }
-
-        final visible = bookmarks.take(visibleCount).toList(growable: false);
-        final overflow = bookmarks.skip(visibleCount).toList(growable: false);
-
-        return Row(
-          children: [
-            for (final bookmark in visible)
-              Padding(
-                padding: const EdgeInsets.only(right: 6),
-                child: SizedBox(
-                  width: _kBookmarkItemWidth - 6,
-                  child: Tooltip(
-                    message: bookmark.url,
-                    child: OutlinedButton(
-                      onPressed: () {
-                        _openBookmark(currentTabController, bookmark.url);
-                      },
-                      style: OutlinedButton.styleFrom(
-                        visualDensity: VisualDensity.compact,
-                        padding: const EdgeInsets.symmetric(horizontal: 10),
-                        side: BorderSide(width: 0, color: Colors.transparent),
-                      ),
-                      child: Row(
-                        children: [
-                          _faviconOrIcon(
-                            favicon: bookmark.favicon,
-                            fallback: Icons.bookmark,
-                            size: 14,
-                          ),
-                          const SizedBox(width: 6),
-                          Expanded(
-                            child: Text(
-                              bookmark.title,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: theme.textTheme.bodySmall,
-                            ),
-                          ),
-                        ],
-                      ),
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: [
+          for (final bookmark in bookmarks)
+            Padding(
+              padding: const EdgeInsets.only(right: 2),
+              child: Tooltip(
+                message: bookmark.url,
+                child: OutlinedButton(
+                  onPressed: () {
+                    _openBookmark(currentTabController, bookmark.url);
+                  },
+                  style: OutlinedButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                    minimumSize: const Size(0, 28),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 12,
                     ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    side: BorderSide(width: 0, color: Colors.transparent),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _faviconOrIcon(
+                        favicon: bookmark.favicon,
+                        fallback: Icons.bookmark,
+                        size: 14,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        bookmark.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.labelLarge,
+                      ),
+                    ],
                   ),
                 ),
               ),
-            if (overflow.isNotEmpty)
-              PopupMenuButton<String>(
-                icon: const Icon(Icons.more_horiz, size: 20),
-                tooltip: 'More bookmarks',
-                onSelected: (value) {
-                  _openBookmark(currentTabController, value);
-                },
-                itemBuilder: (context) {
-                  return overflow
-                      .map((bookmark) {
-                        return PopupMenuItem<String>(
-                          value: bookmark.url,
-                          child: SizedBox(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Row(
-                                  mainAxisSize: .min,
-                                  children: [
-                                    _faviconOrIcon(
-                                      favicon: bookmark.favicon,
-                                      fallback: Icons.bookmark,
-                                      size: 14,
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Expanded(
-                                      child: Text(
-                                        bookmark.title,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                Text(
-                                  bookmark.url,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: theme.textTheme.bodySmall?.copyWith(
-                                    color: theme.colorScheme.onSurfaceVariant,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      })
-                      .toList(growable: false);
-                },
-              ),
-          ],
-        );
-      },
+            ),
+        ],
+      ),
     );
   }
 
@@ -579,7 +512,7 @@ class _BrowserOmniboxBarState extends ConsumerState<BrowserOmniboxBar> {
             if (bookmarks.isNotEmpty) ...[
               const SizedBox(height: 6),
               SizedBox(
-                height: 36,
+                // height: 36,
                 width: double.infinity,
                 child: _buildBookmarksToolbar(
                   theme,
