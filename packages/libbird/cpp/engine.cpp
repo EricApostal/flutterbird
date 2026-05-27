@@ -17,6 +17,8 @@
 #endif
 
 #include <AK/BitCast.h>
+#include <AK/JsonArray.h>
+#include <AK/JsonObject.h>
 #include <AK/LexicalPath.h>
 #include <AK/OwnPtr.h>
 #include <AK/StringView.h>
@@ -34,6 +36,7 @@
 #include <LibWeb/Page/InputEvent.h>
 #include <LibWeb/PixelUnits.h>
 #include <LibWebView/BrowserProcess.h>
+#include <LibWebView/HistoryStore.h>
 #include <LibWebView/Menu.h>
 #include <LibWebView/Utilities.h>
 #include <LibWebView/ViewImplementation.h>
@@ -802,6 +805,75 @@ bool can_go_forward(int view_id) {
   if (it == g_web_views.end())
     return false;
   return it->second->navigate_forward_action().enabled();
+}
+
+char *get_bookmarks_json() {
+  if (!s_app)
+    return nullptr;
+
+  auto json =
+      WebView::Application::bookmark_store().serialize_items().serialized();
+  auto bytes = json.to_byte_string();
+  return strdup(bytes.characters());
+}
+
+void toggle_bookmark_for_view(int view_id) {
+  auto it = g_web_views.find(view_id);
+  if (it == g_web_views.end())
+    return;
+
+  auto &bookmark_store = WebView::Application::bookmark_store();
+  auto const &url = it->second->url();
+
+  if (auto bookmark = bookmark_store.find_bookmark_by_url(url);
+      bookmark.has_value()) {
+    bookmark_store.remove_item(bookmark->id);
+    return;
+  }
+
+  bookmark_store.add_bookmark(url, it->second->title().to_utf8(),
+                              it->second->favicon_base64_png());
+}
+
+bool is_current_view_bookmarked(int view_id) {
+  auto it = g_web_views.find(view_id);
+  if (it == g_web_views.end())
+    return false;
+  return WebView::Application::bookmark_store().is_bookmarked(
+      it->second->url());
+}
+
+char *history_autocomplete_json(const char *query, int limit) {
+  if (!s_app)
+    return nullptr;
+
+  String query_string;
+  if (query && strlen(query) > 0) {
+    auto maybe_query = String::from_utf8(StringView(query, strlen(query)));
+    if (!maybe_query.is_error())
+      query_string = maybe_query.release_value();
+  }
+
+  size_t safe_limit = limit > 0 ? static_cast<size_t>(limit) : 8;
+  auto entries = WebView::Application::history_store().autocomplete_entries(
+      query_string, safe_limit);
+
+  JsonArray suggestions;
+  suggestions.ensure_capacity(entries.size());
+
+  for (auto const &entry : entries) {
+    JsonObject item;
+    item.set("url"sv, entry.url);
+    if (entry.title.has_value())
+      item.set("title"sv, *entry.title);
+    if (entry.favicon_base64_png.has_value())
+      item.set("favicon"sv, *entry.favicon_base64_png);
+    suggestions.must_append(move(item));
+  }
+
+  auto json = JsonValue(move(suggestions)).serialized();
+  auto bytes = json.to_byte_string();
+  return strdup(bytes.characters());
 }
 
 void set_loading_state_change_callback(int view_id,

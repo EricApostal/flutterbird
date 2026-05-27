@@ -395,6 +395,55 @@ class LadybirdBindings {
   late final _can_go_forward = _can_go_forwardPtr
       .asFunction<bool Function(int)>();
 
+  ffi.Pointer<ffi.Char> get_bookmarks_json() {
+    return _get_bookmarks_json();
+  }
+
+  late final _get_bookmarks_jsonPtr =
+      _lookup<ffi.NativeFunction<ffi.Pointer<ffi.Char> Function()>>(
+        'get_bookmarks_json',
+      );
+  late final _get_bookmarks_json = _get_bookmarks_jsonPtr
+      .asFunction<ffi.Pointer<ffi.Char> Function()>();
+
+  void toggle_bookmark_for_view(int view_id) {
+    return _toggle_bookmark_for_view(view_id);
+  }
+
+  late final _toggle_bookmark_for_viewPtr =
+      _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Int)>>(
+        'toggle_bookmark_for_view',
+      );
+  late final _toggle_bookmark_for_view = _toggle_bookmark_for_viewPtr
+      .asFunction<void Function(int)>();
+
+  bool is_current_view_bookmarked(int view_id) {
+    return _is_current_view_bookmarked(view_id);
+  }
+
+  late final _is_current_view_bookmarkedPtr =
+      _lookup<ffi.NativeFunction<ffi.Bool Function(ffi.Int)>>(
+        'is_current_view_bookmarked',
+      );
+  late final _is_current_view_bookmarked = _is_current_view_bookmarkedPtr
+      .asFunction<bool Function(int)>();
+
+  ffi.Pointer<ffi.Char> history_autocomplete_json(
+    ffi.Pointer<ffi.Char> query,
+    int limit,
+  ) {
+    return _history_autocomplete_json(query, limit);
+  }
+
+  late final _history_autocomplete_jsonPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.Pointer<ffi.Char> Function(ffi.Pointer<ffi.Char>, ffi.Int)
+        >
+      >('history_autocomplete_json');
+  late final _history_autocomplete_json = _history_autocomplete_jsonPtr
+      .asFunction<ffi.Pointer<ffi.Char> Function(ffi.Pointer<ffi.Char>, int)>();
+
   void dispatch_mouse_event(
     int view_id,
     int type,

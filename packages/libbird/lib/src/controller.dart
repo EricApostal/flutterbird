@@ -254,6 +254,35 @@ class LadybirdController {
     return _bindings.is_tab_loading(_viewId);
   }
 
+  String getBookmarksJson() {
+    final ptr = _bindings.get_bookmarks_json();
+    if (ptr == ffi.nullptr) return '[]';
+    final json = ptr.cast<Utf8>().toDartString();
+    malloc.free(ptr);
+    return json;
+  }
+
+  void toggleBookmarkForCurrentView() {
+    _bindings.toggle_bookmark_for_view(_viewId);
+  }
+
+  bool isCurrentViewBookmarked() {
+    return _bindings.is_current_view_bookmarked(_viewId);
+  }
+
+  String getHistoryAutocompleteJson(String query, {int limit = 8}) {
+    final queryPtr = query.toNativeUtf8();
+    final ptr = _bindings.history_autocomplete_json(
+      queryPtr.cast<ffi.Char>(),
+      limit,
+    );
+    malloc.free(queryPtr);
+    if (ptr == ffi.nullptr) return '[]';
+    final json = ptr.cast<Utf8>().toDartString();
+    malloc.free(ptr);
+    return json;
+  }
+
   Future<int> createTexture() async {
     return await _channel.invokeMethod('createTexture', _viewId);
   }

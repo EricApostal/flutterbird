@@ -99,6 +99,20 @@ LADYBIRD_API void go_forward(int view_id);
 LADYBIRD_API bool can_go_back(int view_id);
 LADYBIRD_API bool can_go_forward(int view_id);
 
+// Returns a JSON array string with bookmark items from
+// LibWebView::BookmarkStore. Caller owns returned memory and must free it.
+LADYBIRD_API char *get_bookmarks_json();
+
+// Toggles bookmark status for the current URL in the target view.
+LADYBIRD_API void toggle_bookmark_for_view(int view_id);
+
+// Returns whether the current URL in the target view is bookmarked.
+LADYBIRD_API bool is_current_view_bookmarked(int view_id);
+
+// Returns a JSON array string of history autocomplete entries.
+// Caller owns returned memory and must free it.
+LADYBIRD_API char *history_autocomplete_json(const char *query, int limit);
+
 LADYBIRD_API void dispatch_mouse_event(int view_id, int type, int x, int y,
                                        int button, int buttons, int modifiers,
                                        double wheel_delta_x,

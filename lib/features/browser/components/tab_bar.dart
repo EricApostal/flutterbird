@@ -5,7 +5,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutterbird/features/browser/components/tab.dart';
+import 'package:flutterbird/features/browser/state/omnibox_state.dart';
 import 'package:go_router/go_router.dart';
+import 'package:ladybird/ladybird.dart';
 import 'package:window_manager/window_manager.dart';
 
 class BrowserTabBar extends ConsumerStatefulWidget {
@@ -20,8 +22,13 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar>
     with WindowListener {
   static const double _kMacControlsWidth = 78;
   static const double _kRightControlsWidth = 138;
+  static const double _kBookmarkItemWidth = 170;
+  static const double _kBookmarkOverflowButtonWidth = 40;
 
   bool _isWindowMaximized = false;
+  final FocusNode _omniboxFocusNode = FocusNode();
+  LadybirdController? _trackedTabController;
+  bool _suppressTrackedTextSync = false;
 
   @override
   void initState() {
@@ -34,10 +41,214 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar>
 
   @override
   void dispose() {
+    _syncTrackedTabController(null);
     if (Platform.isMacOS || Platform.isLinux || Platform.isWindows) {
       windowManager.removeListener(this);
     }
+    _omniboxFocusNode.dispose();
     super.dispose();
+  }
+
+  void _syncTrackedTabController(LadybirdController? controller) {
+    if (_trackedTabController == controller) return;
+
+    _trackedTabController?.urlNotifier.removeListener(_onTrackedUrlChanged);
+    _trackedTabController?.textController.removeListener(_onTrackedTextChanged);
+    _trackedTabController = controller;
+
+    if (controller == null) return;
+
+    controller.urlNotifier.addListener(_onTrackedUrlChanged);
+    controller.textController.addListener(_onTrackedTextChanged);
+    _scheduleSyncEngineOmnibox(controller);
+  }
+
+  void _onTrackedUrlChanged() {
+    final controller = _trackedTabController;
+    if (controller == null) return;
+    _scheduleSyncEngineOmnibox(controller);
+  }
+
+  void _onTrackedTextChanged() {
+    if (_suppressTrackedTextSync) return;
+    final controller = _trackedTabController;
+    if (controller == null) return;
+    _scheduleSyncEngineOmnibox(controller);
+  }
+
+  void _scheduleSyncEngineOmnibox(LadybirdController controller) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final omnibox = ref.read(browserOmniboxProvider.notifier);
+      omnibox.refreshBookmarksFromEngine(controller);
+      omnibox.refreshHistorySuggestionsFromEngine(
+        controller,
+        controller.textController.text,
+      );
+    });
+  }
+
+  void _openBookmark(
+    BrowserOmnibox omnibox,
+    LadybirdController currentTabController,
+    String url,
+  ) {
+    currentTabController.navigate(url);
+  }
+
+  Widget _buildBookmarksToolbar(
+    ThemeData theme,
+    BrowserOmniboxState omniboxState,
+    BrowserOmnibox omnibox,
+    LadybirdController currentTabController,
+  ) {
+    final bookmarks = omniboxState.bookmarks;
+    if (bookmarks.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final maxWidth = constraints.maxWidth;
+
+        var visibleCount = (maxWidth / _kBookmarkItemWidth).floor();
+        if (visibleCount < 0) visibleCount = 0;
+        if (visibleCount > bookmarks.length) visibleCount = bookmarks.length;
+
+        if (bookmarks.length > visibleCount) {
+          final adjustedCount =
+              ((maxWidth - _kBookmarkOverflowButtonWidth) / _kBookmarkItemWidth)
+                  .floor();
+          visibleCount = adjustedCount.clamp(0, bookmarks.length);
+        }
+
+        final visible = bookmarks.take(visibleCount).toList(growable: false);
+        final overflow = bookmarks.skip(visibleCount).toList(growable: false);
+
+        return Row(
+          children: [
+            for (final bookmark in visible)
+              Padding(
+                padding: const EdgeInsets.only(right: 6),
+                child: SizedBox(
+                  width: _kBookmarkItemWidth - 6,
+                  child: Tooltip(
+                    message: bookmark.url,
+                    child: OutlinedButton(
+                      onPressed: () {
+                        _openBookmark(
+                          omnibox,
+                          currentTabController,
+                          bookmark.url,
+                        );
+                      },
+                      style: OutlinedButton.styleFrom(
+                        visualDensity: VisualDensity.compact,
+                        padding: const EdgeInsets.symmetric(horizontal: 10),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.bookmark, size: 14),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              bookmark.title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.bodySmall,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            if (overflow.isNotEmpty)
+              PopupMenuButton<String>(
+                icon: const Icon(Icons.more_horiz, size: 20),
+                tooltip: 'More bookmarks',
+                onSelected: (value) {
+                  _openBookmark(omnibox, currentTabController, value);
+                },
+                itemBuilder: (context) {
+                  return overflow
+                      .map((bookmark) {
+                        return PopupMenuItem<String>(
+                          value: bookmark.url,
+                          child: SizedBox(
+                            width: 280,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  bookmark.title,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                Text(
+                                  bookmark.url,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: theme.colorScheme.onSurfaceVariant,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      })
+                      .toList(growable: false);
+                },
+              ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _submitOmniboxInput(
+    BrowserOmnibox omnibox,
+    LadybirdController currentTabController,
+    String value,
+  ) {
+    final rawInput = value.trim();
+    if (rawInput.isEmpty) return;
+
+    final target = omnibox.buildNavigationTarget(rawInput);
+    if (target.isEmpty) return;
+
+    currentTabController.navigate(target);
+  }
+
+  void _onSuggestionSelected(
+    BrowserOmnibox omnibox,
+    LadybirdController currentTabController,
+    OmniboxSuggestion suggestion,
+  ) {
+    final target =
+        suggestion.type == OmniboxSuggestionType.searchAction ||
+            suggestion.type == OmniboxSuggestionType.searchQuery
+        ? omnibox.buildNavigationTarget(suggestion.value)
+        : suggestion.value;
+
+    if (target.isEmpty) return;
+
+    currentTabController.navigate(target);
+  }
+
+  IconData _suggestionIconFor(OmniboxSuggestionType type) {
+    switch (type) {
+      case OmniboxSuggestionType.bookmark:
+        return Icons.bookmark;
+      case OmniboxSuggestionType.history:
+        return Icons.history;
+      case OmniboxSuggestionType.searchQuery:
+      case OmniboxSuggestionType.searchAction:
+        return Icons.search;
+    }
   }
 
   Future<void> _refreshWindowState() async {
@@ -60,14 +271,18 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar>
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final omniboxState = ref.watch(browserOmniboxProvider);
+    final omniboxController = ref.read(browserOmniboxProvider.notifier);
 
     final tabs = ref.watch(browserTabControllerProvider);
     final currentTabController = ref.watch(
       browserTabProvider(widget.currentViewId),
     );
     if (currentTabController == null) {
+      _syncTrackedTabController(null);
       return const SizedBox.shrink();
     }
+    _syncTrackedTabController(currentTabController);
 
     final isMacOS = Platform.isMacOS;
     final isWindows = Platform.isWindows;
@@ -179,63 +394,240 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar>
               bottom: 4,
               top: 4,
             ),
-            child: Row(
+            child: Column(
               children: [
-                ValueListenableBuilder<bool>(
-                  valueListenable: currentTabController.canGoBackNotifier,
-                  builder: (context, canGoBack, child) {
-                    return IconButton(
-                      icon: const Icon(Icons.arrow_back, size: 20),
-                      onPressed: canGoBack
-                          ? () {
-                              currentTabController.goBack();
-                            }
-                          : null,
+                Row(
+                  children: [
+                    ValueListenableBuilder<bool>(
+                      valueListenable: currentTabController.canGoBackNotifier,
+                      builder: (context, canGoBack, child) {
+                        return IconButton(
+                          icon: const Icon(Icons.arrow_back, size: 20),
+                          onPressed: canGoBack
+                              ? () {
+                                  currentTabController.goBack();
+                                }
+                              : null,
+                          splashRadius: 20,
+                        );
+                      },
+                    ),
+                    ValueListenableBuilder<bool>(
+                      valueListenable:
+                          currentTabController.canGoForwardNotifier,
+                      builder: (context, canGoForward, child) {
+                        return IconButton(
+                          icon: const Icon(Icons.arrow_forward, size: 20),
+                          onPressed: canGoForward
+                              ? () {
+                                  currentTabController.goForward();
+                                }
+                              : null,
+                          splashRadius: 20,
+                        );
+                      },
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.refresh, size: 20),
+                      onPressed: () {
+                        currentTabController.reload();
+                      },
                       splashRadius: 20,
-                    );
-                  },
-                ),
-                ValueListenableBuilder<bool>(
-                  valueListenable: currentTabController.canGoForwardNotifier,
-                  builder: (context, canGoForward, child) {
-                    return IconButton(
-                      icon: const Icon(Icons.arrow_forward, size: 20),
-                      onPressed: canGoForward
-                          ? () {
-                              currentTabController.goForward();
-                            }
-                          : null,
-                      splashRadius: 20,
-                    );
-                  },
-                ),
-                IconButton(
-                  icon: const Icon(Icons.refresh, size: 20),
-                  onPressed: () {
-                    currentTabController.reload();
-                  },
-                  splashRadius: 20,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: ValueListenableBuilder<String>(
-                    valueListenable: currentTabController.urlNotifier,
-                    builder: (context, url, child) {
-                      if (currentTabController.textController.text != url &&
-                          !FocusScope.of(context).hasFocus) {
-                        currentTabController.textController.text = url;
-                      }
-                      return TextField(
-                        onSubmitted: (value) {
-                          currentTabController.navigate(value);
+                    ),
+                    ValueListenableBuilder<String>(
+                      valueListenable: currentTabController.urlNotifier,
+                      builder: (context, url, child) {
+                        final normalized = omniboxController.normalizeUrl(url);
+                        final isBookmarked = currentTabController
+                            .isCurrentViewBookmarked();
+                        return IconButton(
+                          icon: Icon(
+                            isBookmarked
+                                ? Icons.bookmark
+                                : Icons.bookmark_border,
+                            size: 20,
+                          ),
+                          tooltip: isBookmarked
+                              ? 'Remove bookmark'
+                              : 'Add bookmark',
+                          onPressed: normalized.isEmpty
+                              ? null
+                              : () {
+                                  omniboxController
+                                      .toggleBookmarkForCurrentView(
+                                        currentTabController,
+                                      );
+                                },
+                          splashRadius: 20,
+                        );
+                      },
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: ValueListenableBuilder<String>(
+                        valueListenable: currentTabController.urlNotifier,
+                        builder: (context, url, child) {
+                          if (currentTabController.textController.text != url &&
+                              !_omniboxFocusNode.hasFocus) {
+                            _suppressTrackedTextSync = true;
+                            currentTabController.textController.text = url;
+                            _suppressTrackedTextSync = false;
+                          }
+
+                          return RawAutocomplete<OmniboxSuggestion>(
+                            textEditingController:
+                                currentTabController.textController,
+                            focusNode: _omniboxFocusNode,
+                            displayStringForOption: (option) => option.value,
+                            optionsBuilder: (textEditingValue) {
+                              return omniboxController.suggestionsFor(
+                                textEditingValue.text,
+                              );
+                            },
+                            onSelected: (suggestion) {
+                              _onSuggestionSelected(
+                                omniboxController,
+                                currentTabController,
+                                suggestion,
+                              );
+                            },
+                            fieldViewBuilder:
+                                (
+                                  context,
+                                  textEditingController,
+                                  focusNode,
+                                  onFieldSubmitted,
+                                ) {
+                                  return TextField(
+                                    onSubmitted: (value) {
+                                      _submitOmniboxInput(
+                                        omniboxController,
+                                        currentTabController,
+                                        value,
+                                      );
+                                      onFieldSubmitted();
+                                    },
+                                    controller: textEditingController,
+                                    focusNode: focusNode,
+                                    decoration: _buildInputDecoration(),
+                                    style: theme.textTheme.bodyMedium!,
+                                  );
+                                },
+                            optionsViewBuilder: (context, onSelected, options) {
+                              final optionList = options.toList(
+                                growable: false,
+                              );
+                              if (optionList.isEmpty) {
+                                return const SizedBox.shrink();
+                              }
+
+                              return Align(
+                                alignment: Alignment.topLeft,
+                                child: Material(
+                                  elevation: 6,
+                                  color: theme.colorScheme.surface,
+                                  borderRadius: BorderRadius.circular(10),
+                                  child: ConstrainedBox(
+                                    constraints: const BoxConstraints(
+                                      maxWidth: 760,
+                                      maxHeight: 320,
+                                    ),
+                                    child: ListView.separated(
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 6,
+                                      ),
+                                      shrinkWrap: true,
+                                      itemCount: optionList.length,
+                                      separatorBuilder: (context, index) {
+                                        return Divider(
+                                          height: 1,
+                                          color: theme.colorScheme.outline
+                                              .withAlpha(50),
+                                        );
+                                      },
+                                      itemBuilder: (context, index) {
+                                        final option = optionList[index];
+                                        return InkWell(
+                                          onTap: () => onSelected(option),
+                                          child: Padding(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 12,
+                                              vertical: 10,
+                                            ),
+                                            child: Row(
+                                              children: [
+                                                Icon(
+                                                  _suggestionIconFor(
+                                                    option.type,
+                                                  ),
+                                                  size: 18,
+                                                  color: theme
+                                                      .colorScheme
+                                                      .onSurfaceVariant,
+                                                ),
+                                                const SizedBox(width: 10),
+                                                Expanded(
+                                                  child: Column(
+                                                    crossAxisAlignment:
+                                                        CrossAxisAlignment
+                                                            .start,
+                                                    mainAxisSize:
+                                                        MainAxisSize.min,
+                                                    children: [
+                                                      Text(
+                                                        option.title,
+                                                        maxLines: 1,
+                                                        overflow: TextOverflow
+                                                            .ellipsis,
+                                                      ),
+                                                      if (option.subtitle !=
+                                                          null)
+                                                        Text(
+                                                          option.subtitle!,
+                                                          maxLines: 1,
+                                                          overflow: TextOverflow
+                                                              .ellipsis,
+                                                          style: theme
+                                                              .textTheme
+                                                              .bodySmall
+                                                              ?.copyWith(
+                                                                color: theme
+                                                                    .colorScheme
+                                                                    .onSurfaceVariant,
+                                                              ),
+                                                        ),
+                                                    ],
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        );
+                                      },
+                                    ),
+                                  ),
+                                ),
+                              );
+                            },
+                          );
                         },
-                        controller: currentTabController.textController,
-                        decoration: _buildInputDecoration(),
-                        style: theme.textTheme.bodyMedium!,
-                      );
-                    },
-                  ),
+                      ),
+                    ),
+                  ],
                 ),
+                if (omniboxState.bookmarks.isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  SizedBox(
+                    height: 36,
+                    width: double.infinity,
+                    child: _buildBookmarksToolbar(
+                      theme,
+                      omniboxState,
+                      omniboxController,
+                      currentTabController,
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
