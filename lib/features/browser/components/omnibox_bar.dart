@@ -58,9 +58,12 @@ class _BrowserOmniboxBarState extends ConsumerState<BrowserOmniboxBar> {
 
     controller.urlNotifier.addListener(_onTrackedUrlChanged);
     controller.textController.addListener(_onTrackedTextChanged);
+    final hasBookmarks = ref
+        .read(browserOmniboxProvider.select((value) => value.bookmarks))
+        .isNotEmpty;
     _scheduleSyncEngineOmnibox(
       controller,
-      refreshBookmarks: true,
+      refreshBookmarks: !hasBookmarks,
       refreshHistory: true,
     );
   }
@@ -70,7 +73,7 @@ class _BrowserOmniboxBarState extends ConsumerState<BrowserOmniboxBar> {
     if (controller == null) return;
     _scheduleSyncEngineOmnibox(
       controller,
-      refreshBookmarks: true,
+      refreshBookmarks: false,
       refreshHistory: true,
     );
   }
@@ -122,6 +125,7 @@ class _BrowserOmniboxBarState extends ConsumerState<BrowserOmniboxBar> {
         width: size,
         height: size,
         fit: BoxFit.cover,
+        gaplessPlayback: true,
         errorBuilder: (context, error, stackTrace) {
           return Icon(fallback, size: size, color: color);
         },
@@ -142,6 +146,7 @@ class _BrowserOmniboxBarState extends ConsumerState<BrowserOmniboxBar> {
         width: size,
         height: size,
         fit: BoxFit.cover,
+        gaplessPlayback: true,
         errorBuilder: (context, error, stackTrace) {
           return Icon(fallback, size: size, color: color);
         },
