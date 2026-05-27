@@ -19,6 +19,7 @@ class _LadybirdViewState extends State<LadybirdView>
   bool _textureRecreateInProgress = false;
   bool _textureRecreateQueued = false;
   final FocusNode _focusNode = FocusNode();
+  late final VoidCallback _loadingListener;
 
   double _accumulatedWheelX = 0;
   double _accumulatedWheelY = 0;
@@ -45,11 +46,12 @@ class _LadybirdViewState extends State<LadybirdView>
       _recreateTextureFromCrossSiteNavigation();
     };
 
-    widget.controller.isLoadingNotifier.addListener(() {
+    _loadingListener = () {
       if (mounted) {
         _recreateTexture();
       }
-    });
+    };
+    widget.controller.isLoadingNotifier.addListener(_loadingListener);
 
     _recreateTexture();
   }
@@ -60,11 +62,7 @@ class _LadybirdViewState extends State<LadybirdView>
     if (oldWidget.controller != widget.controller) {
       oldWidget.controller.onResize = null;
       oldWidget.controller.onCrossSiteNavigation = null;
-
-      if (_textureId != null) {
-        oldWidget.controller.unregisterTexture(_textureId!);
-        _textureId = null;
-      }
+      oldWidget.controller.isLoadingNotifier.removeListener(_loadingListener);
 
       widget.controller.onResize = () {
         if (mounted) {
@@ -79,6 +77,7 @@ class _LadybirdViewState extends State<LadybirdView>
         );
         _recreateTextureFromCrossSiteNavigation();
       };
+      widget.controller.isLoadingNotifier.addListener(_loadingListener);
 
       _recreateTexture();
     }
@@ -286,6 +285,7 @@ class _LadybirdViewState extends State<LadybirdView>
   void dispose() {
     widget.controller.onResize = null;
     widget.controller.onCrossSiteNavigation = null;
+    widget.controller.isLoadingNotifier.removeListener(_loadingListener);
     _momentumTicker?.dispose();
     _focusNode.dispose();
 
