@@ -27,12 +27,22 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar>
   static const double _kMinTabWidth = 170;
   static const double _kMaxTabWidth = 225;
   static const double _kAddButtonWidth = 48;
+  static const Duration _kTabSizeAnimationDuration = Duration(
+    milliseconds: 180,
+  );
+  static const Curve _kTabSizeAnimationCurve = Curves.easeOutCubic;
 
   bool _isWindowMaximized = false;
+  final Set<int> _visibleTabIds = <int>{};
+  final Set<int> _pendingExpandTabIds = <int>{};
+  final Set<int> _closingTabIds = <int>{};
 
   @override
   void initState() {
     super.initState();
+    final initialTabs = ref.read(browserTabControllerProvider);
+    _visibleTabIds.addAll(initialTabs.map((tab) => tab.viewId));
+
     if (Platform.isMacOS || Platform.isLinux || Platform.isWindows) {
       windowManager.addListener(this);
       _refreshWindowState();
@@ -69,11 +79,13 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar>
     context.go('/browser/tab/${controller.viewId}');
   }
 
-  void _closeTab(
+  Future<void> _closeTab(
     BuildContext context,
     int viewId,
     List<LadybirdController> tabs,
-  ) {
+  ) async {
+    if (_closingTabIds.contains(viewId)) return;
+
     final index = tabs.indexWhere((tab) => tab.viewId == viewId);
     if (index < 0) return;
 
@@ -88,7 +100,21 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar>
       }
     }
 
+    setState(() {
+      _closingTabIds.add(viewId);
+      _visibleTabIds.remove(viewId);
+      _pendingExpandTabIds.remove(viewId);
+    });
+
+    await Future<void>.delayed(_kTabSizeAnimationDuration);
+    if (!mounted) return;
+
     ref.read(browserTabControllerProvider.notifier).remove(viewId);
+
+    if (!mounted) return;
+    setState(() {
+      _closingTabIds.remove(viewId);
+    });
   }
 
   @override
@@ -97,6 +123,21 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar>
     final currentTabController = ref.watch(
       browserTabProvider(widget.currentViewId),
     );
+
+    final currentTabIds = tabs.map((tab) => tab.viewId).toSet();
+    final tabsToExpand = currentTabIds
+        .difference(_visibleTabIds)
+        .difference(_pendingExpandTabIds);
+    if (tabsToExpand.isNotEmpty) {
+      _pendingExpandTabIds.addAll(tabsToExpand);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        setState(() {
+          _pendingExpandTabIds.removeAll(tabsToExpand);
+          _visibleTabIds.addAll(tabsToExpand);
+        });
+      });
+    }
 
     if (currentTabController == null) {
       return const SizedBox.shrink();
@@ -176,20 +217,37 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar>
                           }
 
                           final id = tabs[index].viewId;
+                          final isExpanded =
+                              _visibleTabIds.contains(id) &&
+                              !_closingTabIds.contains(id);
                           return ReorderableDragStartListener(
                             key: ValueKey(id),
                             index: index,
-                            child: Padding(
-                              padding: const EdgeInsets.only(right: 2),
-                              child: BrowserTab(
-                                viewId: tabs[index].viewId,
-                                selected: id == widget.currentViewId,
-                                minWidth: _kMinTabWidth,
-                                width: adaptiveTabWidth,
-                                onTabClosed: () {
-                                  HapticFeedback.lightImpact();
-                                  _closeTab(context, id, tabs);
-                                },
+                            enabled: isExpanded,
+                            child: ClipRect(
+                              child: AnimatedContainer(
+                                duration: _kTabSizeAnimationDuration,
+                                curve: _kTabSizeAnimationCurve,
+                                width: isExpanded ? adaptiveTabWidth + 2 : 0,
+                                child: Padding(
+                                  padding: const EdgeInsets.only(right: 2),
+                                  child: SizedBox(
+                                    width: adaptiveTabWidth,
+                                    child: IgnorePointer(
+                                      ignoring: _closingTabIds.contains(id),
+                                      child: BrowserTab(
+                                        viewId: tabs[index].viewId,
+                                        selected: id == widget.currentViewId,
+                                        minWidth: _kMinTabWidth,
+                                        width: adaptiveTabWidth,
+                                        onTabClosed: () {
+                                          HapticFeedback.lightImpact();
+                                          _closeTab(context, id, tabs);
+                                        },
+                                      ),
+                                    ),
+                                  ),
+                                ),
                               ),
                             ),
                           );

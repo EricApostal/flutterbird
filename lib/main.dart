@@ -48,6 +48,9 @@ class _MainAppState extends State<MainApp> {
   Widget build(BuildContext context) {
     return MaterialApp.router(
       routerConfig: routerController,
+      builder: (context, child) {
+        return PopScope(canPop: false, child: child ?? const SizedBox.shrink());
+      },
       themeMode: .dark,
       darkTheme: ThemeData(
         colorScheme: .fromSeed(

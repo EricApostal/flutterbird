@@ -28,6 +28,35 @@ class _LadybirdViewState extends State<LadybirdView>
   Offset _lastPointerPos = Offset.zero;
   int _lastPanTime = 0;
 
+  void _onNativeResize() {
+    if (!mounted) return;
+    setState(() {});
+  }
+
+  void _onLoadingStateChanged() {
+    if (!mounted) return;
+  }
+
+  void _attachControllerListeners(LadybirdController controller) {
+    controller.onResize = _onNativeResize;
+    controller.onCrossSiteNavigation = () {
+      if (!mounted) return;
+      print(
+        '[Ladybird][Flutter] cross-site navigation process change for view ${controller.viewId}; recreating texture',
+      );
+      _recreateTextureFromCrossSiteNavigation();
+    };
+    controller.isLoadingNotifier.addListener(_onLoadingStateChanged);
+    controller.mouseCursorNotifier.addListener(_onCursorChanged);
+  }
+
+  void _detachControllerListeners(LadybirdController controller) {
+    controller.mouseCursorNotifier.removeListener(_onCursorChanged);
+    controller.isLoadingNotifier.removeListener(_onLoadingStateChanged);
+    controller.onResize = null;
+    controller.onCrossSiteNavigation = null;
+  }
+
   void _onCursorChanged() {
     if (mounted) {
       setState(() {});
@@ -38,25 +67,7 @@ class _LadybirdViewState extends State<LadybirdView>
   void initState() {
     super.initState();
     _momentumTicker = createTicker(_onMomentumTick);
-    widget.controller.onResize = () {
-      if (mounted) {
-        _recreateTexture();
-      }
-    };
-    widget.controller.onCrossSiteNavigation = () {
-      if (!mounted) return;
-      print(
-        '[Ladybird][Flutter] cross-site navigation process change for view ${widget.controller.viewId}; recreating texture',
-      );
-      _recreateTextureFromCrossSiteNavigation();
-    };
-
-    widget.controller.isLoadingNotifier.addListener(() {
-      if (mounted) {
-        _recreateTexture();
-      }
-    });
-    widget.controller.mouseCursorNotifier.addListener(_onCursorChanged);
+    _attachControllerListeners(widget.controller);
 
     _recreateTexture();
   }
@@ -65,30 +76,14 @@ class _LadybirdViewState extends State<LadybirdView>
   void didUpdateWidget(LadybirdView oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.controller != widget.controller) {
-      oldWidget.controller.mouseCursorNotifier.removeListener(_onCursorChanged);
-      oldWidget.controller.onResize = null;
-      oldWidget.controller.onCrossSiteNavigation = null;
+      _detachControllerListeners(oldWidget.controller);
 
       if (_textureId != null) {
         oldWidget.controller.unregisterTexture(_textureId!);
         _textureId = null;
       }
 
-      widget.controller.onResize = () {
-        if (mounted) {
-          _recreateTexture();
-        }
-      };
-
-      widget.controller.onCrossSiteNavigation = () {
-        if (!mounted) return;
-        print(
-          '[Ladybird][Flutter] cross-site navigation process change for view ${widget.controller.viewId}; recreating texture',
-        );
-        _recreateTextureFromCrossSiteNavigation();
-      };
-
-      widget.controller.mouseCursorNotifier.addListener(_onCursorChanged);
+      _attachControllerListeners(widget.controller);
 
       _recreateTexture();
     }
@@ -294,9 +289,7 @@ class _LadybirdViewState extends State<LadybirdView>
 
   @override
   void dispose() {
-    widget.controller.mouseCursorNotifier.removeListener(_onCursorChanged);
-    widget.controller.onResize = null;
-    widget.controller.onCrossSiteNavigation = null;
+    _detachControllerListeners(widget.controller);
     _momentumTicker?.dispose();
     _focusNode.dispose();
 
