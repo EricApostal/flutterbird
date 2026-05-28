@@ -304,76 +304,84 @@ class _LadybirdViewState extends State<LadybirdView>
     if (_textureId == null) {
       return const Center(child: CircularProgressIndicator());
     }
-    return SizedBox.expand(
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final density = MediaQuery.devicePixelRatioOf(context);
-          _onSizeChanged(constraints.biggest, density);
+    return Scaffold(
+      floatingActionButton: FloatingActionButton(
+        onPressed: () async {
+          setState(() {});
+        },
+        child: Icon(Icons.refresh_rounded),
+      ),
+      body: SizedBox.expand(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final density = MediaQuery.devicePixelRatioOf(context);
+            _onSizeChanged(constraints.biggest, density);
 
-          final paddedWidth = widget.controller.getSurfaceWidth() / density;
-          final paddedHeight = widget.controller.getSurfaceHeight() / density;
-          final displayWidth = paddedWidth > constraints.maxWidth
-              ? paddedWidth
-              : constraints.maxWidth;
-          final displayHeight = paddedHeight > constraints.maxHeight
-              ? paddedHeight
-              : constraints.maxHeight;
+            final paddedWidth = widget.controller.getSurfaceWidth() / density;
+            final paddedHeight = widget.controller.getSurfaceHeight() / density;
+            final displayWidth = paddedWidth > constraints.maxWidth
+                ? paddedWidth
+                : constraints.maxWidth;
+            final displayHeight = paddedHeight > constraints.maxHeight
+                ? paddedHeight
+                : constraints.maxHeight;
 
-          print("BUILDING WITH WIDTH: $displayWidth");
-          print("padded width = $paddedWidth");
+            print("BUILDING WITH WIDTH: $displayWidth");
+            print("padded width = $paddedWidth");
 
-          return ClipRect(
-            child: OverflowBox(
-              alignment: Alignment.topLeft,
-              minWidth: constraints.maxWidth,
-              minHeight: constraints.maxHeight,
-              maxWidth: paddedWidth > constraints.maxWidth
-                  ? paddedWidth
-                  : constraints.maxWidth,
-              maxHeight: paddedHeight > constraints.maxHeight
-                  ? paddedHeight
-                  : constraints.maxHeight,
-              child: SizedBox(
-                width: displayWidth,
-                height: displayHeight,
-                child: MouseRegion(
-                  cursor: widget.controller.mouseCursorNotifier.value,
-                  onEnter: (_) {
-                    // if (!_focusNode.hasFocus) {
-                    //   _focusNode.requestFocus();
-                    // }
-                  },
-                  child: Focus(
-                    focusNode: _focusNode,
-                    autofocus: true,
-                    onKeyEvent: _onKeyEvent,
-                    child: Listener(
-                      onPointerDown: (e) {
-                        _focusNode.requestFocus();
-                        _onPointerEvent(e, 0);
-                      },
-                      onPointerUp: (e) => _onPointerEvent(e, 1),
-                      onPointerMove: (e) => _onPointerEvent(e, 2),
-                      onPointerHover: (e) => _onPointerEvent(e, 2),
-                      onPointerPanZoomStart: _onPointerPanZoomStart,
-                      onPointerPanZoomUpdate: _onPointerPanZoomUpdate,
-                      onPointerPanZoomEnd: _onPointerPanZoomEnd,
-                      onPointerSignal: (e) {
-                        if (e is PointerScrollEvent) {
-                          _onPointerScroll(e);
-                        }
-                      },
-                      child: Texture(
-                        key: ValueKey(_textureId),
-                        textureId: _textureId!,
+            return ClipRect(
+              child: OverflowBox(
+                alignment: Alignment.topLeft,
+                minWidth: constraints.maxWidth,
+                minHeight: constraints.maxHeight,
+                maxWidth: paddedWidth > constraints.maxWidth
+                    ? paddedWidth
+                    : constraints.maxWidth,
+                maxHeight: paddedHeight > constraints.maxHeight
+                    ? paddedHeight
+                    : constraints.maxHeight,
+                child: SizedBox(
+                  width: displayWidth,
+                  height: displayHeight,
+                  child: MouseRegion(
+                    cursor: widget.controller.mouseCursorNotifier.value,
+                    onEnter: (_) {
+                      // if (!_focusNode.hasFocus) {
+                      //   _focusNode.requestFocus();
+                      // }
+                    },
+                    child: Focus(
+                      focusNode: _focusNode,
+                      autofocus: true,
+                      onKeyEvent: _onKeyEvent,
+                      child: Listener(
+                        onPointerDown: (e) {
+                          _focusNode.requestFocus();
+                          _onPointerEvent(e, 0);
+                        },
+                        onPointerUp: (e) => _onPointerEvent(e, 1),
+                        onPointerMove: (e) => _onPointerEvent(e, 2),
+                        onPointerHover: (e) => _onPointerEvent(e, 2),
+                        onPointerPanZoomStart: _onPointerPanZoomStart,
+                        onPointerPanZoomUpdate: _onPointerPanZoomUpdate,
+                        onPointerPanZoomEnd: _onPointerPanZoomEnd,
+                        onPointerSignal: (e) {
+                          if (e is PointerScrollEvent) {
+                            _onPointerScroll(e);
+                          }
+                        },
+                        child: Texture(
+                          key: ValueKey(_textureId),
+                          textureId: _textureId!,
+                        ),
                       ),
                     ),
                   ),
                 ),
               ),
-            ),
-          );
-        },
+            );
+          },
+        ),
       ),
     );
   }
