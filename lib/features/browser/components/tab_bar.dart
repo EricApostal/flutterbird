@@ -11,6 +11,16 @@ import 'package:go_router/go_router.dart';
 import 'package:ladybird/ladybird.dart';
 import 'package:window_manager/window_manager.dart';
 
+class BrowserTabAnimationConfig {
+  final Duration sizeDuration;
+  final Curve sizeCurve;
+
+  const BrowserTabAnimationConfig({
+    this.sizeDuration = const Duration(milliseconds: 180),
+    this.sizeCurve = Curves.easeOutCubic,
+  });
+}
+
 class BrowserTabBar extends ConsumerStatefulWidget {
   final int currentViewId;
 
@@ -27,21 +37,22 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar>
   static const double _kMinTabWidth = 170;
   static const double _kMaxTabWidth = 225;
   static const double _kAddButtonWidth = 48;
-  static const Duration _kTabSizeAnimationDuration = Duration(
-    milliseconds: 180,
-  );
-  static const Curve _kTabSizeAnimationCurve = Curves.easeOutCubic;
+  static const BrowserTabAnimationConfig _kTabAnimationConfig =
+      BrowserTabAnimationConfig();
 
   bool _isWindowMaximized = false;
-  final Set<int> _visibleTabIds = <int>{};
-  final Set<int> _pendingExpandTabIds = <int>{};
-  final Set<int> _closingTabIds = <int>{};
+  bool _animateNewTabs = false;
 
   @override
   void initState() {
     super.initState();
-    final initialTabs = ref.read(browserTabControllerProvider);
-    _visibleTabIds.addAll(initialTabs.map((tab) => tab.viewId));
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      setState(() {
+        _animateNewTabs = true;
+      });
+    });
 
     if (Platform.isMacOS || Platform.isLinux || Platform.isWindows) {
       windowManager.addListener(this);
@@ -79,15 +90,13 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar>
     context.go('/browser/tab/${controller.viewId}');
   }
 
-  Future<void> _closeTab(
+  bool _prepareCloseTab(
     BuildContext context,
     int viewId,
     List<LadybirdController> tabs,
-  ) async {
-    if (_closingTabIds.contains(viewId)) return;
-
+  ) {
     final index = tabs.indexWhere((tab) => tab.viewId == viewId);
-    if (index < 0) return;
+    if (index < 0) return false;
 
     if (viewId == widget.currentViewId) {
       if (tabs.length == 1) {
@@ -100,21 +109,11 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar>
       }
     }
 
-    setState(() {
-      _closingTabIds.add(viewId);
-      _visibleTabIds.remove(viewId);
-      _pendingExpandTabIds.remove(viewId);
-    });
+    return true;
+  }
 
-    await Future<void>.delayed(_kTabSizeAnimationDuration);
-    if (!mounted) return;
-
+  void _commitCloseTab(int viewId) {
     ref.read(browserTabControllerProvider.notifier).remove(viewId);
-
-    if (!mounted) return;
-    setState(() {
-      _closingTabIds.remove(viewId);
-    });
   }
 
   @override
@@ -123,21 +122,6 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar>
     final currentTabController = ref.watch(
       browserTabProvider(widget.currentViewId),
     );
-
-    final currentTabIds = tabs.map((tab) => tab.viewId).toSet();
-    final tabsToExpand = currentTabIds
-        .difference(_visibleTabIds)
-        .difference(_pendingExpandTabIds);
-    if (tabsToExpand.isNotEmpty) {
-      _pendingExpandTabIds.addAll(tabsToExpand);
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        setState(() {
-          _pendingExpandTabIds.removeAll(tabsToExpand);
-          _visibleTabIds.addAll(tabsToExpand);
-        });
-      });
-    }
 
     if (currentTabController == null) {
       return const SizedBox.shrink();
@@ -217,39 +201,20 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar>
                           }
 
                           final id = tabs[index].viewId;
-                          final isExpanded =
-                              _visibleTabIds.contains(id) &&
-                              !_closingTabIds.contains(id);
-                          return ReorderableDragStartListener(
+                          return _AnimatedBrowserTabItem(
                             key: ValueKey(id),
                             index: index,
-                            enabled: isExpanded,
-                            child: ClipRect(
-                              child: AnimatedContainer(
-                                duration: _kTabSizeAnimationDuration,
-                                curve: _kTabSizeAnimationCurve,
-                                width: isExpanded ? adaptiveTabWidth + 2 : 0,
-                                child: Padding(
-                                  padding: const EdgeInsets.only(right: 2),
-                                  child: SizedBox(
-                                    width: adaptiveTabWidth,
-                                    child: IgnorePointer(
-                                      ignoring: _closingTabIds.contains(id),
-                                      child: BrowserTab(
-                                        viewId: tabs[index].viewId,
-                                        selected: id == widget.currentViewId,
-                                        minWidth: _kMinTabWidth,
-                                        width: adaptiveTabWidth,
-                                        onTabClosed: () {
-                                          HapticFeedback.lightImpact();
-                                          _closeTab(context, id, tabs);
-                                        },
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
+                            viewId: tabs[index].viewId,
+                            selected: id == widget.currentViewId,
+                            minWidth: _kMinTabWidth,
+                            width: adaptiveTabWidth,
+                            animateOnMount: _animateNewTabs,
+                            animationConfig: _kTabAnimationConfig,
+                            onCloseRequested: () {
+                              HapticFeedback.lightImpact();
+                              return _prepareCloseTab(context, id, tabs);
+                            },
+                            onCloseCommitted: () => _commitCloseTab(id),
                           );
                         },
                         proxyDecorator:
@@ -317,6 +282,100 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar>
         ),
         BrowserOmniboxBar(currentTabController: currentTabController),
       ],
+    );
+  }
+}
+
+class _AnimatedBrowserTabItem extends StatefulWidget {
+  final int index;
+  final int viewId;
+  final bool selected;
+  final double minWidth;
+  final double width;
+  final bool animateOnMount;
+  final BrowserTabAnimationConfig animationConfig;
+  final bool Function() onCloseRequested;
+  final VoidCallback onCloseCommitted;
+
+  const _AnimatedBrowserTabItem({
+    super.key,
+    required this.index,
+    required this.viewId,
+    required this.selected,
+    required this.minWidth,
+    required this.width,
+    required this.animateOnMount,
+    required this.animationConfig,
+    required this.onCloseRequested,
+    required this.onCloseCommitted,
+  });
+
+  @override
+  State<_AnimatedBrowserTabItem> createState() =>
+      _AnimatedBrowserTabItemState();
+}
+
+class _AnimatedBrowserTabItemState extends State<_AnimatedBrowserTabItem> {
+  late bool _isExpanded;
+  bool _isClosing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _isExpanded = !widget.animateOnMount;
+
+    if (widget.animateOnMount) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || _isClosing || _isExpanded) return;
+        setState(() {
+          _isExpanded = true;
+        });
+      });
+    }
+  }
+
+  Future<void> _handleClose() async {
+    if (_isClosing) return;
+    if (!widget.onCloseRequested()) return;
+
+    setState(() {
+      _isClosing = true;
+      _isExpanded = false;
+    });
+
+    await Future<void>.delayed(widget.animationConfig.sizeDuration);
+    if (!mounted) return;
+    widget.onCloseCommitted();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ReorderableDragStartListener(
+      index: widget.index,
+      enabled: _isExpanded && !_isClosing,
+      child: ClipRect(
+        child: AnimatedContainer(
+          duration: widget.animationConfig.sizeDuration,
+          curve: widget.animationConfig.sizeCurve,
+          width: _isExpanded ? widget.width + 2 : 0,
+          child: Padding(
+            padding: const EdgeInsets.only(right: 2),
+            child: SizedBox(
+              width: widget.width,
+              child: IgnorePointer(
+                ignoring: _isClosing || !_isExpanded,
+                child: BrowserTab(
+                  viewId: widget.viewId,
+                  selected: widget.selected,
+                  minWidth: widget.minWidth,
+                  width: widget.width,
+                  onTabClosed: _handleClose,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
