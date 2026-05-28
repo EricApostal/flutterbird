@@ -4,123 +4,181 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-class BrowserTab extends ConsumerWidget {
+enum BrowserTabVariant { horizontal, arcSidebar }
+
+class BrowserTab extends ConsumerStatefulWidget {
   final int viewId;
   final bool selected;
   final void Function() onTabClosed;
+  final BrowserTabVariant variant;
   final double minWidth;
   final double? width;
+  final double? minHeight;
 
   const BrowserTab({
     super.key,
     required this.viewId,
     required this.selected,
     required this.onTabClosed,
+    this.variant = BrowserTabVariant.horizontal,
     this.minWidth = 170,
     this.width,
+    this.minHeight,
   });
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final browserTab = ref.watch(browserTabProvider(viewId))!;
+  ConsumerState<BrowserTab> createState() => _BrowserTabState();
+}
+
+class _BrowserTabState extends ConsumerState<BrowserTab> {
+  bool _isHovering = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final browserTab = ref.watch(browserTabProvider(widget.viewId))!;
 
     final theme = Theme.of(context);
-    return Material(
-      borderRadius: .circular(8),
-      child: InkWell(
-        borderRadius: .circular(8),
-        onTap: () {
-          HapticFeedback.lightImpact();
-          context.go("/browser/tab/$viewId");
-        },
-        child: Container(
-          width: width,
-          constraints: BoxConstraints(minWidth: minWidth),
-          decoration: BoxDecoration(
-            color: selected
-                ? theme.colorScheme.surfaceContainerHighest
-                : Colors.transparent,
-            borderRadius: const BorderRadius.vertical(
-              top: Radius.circular(8),
-              bottom: Radius.circular(8),
-            ),
-          ),
-          child: Row(
-            children: [
-              Expanded(
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: Padding(
-                    padding: const EdgeInsets.only(left: 12),
-                    child: Row(
-                      children: [
-                        ValueListenableBuilder<bool>(
-                          valueListenable: browserTab.isLoadingNotifier,
-                          builder: (context, isLoading, child) {
-                            if (isLoading) {
-                              return const Padding(
-                                padding: EdgeInsets.only(right: 8.0),
-                                child: SizedBox(
-                                  width: 16,
-                                  height: 16,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  ),
-                                ),
-                              );
-                            }
+    final isSidebarVariant = widget.variant == BrowserTabVariant.arcSidebar;
+    final showCloseButton = !isSidebarVariant || widget.selected || _isHovering;
+    final tabColor = widget.selected
+        ? theme.colorScheme.surfaceContainerHighest
+        : isSidebarVariant
+        ? theme.colorScheme.surfaceContainerLow
+        : Colors.transparent;
+    final borderRadius = isSidebarVariant
+        ? BorderRadius.circular(10)
+        : const BorderRadius.vertical(
+            top: Radius.circular(8),
+            bottom: Radius.circular(8),
+          );
+    final titleStyle = isSidebarVariant
+        ? theme.textTheme.bodyMedium
+        : theme.textTheme.bodySmall;
 
-                            return ValueListenableBuilder<dynamic>(
-                              valueListenable: browserTab.faviconNotifier,
-                              builder: (context, image, child) {
-                                if (image != null) {
-                                  return Padding(
-                                    padding: const EdgeInsets.only(right: 8.0),
-                                    child: RawImage(
-                                      image: image,
-                                      width: 16,
-                                      height: 16,
-                                      filterQuality: FilterQuality.high,
+    return Material(
+      borderRadius: borderRadius,
+      color: Colors.transparent,
+      child: MouseRegion(
+        onEnter: (_) {
+          if (!isSidebarVariant) return;
+          setState(() {
+            _isHovering = true;
+          });
+        },
+        onExit: (_) {
+          if (!isSidebarVariant) return;
+          setState(() {
+            _isHovering = false;
+          });
+        },
+        child: InkWell(
+          borderRadius: borderRadius,
+          onTap: () {
+            HapticFeedback.lightImpact();
+            context.go('/browser/tab/${widget.viewId}');
+          },
+          child: Container(
+            width: widget.width,
+            constraints: BoxConstraints(
+              minWidth: widget.minWidth,
+              minHeight: widget.minHeight ?? 36,
+            ),
+            decoration: BoxDecoration(
+              color: tabColor,
+              borderRadius: borderRadius,
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Padding(
+                      padding: EdgeInsets.only(
+                        left: isSidebarVariant ? 10 : 12,
+                        right: 6,
+                      ),
+                      child: Row(
+                        children: [
+                          ValueListenableBuilder<bool>(
+                            valueListenable: browserTab.isLoadingNotifier,
+                            builder: (context, isLoading, child) {
+                              if (isLoading) {
+                                return const Padding(
+                                  padding: EdgeInsets.only(right: 8.0),
+                                  child: SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
                                     ),
-                                  );
-                                }
-                                return const SizedBox.shrink();
-                              },
-                            );
-                          },
-                        ),
-                        Expanded(
-                          child: ValueListenableBuilder<String>(
-                            valueListenable: browserTab.titleNotifier,
-                            builder: (context, title, child) {
-                              return Text(
-                                title,
-                                style: theme.textTheme.bodySmall!.copyWith(
-                                  color: selected
-                                      ? theme.colorScheme.onSurface
-                                      : theme.colorScheme.onSurfaceVariant,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
+                                  ),
+                                );
+                              }
+
+                              return ValueListenableBuilder<dynamic>(
+                                valueListenable: browserTab.faviconNotifier,
+                                builder: (context, image, child) {
+                                  if (image != null) {
+                                    return Padding(
+                                      padding: const EdgeInsets.only(
+                                        right: 8.0,
+                                      ),
+                                      child: RawImage(
+                                        image: image,
+                                        width: 16,
+                                        height: 16,
+                                        filterQuality: FilterQuality.high,
+                                      ),
+                                    );
+                                  }
+                                  return const SizedBox.shrink();
+                                },
                               );
                             },
                           ),
-                        ),
-                      ],
+                          Expanded(
+                            child: ValueListenableBuilder<String>(
+                              valueListenable: browserTab.titleNotifier,
+                              builder: (context, title, child) {
+                                return Text(
+                                  title,
+                                  style: titleStyle!.copyWith(
+                                    color: widget.selected
+                                        ? theme.colorScheme.onSurface
+                                        : theme.colorScheme.onSurfaceVariant,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                );
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
-              ),
-              IconButton(
-                icon: const Icon(Icons.close, size: 16),
-                onPressed: onTabClosed,
-
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
-                splashRadius: 16,
-              ),
-              const SizedBox(width: 8),
-            ],
+                IgnorePointer(
+                  ignoring: !showCloseButton,
+                  child: AnimatedOpacity(
+                    duration: const Duration(milliseconds: 120),
+                    curve: Curves.easeOut,
+                    opacity: showCloseButton ? 1 : 0,
+                    child: IconButton(
+                      icon: Icon(Icons.close, size: isSidebarVariant ? 15 : 16),
+                      onPressed: widget.onTabClosed,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(
+                        minWidth: 24,
+                        minHeight: 24,
+                      ),
+                      splashRadius: 16,
+                    ),
+                  ),
+                ),
+                SizedBox(width: isSidebarVariant ? 6 : 8),
+              ],
+            ),
           ),
         ),
       ),

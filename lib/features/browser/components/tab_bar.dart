@@ -7,8 +7,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutterbird/features/browser/components/omnibox_bar.dart';
 import 'package:flutterbird/features/browser/components/tab.dart';
-import 'package:go_router/go_router.dart';
-import 'package:ladybird/ladybird.dart';
+import 'package:flutterbird/features/browser/state/tab_actions.dart';
+import 'package:flutterbird/features/browser/state/tab_layout_mode.dart';
 import 'package:window_manager/window_manager.dart';
 
 class BrowserTabAnimationConfig {
@@ -37,6 +37,7 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar>
   static const double _kMinTabWidth = 170;
   static const double _kMaxTabWidth = 225;
   static const double _kAddButtonWidth = 48;
+  static const double _kLayoutToggleButtonWidth = 40;
   static const BrowserTabAnimationConfig _kTabAnimationConfig =
       BrowserTabAnimationConfig();
 
@@ -85,37 +86,6 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar>
   @override
   void onWindowRestore() => _refreshWindowState();
 
-  void _openNewTab(BuildContext context) {
-    final controller = ref.read(browserTabControllerProvider.notifier).add();
-    context.go('/browser/tab/${controller.viewId}');
-  }
-
-  bool _prepareCloseTab(
-    BuildContext context,
-    int viewId,
-    List<LadybirdController> tabs,
-  ) {
-    final index = tabs.indexWhere((tab) => tab.viewId == viewId);
-    if (index < 0) return false;
-
-    if (viewId == widget.currentViewId) {
-      if (tabs.length == 1) {
-        exit(0);
-      }
-      if (index == 0) {
-        context.go('/browser/tab/${tabs[1].viewId}');
-      } else {
-        context.go('/browser/tab/${tabs[index - 1].viewId}');
-      }
-    }
-
-    return true;
-  }
-
-  void _commitCloseTab(int viewId) {
-    ref.read(browserTabControllerProvider.notifier).remove(viewId);
-  }
-
   @override
   Widget build(BuildContext context) {
     final tabs = ref.watch(browserTabControllerProvider);
@@ -144,17 +114,32 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar>
                   width: leadingControlsPadding,
                 ),
               ),
+              SizedBox(
+                width: _kLayoutToggleButtonWidth,
+                child: IconButton(
+                  icon: Icon(Icons.dashboard),
+                  tooltip: 'Switch to vertical tabs',
+                  onPressed: () {
+                    ref
+                        .read(browserTabLayoutModeControllerProvider.notifier)
+                        .setVertical();
+                  },
+                ),
+              ),
               Expanded(
                 child: LayoutBuilder(
                   builder: (context, constraints) {
                     final tabCount = tabs.isEmpty ? 1 : tabs.length;
                     final pinAddButton =
                         (tabs.length * _kMinTabWidth) + _kAddButtonWidth >
-                        constraints.maxWidth - trailingControlsPadding;
+                        constraints.maxWidth -
+                            trailingControlsPadding -
+                            _kLayoutToggleButtonWidth;
                     final availableForTabViewport = math.max(
                       0.0,
                       constraints.maxWidth -
                           trailingControlsPadding -
+                          _kLayoutToggleButtonWidth -
                           (pinAddButton ? _kAddButtonWidth : 0.0),
                     );
                     final adaptiveTabWidth = math.min(
@@ -175,6 +160,7 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar>
                       trailingControlsPadding,
                       constraints.maxWidth -
                           tabViewportWidth -
+                          _kLayoutToggleButtonWidth -
                           (pinAddButton ? _kAddButtonWidth : 0.0),
                     );
 
@@ -194,7 +180,10 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar>
                                 width: _kAddButtonWidth,
                                 child: IconButton(
                                   icon: const Icon(Icons.add, size: 20),
-                                  onPressed: () => _openNewTab(context),
+                                  onPressed: () => BrowserTabActions.openNewTab(
+                                    ref,
+                                    context,
+                                  ),
                                 ),
                               ),
                             );
@@ -212,9 +201,15 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar>
                             animationConfig: _kTabAnimationConfig,
                             onCloseRequested: () {
                               HapticFeedback.lightImpact();
-                              return _prepareCloseTab(context, id, tabs);
+                              return BrowserTabActions.prepareCloseTabNavigation(
+                                context,
+                                currentViewId: widget.currentViewId,
+                                closeViewId: id,
+                                tabs: tabs,
+                              );
                             },
-                            onCloseCommitted: () => _commitCloseTab(id),
+                            onCloseCommitted: () =>
+                                BrowserTabActions.commitCloseTab(ref, id),
                           );
                         },
                         proxyDecorator:
@@ -260,9 +255,11 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar>
                             width: _kAddButtonWidth,
                             child: IconButton(
                               icon: const Icon(Icons.add, size: 20),
-                              onPressed: () => _openNewTab(context),
+                              onPressed: () =>
+                                  BrowserTabActions.openNewTab(ref, context),
                             ),
                           ),
+
                         SizedBox(
                           width: dragAreaWidth,
                           child: DragToMoveArea(

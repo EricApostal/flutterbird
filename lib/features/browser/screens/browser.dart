@@ -1,12 +1,13 @@
-import 'dart:io';
-
 import 'package:bird_core/bird_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutterbird/features/browser/components/browser_window.dart';
+import 'package:flutterbird/features/browser/components/omnibox_bar.dart';
 import 'package:flutterbird/features/browser/components/tab_bar.dart';
-import 'package:go_router/go_router.dart';
+import 'package:flutterbird/features/browser/components/vertical_tab_sidebar.dart';
+import 'package:flutterbird/features/browser/state/tab_actions.dart';
+import 'package:flutterbird/features/browser/state/tab_layout_mode.dart';
 
 class BrowserWindowScreen extends ConsumerStatefulWidget {
   final int viewId;
@@ -41,25 +42,27 @@ class _BrowserWindowScreenState extends ConsumerState<BrowserWindowScreen> {
     return hasControl || hasMeta;
   }
 
+  bool _isShiftPressed() {
+    final pressed = HardwareKeyboard.instance.logicalKeysPressed;
+    return pressed.contains(LogicalKeyboardKey.shiftLeft) ||
+        pressed.contains(LogicalKeyboardKey.shiftRight);
+  }
+
   void _openNewTab() {
-    final controller = ref.read(browserTabControllerProvider.notifier).add();
-    context.go('/browser/tab/${controller.viewId}');
+    BrowserTabActions.openNewTab(ref, context);
   }
 
   void _closeCurrentTab() {
-    final tabs = ref.read(browserTabControllerProvider);
-    if (tabs.isEmpty) return;
+    BrowserTabActions.closeTabImmediately(
+      ref,
+      context,
+      currentViewId: widget.viewId,
+      closeViewId: widget.viewId,
+    );
+  }
 
-    final currentIndex = tabs.indexWhere((tab) => tab.viewId == widget.viewId);
-    if (currentIndex < 0) return;
-
-    if (tabs.length == 1) {
-      exit(0);
-    }
-
-    final destinationIndex = currentIndex == 0 ? 1 : currentIndex - 1;
-    context.go('/browser/tab/${tabs[destinationIndex].viewId}');
-    ref.read(browserTabControllerProvider.notifier).remove(widget.viewId);
+  void _toggleTabLayoutMode() {
+    ref.read(browserTabLayoutModeControllerProvider.notifier).toggle();
   }
 
   bool _handleKeyEvent(KeyEvent event) {
@@ -76,21 +79,49 @@ class _BrowserWindowScreenState extends ConsumerState<BrowserWindowScreen> {
       return true;
     }
 
+    if (event.logicalKey == LogicalKeyboardKey.keyS && _isShiftPressed()) {
+      _toggleTabLayoutMode();
+      return true;
+    }
+
     return false;
   }
 
   @override
   Widget build(BuildContext context) {
     final viewId = widget.viewId;
+    final layoutMode = ref.watch(browserTabLayoutModeControllerProvider);
+    final currentTabController = ref.watch(browserTabProvider(viewId));
+
+    if (currentTabController == null) {
+      return const SizedBox.shrink();
+    }
+
+    if (layoutMode == BrowserTabLayoutMode.horizontal) {
+      return Scaffold(
+        body: Column(
+          children: [
+            BrowserTabBar(currentViewId: viewId),
+            Expanded(child: BrowserWindow(viewId: viewId)),
+          ],
+        ),
+      );
+    }
 
     return Scaffold(
-      body: Column(
+      body: Row(
         children: [
-          BrowserTabBar(currentViewId: viewId),
-          Expanded(child: BrowserWindow(viewId: viewId)),
+          BrowserVerticalTabSidebar(currentViewId: viewId),
+          Expanded(
+            child: Column(
+              children: [
+                BrowserOmniboxBar(currentTabController: currentTabController),
+                Expanded(child: BrowserWindow(viewId: viewId)),
+              ],
+            ),
+          ),
         ],
       ),
-      // body: Center(child: Text("bruh")),
     );
   }
 }
