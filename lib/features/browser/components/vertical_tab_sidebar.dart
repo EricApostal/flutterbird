@@ -13,6 +13,8 @@ const Duration _kSidebarTabAnimationDuration = Duration(milliseconds: 180);
 const Curve _kSidebarTabAnimationCurve = Curves.easeOutCubic;
 
 class BrowserVerticalTabSidebar extends ConsumerStatefulWidget {
+  static const double sidebarWidth = 272;
+
   final int currentViewId;
 
   const BrowserVerticalTabSidebar({super.key, required this.currentViewId});
@@ -25,7 +27,7 @@ class BrowserVerticalTabSidebar extends ConsumerStatefulWidget {
 class _BrowserVerticalTabSidebarState
     extends ConsumerState<BrowserVerticalTabSidebar>
     with WindowListener {
-  static const double _kSidebarWidth = 272;
+  static const double _kSidebarWidth = BrowserVerticalTabSidebar.sidebarWidth;
   static const double _kTabHeight = 36;
   static const double _kMacControlsWidth = 78;
 

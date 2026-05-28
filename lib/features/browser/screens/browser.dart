@@ -19,6 +19,10 @@ class BrowserWindowScreen extends ConsumerStatefulWidget {
 }
 
 class _BrowserWindowScreenState extends ConsumerState<BrowserWindowScreen> {
+  static const Duration _kLayoutTransitionDuration = Duration(
+    milliseconds: 240,
+  );
+
   @override
   void initState() {
     super.initState();
@@ -91,33 +95,73 @@ class _BrowserWindowScreenState extends ConsumerState<BrowserWindowScreen> {
   Widget build(BuildContext context) {
     final viewId = widget.viewId;
     final layoutMode = ref.watch(browserTabLayoutModeControllerProvider);
+    final isVerticalLayout = layoutMode == BrowserTabLayoutMode.vertical;
     final currentTabController = ref.watch(browserTabProvider(viewId));
 
     if (currentTabController == null) {
       return const SizedBox.shrink();
     }
 
-    if (layoutMode == BrowserTabLayoutMode.horizontal) {
-      return Scaffold(
-        body: Column(
-          children: [
-            BrowserTabBar(currentViewId: viewId),
-            Expanded(child: BrowserWindow(viewId: viewId)),
-          ],
-        ),
-      );
-    }
-
     return Scaffold(
       body: Row(
         children: [
-          BrowserVerticalTabSidebar(currentViewId: viewId),
+          AnimatedContainer(
+            duration: _kLayoutTransitionDuration,
+            curve: Curves.easeOutCubic,
+            width: isVerticalLayout
+                ? BrowserVerticalTabSidebar.sidebarWidth
+                : 0,
+            child: IgnorePointer(
+              ignoring: !isVerticalLayout,
+              child: ClipRect(
+                child: AnimatedSlide(
+                  duration: _kLayoutTransitionDuration,
+                  curve: Curves.easeOutCubic,
+                  offset: isVerticalLayout
+                      ? Offset.zero
+                      : const Offset(-0.08, 0),
+                  child: AnimatedOpacity(
+                    duration: _kLayoutTransitionDuration,
+                    curve: Curves.easeOut,
+                    opacity: isVerticalLayout ? 1 : 0,
+                    child: BrowserVerticalTabSidebar(currentViewId: viewId),
+                  ),
+                ),
+              ),
+            ),
+          ),
           Expanded(
-            child: Column(
-              children: [
-                BrowserOmniboxBar(currentTabController: currentTabController),
-                Expanded(child: BrowserWindow(viewId: viewId)),
-              ],
+            child: AnimatedSwitcher(
+              duration: _kLayoutTransitionDuration,
+              switchInCurve: Curves.easeOutCubic,
+              switchOutCurve: Curves.easeOutCubic,
+              transitionBuilder: (child, animation) {
+                final slide = Tween<Offset>(
+                  begin: const Offset(0.02, 0),
+                  end: Offset.zero,
+                ).animate(animation);
+                return FadeTransition(
+                  opacity: animation,
+                  child: SlideTransition(position: slide, child: child),
+                );
+              },
+              child: isVerticalLayout
+                  ? Column(
+                      key: const ValueKey('vertical-layout'),
+                      children: [
+                        BrowserOmniboxBar(
+                          currentTabController: currentTabController,
+                        ),
+                        Expanded(child: BrowserWindow(viewId: viewId)),
+                      ],
+                    )
+                  : Column(
+                      key: const ValueKey('horizontal-layout'),
+                      children: [
+                        BrowserTabBar(currentViewId: viewId),
+                        Expanded(child: BrowserWindow(viewId: viewId)),
+                      ],
+                    ),
             ),
           ),
         ],
