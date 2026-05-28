@@ -452,7 +452,8 @@ public:
     }
   }
 
-  virtual Utf16String clipboard_text() const override {
+  // todo: figure out what "Selection" is
+  virtual Utf16String clipboard_text(ClipboardType type) const override {
     return WebView::Application::clipboard_text();
   }
   virtual Vector<Web::Clipboard::SystemClipboardRepresentation>

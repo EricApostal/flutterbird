@@ -22,6 +22,7 @@ class BrowserTabBar extends ConsumerStatefulWidget {
 class _BrowserTabBarState extends ConsumerState<BrowserTabBar>
     with WindowListener {
   static const double _kMacControlsWidth = 78;
+  static const double _kWindowsControlsWidth = 138;
 
   bool _isWindowMaximized = false;
 
@@ -97,9 +98,10 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar>
       return const SizedBox.shrink();
     }
 
-    final isMacOS = Platform.isMacOS;
-
-    final leftPadding = isMacOS ? _kMacControlsWidth : 8.0;
+    final leadingControlsPadding = Platform.isMacOS ? _kMacControlsWidth : 8.0;
+    final trailingControlsPadding = Platform.isWindows
+        ? _kWindowsControlsWidth
+        : 8.0;
 
     return Column(
       children: [
@@ -108,10 +110,12 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar>
           child: Row(
             children: [
               DragToMoveArea(
-                child: SizedBox(height: .infinity, width: leftPadding),
+                child: SizedBox(
+                  height: double.infinity,
+                  width: leadingControlsPadding,
+                ),
               ),
-              Padding(
-                padding: EdgeInsets.only(left: leftPadding),
+              SizedBox(
                 child: ReorderableListView.builder(
                   shrinkWrap: true,
                   padding: const EdgeInsets.only(top: 4, bottom: 4),
@@ -172,7 +176,7 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar>
               ),
               Expanded(
                 child: DragToMoveArea(
-                  child: SizedBox(height: .infinity, width: double.infinity),
+                  child: SizedBox(height: double.infinity, width: .infinity),
                 ),
               ),
             ],

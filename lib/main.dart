@@ -11,17 +11,21 @@ void main() async {
 
   if (isDesktop) {
     await windowManager.ensureInitialized();
+    final usesCustomTitlebar = Platform.isMacOS || Platform.isWindows;
     const initialSize = Size(800, 600);
-    const windowOptions = WindowOptions(
+    final windowOptions = WindowOptions(
       minimumSize: initialSize,
       size: initialSize,
       center: true,
-      titleBarStyle: TitleBarStyle.hidden,
-      windowButtonVisibility: false,
+      titleBarStyle: usesCustomTitlebar
+          ? TitleBarStyle.hidden
+          : TitleBarStyle.normal,
+      // Keep real native caption buttons when titlebar is hidden.
+      windowButtonVisibility: usesCustomTitlebar,
     );
 
     await windowManager.waitUntilReadyToShow(windowOptions, () async {
-      if (isDesktop) {
+      if (usesCustomTitlebar) {
         await windowManager.setMovable(false);
       }
       await windowManager.show();
