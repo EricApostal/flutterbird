@@ -123,16 +123,34 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar>
                 child: LayoutBuilder(
                   builder: (context, constraints) {
                     final tabCount = tabs.isEmpty ? 1 : tabs.length;
-                    final availableForTabs = math.max(
-                      0.0,
-                      constraints.maxWidth - _kAddButtonWidth,
-                    );
                     final pinAddButton =
                         (tabs.length * _kMinTabWidth) + _kAddButtonWidth >
-                        constraints.maxWidth;
+                        constraints.maxWidth - trailingControlsPadding;
+                    final availableForTabViewport = math.max(
+                      0.0,
+                      constraints.maxWidth -
+                          trailingControlsPadding -
+                          (pinAddButton ? _kAddButtonWidth : 0.0),
+                    );
                     final adaptiveTabWidth = math.min(
                       _kMaxTabWidth,
-                      math.max(_kMinTabWidth, availableForTabs / tabCount),
+                      math.max(
+                        _kMinTabWidth,
+                        availableForTabViewport / tabCount,
+                      ),
+                    );
+                    final tabContentWidth =
+                        (adaptiveTabWidth * tabs.length) +
+                        (pinAddButton ? 0 : _kAddButtonWidth);
+                    final tabViewportWidth = math.min(
+                      availableForTabViewport,
+                      tabContentWidth,
+                    );
+                    final dragAreaWidth = math.max(
+                      trailingControlsPadding,
+                      constraints.maxWidth -
+                          tabViewportWidth -
+                          (pinAddButton ? _kAddButtonWidth : 0.0),
                     );
 
                     Widget buildTabList({required bool includeAddButton}) {
@@ -208,29 +226,32 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar>
                       );
                     }
 
-                    if (!pinAddButton) {
-                      return buildTabList(includeAddButton: true);
-                    }
-
                     return Row(
                       children: [
-                        Expanded(child: buildTabList(includeAddButton: false)),
                         SizedBox(
-                          width: _kAddButtonWidth,
-                          child: IconButton(
-                            icon: const Icon(Icons.add, size: 20),
-                            onPressed: () => _openNewTab(context),
+                          width: tabViewportWidth,
+                          child: buildTabList(includeAddButton: !pinAddButton),
+                        ),
+                        if (pinAddButton)
+                          SizedBox(
+                            width: _kAddButtonWidth,
+                            child: IconButton(
+                              icon: const Icon(Icons.add, size: 20),
+                              onPressed: () => _openNewTab(context),
+                            ),
+                          ),
+                        SizedBox(
+                          width: dragAreaWidth,
+                          child: DragToMoveArea(
+                            child: SizedBox(
+                              height: double.infinity,
+                              width: double.infinity,
+                            ),
                           ),
                         ),
                       ],
                     );
                   },
-                ),
-              ),
-              DragToMoveArea(
-                child: SizedBox(
-                  height: double.infinity,
-                  width: trailingControlsPadding,
                 ),
               ),
             ],
