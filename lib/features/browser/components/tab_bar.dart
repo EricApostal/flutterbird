@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:bird_core/bird_core.dart';
 import 'package:flutter/material.dart';
@@ -23,6 +24,9 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar>
     with WindowListener {
   static const double _kMacControlsWidth = 78;
   static const double _kWindowsControlsWidth = 138;
+  static const double _kMinTabWidth = 170;
+  static const double _kMaxTabWidth = 225;
+  static const double _kAddButtonWidth = 48;
 
   bool _isWindowMaximized = false;
 
@@ -115,68 +119,118 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar>
                   width: leadingControlsPadding,
                 ),
               ),
-              SizedBox(
-                child: ReorderableListView.builder(
-                  shrinkWrap: true,
-                  padding: const EdgeInsets.only(top: 4, bottom: 4),
-                  scrollDirection: Axis.horizontal,
-                  buildDefaultDragHandles: false,
-                  itemBuilder: (context, index) {
-                    if (index == tabs.length) {
-                      return ReorderableDragStartListener(
-                        key: const ValueKey('add'),
-                        index: index,
-                        enabled: false,
-                        child: IconButton(
-                          icon: const Icon(Icons.add, size: 20),
-                          onPressed: () => _openNewTab(context),
-                        ),
+              Expanded(
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final tabCount = tabs.isEmpty ? 1 : tabs.length;
+                    final availableForTabs = math.max(
+                      0.0,
+                      constraints.maxWidth - _kAddButtonWidth,
+                    );
+                    final pinAddButton =
+                        (tabs.length * _kMinTabWidth) + _kAddButtonWidth >
+                        constraints.maxWidth;
+                    final adaptiveTabWidth = math.min(
+                      _kMaxTabWidth,
+                      math.max(_kMinTabWidth, availableForTabs / tabCount),
+                    );
+
+                    Widget buildTabList({required bool includeAddButton}) {
+                      return ReorderableListView.builder(
+                        shrinkWrap: true,
+                        padding: const EdgeInsets.only(top: 4, bottom: 4),
+                        scrollDirection: Axis.horizontal,
+                        buildDefaultDragHandles: false,
+                        itemBuilder: (context, index) {
+                          if (includeAddButton && index == tabs.length) {
+                            return ReorderableDragStartListener(
+                              key: const ValueKey('add'),
+                              index: index,
+                              enabled: false,
+                              child: SizedBox(
+                                width: _kAddButtonWidth,
+                                child: IconButton(
+                                  icon: const Icon(Icons.add, size: 20),
+                                  onPressed: () => _openNewTab(context),
+                                ),
+                              ),
+                            );
+                          }
+
+                          final id = tabs[index].viewId;
+                          return ReorderableDragStartListener(
+                            key: ValueKey(id),
+                            index: index,
+                            child: Padding(
+                              padding: const EdgeInsets.only(right: 2),
+                              child: BrowserTab(
+                                viewId: tabs[index].viewId,
+                                selected: id == widget.currentViewId,
+                                minWidth: _kMinTabWidth,
+                                width: adaptiveTabWidth,
+                                onTabClosed: () {
+                                  HapticFeedback.lightImpact();
+                                  _closeTab(context, id, tabs);
+                                },
+                              ),
+                            ),
+                          );
+                        },
+                        proxyDecorator:
+                            (
+                              Widget child,
+                              int index,
+                              Animation<double> animation,
+                            ) {
+                              return Material(
+                                color: Colors.transparent,
+                                elevation: 0,
+                                child: child,
+                              );
+                            },
+                        itemCount: tabs.length + (includeAddButton ? 1 : 0),
+                        onReorder: (oldIndex, newIndex) {
+                          if (includeAddButton && oldIndex == tabs.length) {
+                            return;
+                          }
+                          if (oldIndex < newIndex) {
+                            newIndex -= 1;
+                          }
+                          final maxIndex = tabs.length - 1;
+                          if (newIndex > maxIndex) {
+                            newIndex = maxIndex;
+                          }
+                          if (newIndex < 0 || oldIndex == newIndex) return;
+                          ref
+                              .read(browserTabControllerProvider.notifier)
+                              .reorder(oldIndex, newIndex);
+                        },
                       );
                     }
 
-                    final id = tabs[index].viewId;
-                    return ReorderableDragStartListener(
-                      key: ValueKey(id),
-                      index: index,
-                      child: Padding(
-                        padding: const EdgeInsets.only(right: 2),
-                        child: BrowserTab(
-                          viewId: tabs[index].viewId,
-                          selected: id == widget.currentViewId,
-                          onTabClosed: () {
-                            HapticFeedback.lightImpact();
-                            _closeTab(context, id, tabs);
-                          },
+                    if (!pinAddButton) {
+                      return buildTabList(includeAddButton: true);
+                    }
+
+                    return Row(
+                      children: [
+                        Expanded(child: buildTabList(includeAddButton: false)),
+                        SizedBox(
+                          width: _kAddButtonWidth,
+                          child: IconButton(
+                            icon: const Icon(Icons.add, size: 20),
+                            onPressed: () => _openNewTab(context),
+                          ),
                         ),
-                      ),
+                      ],
                     );
-                  },
-                  proxyDecorator:
-                      (Widget child, int index, Animation<double> animation) {
-                        return Material(
-                          color: Colors.transparent,
-                          elevation: 0,
-                          child: child,
-                        );
-                      },
-                  itemCount: tabs.length + 1,
-                  onReorder: (oldIndex, newIndex) {
-                    if (oldIndex == tabs.length) return;
-                    if (oldIndex < newIndex) {
-                      newIndex -= 1;
-                    }
-                    if (newIndex >= tabs.length) {
-                      newIndex = tabs.length - 1;
-                    }
-                    ref
-                        .read(browserTabControllerProvider.notifier)
-                        .reorder(oldIndex, newIndex);
                   },
                 ),
               ),
-              Expanded(
-                child: DragToMoveArea(
-                  child: SizedBox(height: double.infinity, width: .infinity),
+              DragToMoveArea(
+                child: SizedBox(
+                  height: double.infinity,
+                  width: trailingControlsPadding,
                 ),
               ),
             ],

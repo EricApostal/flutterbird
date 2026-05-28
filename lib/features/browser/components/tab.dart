@@ -8,11 +8,16 @@ class BrowserTab extends ConsumerWidget {
   final int viewId;
   final bool selected;
   final void Function() onTabClosed;
+  final double minWidth;
+  final double? width;
+
   const BrowserTab({
     super.key,
     required this.viewId,
     required this.selected,
     required this.onTabClosed,
+    this.minWidth = 170,
+    this.width,
   });
 
   @override
@@ -29,7 +34,8 @@ class BrowserTab extends ConsumerWidget {
           context.go("/browser/tab/$viewId");
         },
         child: Container(
-          width: 225,
+          width: width,
+          constraints: BoxConstraints(minWidth: minWidth),
           decoration: BoxDecoration(
             color: selected
                 ? theme.colorScheme.surfaceContainerHighest
