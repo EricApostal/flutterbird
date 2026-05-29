@@ -1,9 +1,11 @@
+// ignore_for_file: invalid_use_of_internal_member
+
 import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutterbird/features/router/controller.dart';
-import 'package:window_manager/window_manager.dart';
+import 'package:window_manager/window_manager.dart' as wm;
 
 import 'package:flutter/src/widgets/_window.dart';
 
@@ -12,26 +14,26 @@ void main() async {
   final isDesktop = Platform.isMacOS || Platform.isLinux || Platform.isWindows;
 
   if (isDesktop) {
-    await windowManager.ensureInitialized();
+    await wm.windowManager.ensureInitialized();
     final usesCustomTitlebar = Platform.isMacOS || Platform.isWindows;
     const initialSize = Size(800, 600);
-    final windowOptions = WindowOptions(
+    final windowOptions = wm.WindowOptions(
       minimumSize: initialSize,
       size: initialSize,
       center: true,
       titleBarStyle: usesCustomTitlebar
-          ? TitleBarStyle.hidden
-          : TitleBarStyle.normal,
+          ? wm.TitleBarStyle.hidden
+          : wm.TitleBarStyle.normal,
       // Keep real native caption buttons when titlebar is hidden.
       windowButtonVisibility: usesCustomTitlebar,
     );
 
-    await windowManager.waitUntilReadyToShow(windowOptions, () async {
+    await wm.windowManager.waitUntilReadyToShow(windowOptions, () async {
       if (usesCustomTitlebar) {
-        await windowManager.setMovable(false);
+        await wm.windowManager.setMovable(false);
       }
-      await windowManager.show();
-      await windowManager.focus();
+      await wm.windowManager.show();
+      await wm.windowManager.focus();
     });
   }
 
@@ -51,7 +53,16 @@ class _MainAppState extends State<MainApp> {
     return MaterialApp.router(
       routerConfig: routerController,
       builder: (context, child) {
-        return PopScope(canPop: false, child: child ?? const SizedBox.shrink());
+        final content = PopScope(
+          canPop: false,
+          child: child ?? const SizedBox.shrink(),
+        );
+
+        if (Platform.isLinux) {
+          return WindowManager(child: content);
+        }
+
+        return content;
       },
       themeMode: .dark,
       darkTheme: ThemeData(

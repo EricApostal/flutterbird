@@ -1,12 +1,14 @@
 import 'dart:io';
 
 import 'package:bird_core/bird_core.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutterbird/features/browser/components/tab.dart';
 import 'package:flutterbird/features/browser/state/tab_actions.dart';
 import 'package:flutterbird/features/browser/state/tab_layout_mode.dart';
+import 'package:ladybird/ladybird.dart';
 import 'package:window_manager/window_manager.dart';
 
 const Duration _kSidebarTabAnimationDuration = Duration(milliseconds: 180);
@@ -30,8 +32,12 @@ class _BrowserVerticalTabSidebarState
   static const double _kSidebarWidth = BrowserVerticalTabSidebar.sidebarWidth;
   static const double _kTabHeight = 36;
   static const double _kMacControlsWidth = 78;
+  static const double _kDetachDragThreshold = 18;
 
   bool _animateNewTabs = false;
+  final GlobalKey _sidebarTabListKey = GlobalKey();
+  int? _draggingViewId;
+  Offset? _lastGlobalPointerPosition;
 
   @override
   void initState() {
@@ -47,6 +53,10 @@ class _BrowserVerticalTabSidebarState
     if (Platform.isMacOS || Platform.isLinux || Platform.isWindows) {
       windowManager.addListener(this);
     }
+
+    GestureBinding.instance.pointerRouter.addGlobalRoute(
+      _handleGlobalPointerEvent,
+    );
   }
 
   @override
@@ -54,7 +64,66 @@ class _BrowserVerticalTabSidebarState
     if (Platform.isMacOS || Platform.isLinux || Platform.isWindows) {
       windowManager.removeListener(this);
     }
+    GestureBinding.instance.pointerRouter.removeGlobalRoute(
+      _handleGlobalPointerEvent,
+    );
     super.dispose();
+  }
+
+  void _handleGlobalPointerEvent(PointerEvent event) {
+    if (_draggingViewId == null) return;
+    if (event is PointerMoveEvent ||
+        event is PointerHoverEvent ||
+        event is PointerUpEvent) {
+      _lastGlobalPointerPosition = event.position;
+    }
+  }
+
+  void _handleTabReorderStart(int index, List<LadybirdController> tabs) {
+    if (index < 0 || index >= tabs.length) {
+      _draggingViewId = null;
+      return;
+    }
+    _draggingViewId = tabs[index].viewId;
+  }
+
+  Future<void> _handleTabReorderEnd(List<LadybirdController> tabs) async {
+    if (!Platform.isLinux) {
+      _draggingViewId = null;
+      return;
+    }
+
+    final draggingViewId = _draggingViewId;
+    _draggingViewId = null;
+
+    if (draggingViewId == null) return;
+    if (!tabs.any((tab) => tab.viewId == draggingViewId)) return;
+
+    final pointerPosition = _lastGlobalPointerPosition;
+    if (pointerPosition == null) return;
+
+    final sidebarRect = _sidebarTabListRect();
+    if (sidebarRect == null) return;
+
+    final droppedOutsideHorizontally =
+        pointerPosition.dx < sidebarRect.left - _kDetachDragThreshold ||
+        pointerPosition.dx > sidebarRect.right + _kDetachDragThreshold;
+    if (!droppedOutsideHorizontally) return;
+
+    await BrowserTabActions.detachTabToNewWindow(
+      ref,
+      context,
+      currentViewId: widget.currentViewId,
+      detachViewId: draggingViewId,
+    );
+  }
+
+  Rect? _sidebarTabListRect() {
+    final renderObject = _sidebarTabListKey.currentContext?.findRenderObject();
+    if (renderObject is! RenderBox || !renderObject.hasSize) return null;
+
+    final topLeft = renderObject.localToGlobal(Offset.zero);
+    return topLeft & renderObject.size;
   }
 
   @override
@@ -103,9 +172,14 @@ class _BrowserVerticalTabSidebarState
           ),
           Expanded(
             child: ReorderableListView.builder(
+              key: _sidebarTabListKey,
               buildDefaultDragHandles: false,
               padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
               itemCount: tabs.length,
+              onReorderStart: (index) => _handleTabReorderStart(index, tabs),
+              onReorderEnd: (_) {
+                _handleTabReorderEnd(tabs);
+              },
               proxyDecorator:
                   (Widget child, int index, Animation<double> animation) {
                     return Material(
