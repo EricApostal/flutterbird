@@ -165,8 +165,6 @@ public:
   virtual void initialize_client(
       CreateNewClient create_new_client = CreateNewClient::Yes) override {
 
-    m_backend = create_view_backend();
-
     ViewImplementation::initialize_client(create_new_client);
     configure_client_process();
     set_system_visibility_state(Web::HTML::VisibilityState::Visible);
@@ -363,9 +361,9 @@ public:
   virtual ~FlutterViewImpl() = default;
 
 private:
-  explicit FlutterViewImpl(int view_id) : m_view_id(view_id) {}
-
-  virtual void update_zoom() override {}
+  explicit FlutterViewImpl(int view_id) : m_view_id(view_id) {
+    m_backend = create_view_backend();
+  }
 
   virtual Web::DevicePixelSize viewport_size() const override {
     return {m_viewport_width, m_viewport_height};

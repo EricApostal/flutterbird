@@ -39,13 +39,6 @@ class _LadybirdViewState extends State<LadybirdView>
 
   void _attachControllerListeners(LadybirdController controller) {
     controller.onResize = _onNativeResize;
-    controller.onCrossSiteNavigation = () {
-      if (!mounted) return;
-      print(
-        '[Ladybird][Flutter] cross-site navigation process change for view ${controller.viewId}; recreating texture',
-      );
-      _recreateTextureFromCrossSiteNavigation();
-    };
     controller.isLoadingNotifier.addListener(_onLoadingStateChanged);
     controller.mouseCursorNotifier.addListener(_onCursorChanged);
   }
@@ -54,7 +47,6 @@ class _LadybirdViewState extends State<LadybirdView>
     controller.mouseCursorNotifier.removeListener(_onCursorChanged);
     controller.isLoadingNotifier.removeListener(_onLoadingStateChanged);
     controller.onResize = null;
-    controller.onCrossSiteNavigation = null;
   }
 
   void _onCursorChanged() {
@@ -79,6 +71,7 @@ class _LadybirdViewState extends State<LadybirdView>
       _detachControllerListeners(oldWidget.controller);
 
       if (_textureId != null) {
+        print("unregister texture");
         oldWidget.controller.unregisterTexture(_textureId!);
         _textureId = null;
       }
@@ -90,43 +83,22 @@ class _LadybirdViewState extends State<LadybirdView>
   }
 
   Future<void> _recreateTexture() async {
-    if (_textureRecreateInProgress) {
-      _textureRecreateQueued = true;
-      return;
-    }
+    _textureRecreateQueued = false;
+    final int? oldTextureId = _textureId;
+    final int textureId = await widget.controller.createTexture();
 
-    _textureRecreateInProgress = true;
-    try {
-      do {
-        _textureRecreateQueued = false;
-        final int? oldTextureId = _textureId;
-        final int textureId = await widget.controller.createTexture();
-
-        if (mounted) {
-          setState(() {
-            _textureId = textureId;
-          });
-          if (oldTextureId != null && oldTextureId != textureId) {
-            widget.controller.unregisterTexture(oldTextureId);
-          }
-        } else {
-          await widget.controller.unregisterTexture(textureId);
-          if (oldTextureId != null) {
-            await widget.controller.unregisterTexture(oldTextureId);
-          }
-        }
-      } while (_textureRecreateQueued && mounted);
-    } finally {
-      _textureRecreateInProgress = false;
-      _textureRecreateQueued = false;
-    }
-  }
-
-  Future<void> _recreateTextureFromCrossSiteNavigation() async {
-    if (!mounted) return;
-    await _recreateTexture();
     if (mounted) {
-      setState(() {});
+      setState(() {
+        _textureId = textureId;
+      });
+      if (oldTextureId != null && oldTextureId != textureId) {
+        widget.controller.unregisterTexture(oldTextureId);
+      }
+    } else {
+      await widget.controller.unregisterTexture(textureId);
+      if (oldTextureId != null) {
+        await widget.controller.unregisterTexture(oldTextureId);
+      }
     }
   }
 
@@ -305,6 +277,7 @@ class _LadybirdViewState extends State<LadybirdView>
       return const Center(child: CircularProgressIndicator());
     }
     return Scaffold(
+      // for debug
       floatingActionButton: FloatingActionButton(
         onPressed: () async {
           setState(() {});
@@ -329,51 +302,51 @@ class _LadybirdViewState extends State<LadybirdView>
             print("BUILDING WITH WIDTH: $displayWidth");
             print("padded width = $paddedWidth");
 
-            return ClipRect(
-              child: OverflowBox(
-                alignment: Alignment.topLeft,
-                minWidth: constraints.maxWidth,
-                minHeight: constraints.maxHeight,
-                maxWidth: paddedWidth > constraints.maxWidth
-                    ? paddedWidth
-                    : constraints.maxWidth,
-                maxHeight: paddedHeight > constraints.maxHeight
-                    ? paddedHeight
-                    : constraints.maxHeight,
-                child: SizedBox(
-                  width: displayWidth,
-                  height: displayHeight,
-                  child: MouseRegion(
-                    cursor: widget.controller.mouseCursorNotifier.value,
-                    onEnter: (_) {
-                      // if (!_focusNode.hasFocus) {
-                      //   _focusNode.requestFocus();
-                      // }
-                    },
-                    child: Focus(
-                      focusNode: _focusNode,
-                      autofocus: true,
-                      onKeyEvent: _onKeyEvent,
-                      child: Listener(
-                        onPointerDown: (e) {
-                          _focusNode.requestFocus();
-                          _onPointerEvent(e, 0);
-                        },
-                        onPointerUp: (e) => _onPointerEvent(e, 1),
-                        onPointerMove: (e) => _onPointerEvent(e, 2),
-                        onPointerHover: (e) => _onPointerEvent(e, 2),
-                        onPointerPanZoomStart: _onPointerPanZoomStart,
-                        onPointerPanZoomUpdate: _onPointerPanZoomUpdate,
-                        onPointerPanZoomEnd: _onPointerPanZoomEnd,
-                        onPointerSignal: (e) {
-                          if (e is PointerScrollEvent) {
-                            _onPointerScroll(e);
-                          }
-                        },
-                        child: Texture(
-                          key: ValueKey(_textureId),
-                          textureId: _textureId!,
-                        ),
+            return OverflowBox(
+              // color: Colors.red,
+              alignment: Alignment.topLeft,
+              minWidth: constraints.maxWidth,
+              minHeight: constraints.maxHeight,
+              maxWidth: paddedWidth > constraints.maxWidth
+                  ? paddedWidth
+                  : constraints.maxWidth,
+              maxHeight: paddedHeight > constraints.maxHeight
+                  ? paddedHeight
+                  : constraints.maxHeight,
+              child: SizedBox(
+                // width: displayWidth / 2,
+                // height: displayHeight / 2,
+                child: MouseRegion(
+                  cursor: widget.controller.mouseCursorNotifier.value,
+                  onEnter: (_) {
+                    // if (!_focusNode.hasFocus) {
+                    //   _focusNode.requestFocus();
+                    // }
+                  },
+                  child: Focus(
+                    focusNode: _focusNode,
+                    autofocus: true,
+                    onKeyEvent: _onKeyEvent,
+                    child: Listener(
+                      onPointerDown: (e) {
+                        _focusNode.requestFocus();
+                        _onPointerEvent(e, 0);
+                      },
+                      onPointerUp: (e) => _onPointerEvent(e, 1),
+                      onPointerMove: (e) => _onPointerEvent(e, 2),
+                      onPointerHover: (e) => _onPointerEvent(e, 2),
+                      onPointerPanZoomStart: _onPointerPanZoomStart,
+                      onPointerPanZoomUpdate: _onPointerPanZoomUpdate,
+                      onPointerPanZoomEnd: _onPointerPanZoomEnd,
+                      onPointerSignal: (e) {
+                        if (e is PointerScrollEvent) {
+                          _onPointerScroll(e);
+                        }
+                      },
+                      child: Texture(
+                        filterQuality: .high,
+                        key: ValueKey(_textureId),
+                        textureId: _textureId!,
                       ),
                     ),
                   ),
