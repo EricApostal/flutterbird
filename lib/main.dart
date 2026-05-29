@@ -15,7 +15,7 @@ void main() async {
 
   if (isDesktop) {
     await wm.windowManager.ensureInitialized();
-    final usesCustomTitlebar = Platform.isMacOS || Platform.isWindows;
+    final usesCustomTitlebar = true;
     const initialSize = Size(800, 600);
     final windowOptions = wm.WindowOptions(
       minimumSize: initialSize,

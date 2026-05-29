@@ -3,6 +3,7 @@
 import 'dart:io';
 
 import 'package:bird_core/bird_core.dart';
+import 'package:flutter/material.dart' show MaterialPageRoute, Navigator;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/src/widgets/_window.dart';
@@ -79,7 +80,17 @@ class BrowserTabActions {
       final entry = WindowEntry(
         controller: windowController,
         builder: (context) {
-          return DetachedTabWindowScreen(controller: tabController);
+          return Navigator(
+            onGenerateInitialRoutes: (_, __) {
+              return [
+                MaterialPageRoute<void>(
+                  builder: (_) {
+                    return DetachedTabWindowScreen(controller: tabController);
+                  },
+                ),
+              ];
+            },
+          );
         },
       );
       session.entry = entry;
