@@ -190,6 +190,10 @@ class LadybirdController {
       _newWebViewCallback.nativeFunction,
     );
 
+    if (existingViewId != null) {
+      syncUrlFromEngine();
+    }
+
     _refreshNavigationState();
 
     // _bindings.set_zoom(_viewId, 1.0);
@@ -291,6 +295,20 @@ class LadybirdController {
   void _onNewWebView(int newViewId, bool activateTab) {
     if (newViewId <= 0) return;
     onNewWebView?.call(newViewId, activateTab);
+  }
+
+  void syncUrlFromEngine() {
+    final ptr = _bindings.get_view_url(_viewId);
+    if (ptr == ffi.nullptr) return;
+
+    final url = ptr.cast<Utf8>().toDartString();
+    malloc.free(ptr);
+
+    if (url.isEmpty || url == ':') return;
+    if (urlNotifier.value == url) return;
+
+    urlNotifier.value = url;
+    _refreshNavigationState();
   }
 
   MouseCursor _mapNativeCursor(int cursorType) {

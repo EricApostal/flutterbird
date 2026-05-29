@@ -67,6 +67,7 @@ class _BrowserOmniboxBarState extends ConsumerState<BrowserOmniboxBar> {
 
     controller.urlNotifier.addListener(_onTrackedUrlChanged);
     _syncOmniboxTextFromControllerUrl(controller);
+    _scheduleInitialUrlSyncIfNeeded(controller);
     final hasBookmarks = ref
         .read(browserOmniboxProvider.select((value) => value.bookmarks))
         .isNotEmpty;
@@ -75,6 +76,35 @@ class _BrowserOmniboxBarState extends ConsumerState<BrowserOmniboxBar> {
       refreshBookmarks: !hasBookmarks,
       refreshHistory: true,
     );
+  }
+
+  void _scheduleInitialUrlSyncIfNeeded(
+    LadybirdController controller, {
+    int remainingAttempts = 20,
+  }) {
+    if (remainingAttempts <= 0) return;
+
+    if (!controller.hasStartedNavigation) return;
+    if (controller.urlNotifier.value.trim().isNotEmpty) return;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _trackedTabController != controller) return;
+      if (controller.urlNotifier.value.trim().isNotEmpty) return;
+
+      controller.syncUrlFromEngine();
+      if (controller.urlNotifier.value.trim().isNotEmpty) {
+        _syncOmniboxTextFromControllerUrl(controller);
+        return;
+      }
+
+      Future<void>.delayed(const Duration(milliseconds: 120), () {
+        if (!mounted || _trackedTabController != controller) return;
+        _scheduleInitialUrlSyncIfNeeded(
+          controller,
+          remainingAttempts: remainingAttempts - 1,
+        );
+      });
+    });
   }
 
   void _onTrackedUrlChanged() {

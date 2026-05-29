@@ -1020,6 +1020,19 @@ bool can_go_forward(int view_id) {
   return it->second->navigate_forward_action().enabled();
 }
 
+char *get_view_url(int view_id) {
+  auto it = g_web_views.find(view_id);
+  if (it == g_web_views.end())
+    return nullptr;
+
+  auto const &url = it->second->url();
+  if (url.scheme().is_empty())
+    return nullptr;
+
+  auto bytes = url.to_string().to_byte_string();
+  return strdup(bytes.characters());
+}
+
 char *get_bookmarks_json() {
   if (!s_app)
     return nullptr;

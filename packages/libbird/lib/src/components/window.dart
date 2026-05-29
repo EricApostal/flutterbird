@@ -107,6 +107,11 @@ class _LadybirdViewState extends State<LadybirdView>
     widget.controller.updateDevicePixelRatio(density);
     widget.controller.resizeWindow(physicalSize);
 
+    if (widget.controller.hasStartedNavigation &&
+        widget.controller.urlNotifier.value.trim().isEmpty) {
+      widget.controller.syncUrlFromEngine();
+    }
+
     // Ensure first navigation happens only after the native viewport has been
     // sized with the current Flutter constraints and DPR.
     if (!widget.controller.hasNavigatedInitial) {

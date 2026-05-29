@@ -108,6 +108,7 @@ LADYBIRD_API void go_back(int view_id);
 LADYBIRD_API void go_forward(int view_id);
 LADYBIRD_API bool can_go_back(int view_id);
 LADYBIRD_API bool can_go_forward(int view_id);
+LADYBIRD_API char *get_view_url(int view_id);
 
 // Returns a JSON array string with bookmark items from
 // LibWebView::BookmarkStore. Caller owns returned memory and must free it.

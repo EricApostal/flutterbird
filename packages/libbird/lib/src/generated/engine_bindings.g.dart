@@ -445,6 +445,17 @@ class LadybirdBindings {
   late final _can_go_forward = _can_go_forwardPtr
       .asFunction<bool Function(int)>();
 
+  ffi.Pointer<ffi.Char> get_view_url(int view_id) {
+    return _get_view_url(view_id);
+  }
+
+  late final _get_view_urlPtr =
+      _lookup<ffi.NativeFunction<ffi.Pointer<ffi.Char> Function(ffi.Int)>>(
+        'get_view_url',
+      );
+  late final _get_view_url = _get_view_urlPtr
+      .asFunction<ffi.Pointer<ffi.Char> Function(int)>();
+
   ffi.Pointer<ffi.Char> get_bookmarks_json() {
     return _get_bookmarks_json();
   }
