@@ -17,7 +17,6 @@ class _LadybirdViewState extends State<LadybirdView>
     with SingleTickerProviderStateMixin {
   int? _textureId;
   final FocusNode _focusNode = FocusNode();
-  late final VoidCallback _loadingListener;
 
   double _accumulatedWheelX = 0;
   double _accumulatedWheelY = 0;
@@ -59,24 +58,6 @@ class _LadybirdViewState extends State<LadybirdView>
     super.initState();
     _momentumTicker = createTicker(_onMomentumTick);
     _attachControllerListeners(widget.controller);
-    widget.controller.onResize = () {
-      if (mounted) {
-        _recreateTexture();
-      }
-    };
-    widget.controller.onCrossSiteNavigation = () {
-      if (!mounted) return;
-      print(
-        '[Ladybird][Flutter] cross-site navigation process change for view ${widget.controller.viewId}; recreating texture',
-      );
-    };
-
-    _loadingListener = () {
-      if (mounted) {
-        _recreateTexture();
-      }
-    };
-    widget.controller.isLoadingNotifier.addListener(_loadingListener);
 
     _recreateTexture();
   }
@@ -86,10 +67,13 @@ class _LadybirdViewState extends State<LadybirdView>
     super.didUpdateWidget(oldWidget);
     if (oldWidget.controller != widget.controller) {
       _detachControllerListeners(oldWidget.controller);
-      oldWidget.controller.isLoadingNotifier.removeListener(_loadingListener);
+
+      if (_textureId != null) {
+        oldWidget.controller.unregisterTexture(_textureId!);
+        _textureId = null;
+      }
 
       _attachControllerListeners(widget.controller);
-      widget.controller.isLoadingNotifier.addListener(_loadingListener);
 
       _recreateTexture();
     }
@@ -274,7 +258,6 @@ class _LadybirdViewState extends State<LadybirdView>
   @override
   void dispose() {
     _detachControllerListeners(widget.controller);
-    widget.controller.isLoadingNotifier.removeListener(_loadingListener);
     _momentumTicker?.dispose();
     _focusNode.dispose();
 

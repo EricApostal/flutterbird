@@ -2,7 +2,6 @@ import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:bird_core/bird_core.dart';
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -10,7 +9,6 @@ import 'package:flutterbird/features/browser/components/omnibox_bar.dart';
 import 'package:flutterbird/features/browser/components/tab.dart';
 import 'package:flutterbird/features/browser/state/tab_actions.dart';
 import 'package:flutterbird/features/browser/state/tab_layout_mode.dart';
-import 'package:ladybird/ladybird.dart';
 import 'package:window_manager/window_manager.dart';
 
 class BrowserTabAnimationConfig {
@@ -40,15 +38,11 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar>
   static const double _kMaxTabWidth = 225;
   static const double _kAddButtonWidth = 48;
   static const double _kLayoutToggleButtonWidth = 40;
-  static const double _kDetachDragThreshold = 18;
   static const BrowserTabAnimationConfig _kTabAnimationConfig =
       BrowserTabAnimationConfig();
 
   bool _isWindowMaximized = false;
   bool _animateNewTabs = false;
-  final GlobalKey _tabStripViewportKey = GlobalKey();
-  int? _draggingViewId;
-  Offset? _lastGlobalPointerPosition;
 
   @override
   void initState() {
@@ -65,10 +59,6 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar>
       windowManager.addListener(this);
       _refreshWindowState();
     }
-
-    GestureBinding.instance.pointerRouter.addGlobalRoute(
-      _handleGlobalPointerEvent,
-    );
   }
 
   @override
@@ -76,9 +66,6 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar>
     if (Platform.isMacOS || Platform.isLinux || Platform.isWindows) {
       windowManager.removeListener(this);
     }
-    GestureBinding.instance.pointerRouter.removeGlobalRoute(
-      _handleGlobalPointerEvent,
-    );
     super.dispose();
   }
 
@@ -98,63 +85,6 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar>
 
   @override
   void onWindowRestore() => _refreshWindowState();
-
-  void _handleGlobalPointerEvent(PointerEvent event) {
-    if (_draggingViewId == null) return;
-    if (event is PointerMoveEvent ||
-        event is PointerHoverEvent ||
-        event is PointerUpEvent) {
-      _lastGlobalPointerPosition = event.position;
-    }
-  }
-
-  void _handleTabReorderStart(int index, List<LadybirdController> tabs) {
-    if (index < 0 || index >= tabs.length) {
-      _draggingViewId = null;
-      return;
-    }
-    _draggingViewId = tabs[index].viewId;
-  }
-
-  Future<void> _handleTabReorderEnd(List<LadybirdController> tabs) async {
-    if (!Platform.isLinux) {
-      _draggingViewId = null;
-      return;
-    }
-
-    final draggingViewId = _draggingViewId;
-    _draggingViewId = null;
-
-    if (draggingViewId == null) return;
-    if (!tabs.any((tab) => tab.viewId == draggingViewId)) return;
-
-    final pointerPosition = _lastGlobalPointerPosition;
-    if (pointerPosition == null) return;
-
-    final tabStripRect = _tabStripViewportRect();
-    if (tabStripRect == null) return;
-
-    final droppedOutsideVertically =
-        pointerPosition.dy < tabStripRect.top - _kDetachDragThreshold ||
-        pointerPosition.dy > tabStripRect.bottom + _kDetachDragThreshold;
-    if (!droppedOutsideVertically) return;
-
-    await BrowserTabActions.detachTabToNewWindow(
-      ref,
-      context,
-      currentViewId: widget.currentViewId,
-      detachViewId: draggingViewId,
-    );
-  }
-
-  Rect? _tabStripViewportRect() {
-    final renderObject = _tabStripViewportKey.currentContext
-        ?.findRenderObject();
-    if (renderObject is! RenderBox || !renderObject.hasSize) return null;
-
-    final topLeft = renderObject.localToGlobal(Offset.zero);
-    return topLeft & renderObject.size;
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -240,11 +170,6 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar>
                         padding: const EdgeInsets.only(top: 4, bottom: 4),
                         scrollDirection: Axis.horizontal,
                         buildDefaultDragHandles: false,
-                        onReorderStart: (index) =>
-                            _handleTabReorderStart(index, tabs),
-                        onReorderEnd: (_) {
-                          _handleTabReorderEnd(tabs);
-                        },
                         itemBuilder: (context, index) {
                           if (includeAddButton && index == tabs.length) {
                             return ReorderableDragStartListener(
@@ -322,7 +247,6 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar>
                     return Row(
                       children: [
                         SizedBox(
-                          key: _tabStripViewportKey,
                           width: tabViewportWidth,
                           child: buildTabList(includeAddButton: !pinAddButton),
                         ),
