@@ -19,7 +19,6 @@ dependencies:
   riverpod_annotation: ^4.0.2
   go_router: ^17.1.0
   google_fonts: ^8.1.0
-  window_toolbox: ^0.0.7
 
 dev_dependencies:
   flutter_test:

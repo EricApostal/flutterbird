@@ -1,6 +1,5 @@
 // ignore_for_file: invalid_use_of_internal_member
 
-import 'dart:async';
 import 'dart:io';
 
 import 'package:bird_core/bird_core.dart';
@@ -9,18 +8,12 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/src/widgets/_window.dart';
 import 'package:flutterbird/features/browser/screens/detached_tab_window.dart';
-import 'package:flutterbird/features/browser/state/detached_browser_window_session.dart';
 import 'package:go_router/go_router.dart';
 import 'package:ladybird/ladybird.dart';
-import 'package:window_manager/window_manager.dart';
-import 'package:window_toolbox/src/custom_window.dart' as custom_window;
-import 'package:window_toolbox/window_toolbox.dart';
 
 class BrowserTabActions {
-  static final Set<int> _tabsBeingDetached = <int>{};
-  static final Map<DetachedBrowserWindowSession, _DetachedTabWindowSession>
-  _detachedSessions =
-      <DetachedBrowserWindowSession, _DetachedTabWindowSession>{};
+  static final Map<int, _DetachedTabWindowSession> _detachedSessionsByViewId =
+      <int, _DetachedTabWindowSession>{};
 
   static LadybirdController openNewTab(WidgetRef ref, BuildContext context) {
     final controller = ref.read(browserTabControllerProvider.notifier).add();
@@ -33,11 +26,8 @@ class BrowserTabActions {
     BuildContext context, {
     required int currentViewId,
     required int detachViewId,
-    Offset? initialPointerPosition,
-    bool continueDragAfterDetach = false,
   }) async {
     if (!Platform.isLinux) return false;
-    if (_tabsBeingDetached.contains(detachViewId)) return false;
 
     final registry = WindowRegistry.maybeOf(context);
     if (registry == null) return false;
@@ -46,7 +36,7 @@ class BrowserTabActions {
     final detachIndex = tabs.indexWhere((tab) => tab.viewId == detachViewId);
     if (detachIndex < 0 || tabs.length <= 1) return false;
 
-    _tabsBeingDetached.add(detachViewId);
+    if (_detachedSessionsByViewId.containsKey(detachViewId)) return false;
 
     final fallbackViewId = detachViewId == currentViewId
         ? tabs[detachIndex == 0 ? 1 : detachIndex - 1].viewId
@@ -59,195 +49,86 @@ class BrowserTabActions {
     final tabController = ref
         .read(browserTabControllerProvider.notifier)
         .take(detachViewId);
-    if (tabController == null) {
-      _tabsBeingDetached.remove(detachViewId);
-      return false;
-    }
+    if (tabController == null) return false;
 
-    DetachedBrowserWindowSession? detachedSession;
     try {
-      detachedSession = DetachedBrowserWindowSession(initialTab: tabController);
-
-      final opened = _openDetachedWindowSession(
-        registry,
-        detachedSession,
-        initialPointerPosition: initialPointerPosition,
-        continueDragAfterDetach: continueDragAfterDetach,
+      final delegate = _DetachedTabWindowDelegate(
+        onDestroyed: () => _disposeDetachedSession(detachViewId, registry),
       );
-      if (!opened) {
-        throw StateError('Failed to open detached window session');
+
+      final windowController = RegularWindowController(
+        preferredSize: const Size(1040, 760),
+        preferredConstraints: const BoxConstraints(
+          minWidth: 640,
+          minHeight: 480,
+        ),
+        title: _windowTitleFor(tabController),
+        delegate: delegate,
+      );
+
+      void syncWindowTitle() {
+        windowController.setTitle(_windowTitleFor(tabController));
       }
 
-      _tabsBeingDetached.remove(detachViewId);
+      final session = _DetachedTabWindowSession(
+        tabController: tabController,
+        titleListener: syncWindowTitle,
+      );
+
+      tabController.titleNotifier.addListener(syncWindowTitle);
+
+      final entry = WindowEntry(
+        controller: windowController,
+        builder: (context) {
+          return Navigator(
+            onGenerateInitialRoutes: (_, __) {
+              return [
+                MaterialPageRoute<void>(
+                  builder: (_) {
+                    return DetachedTabWindowScreen(controller: tabController);
+                  },
+                ),
+              ];
+            },
+          );
+        },
+      );
+      session.entry = entry;
+
+      _detachedSessionsByViewId[detachViewId] = session;
+      registry.register(entry);
+      windowController.activate();
       return true;
     } catch (_) {
       ref
           .read(browserTabControllerProvider.notifier)
           .insertAt(detachIndex, tabController);
-      detachedSession?.onWindowTitleChanged = null;
-      detachedSession?.onEmpty = null;
-      detachedSession?.dispose();
       if (fallbackViewId != null) {
         context.go('/browser/tab/$detachViewId');
       }
-      _tabsBeingDetached.remove(detachViewId);
       return false;
     }
   }
 
-  static Future<bool> detachTabFromDetachedSessionToNewWindow(
-    BuildContext context, {
-    required DetachedBrowserWindowSession sourceSession,
-    required int detachViewId,
-    Offset? initialPointerPosition,
-    bool continueDragAfterDetach = false,
-  }) async {
-    if (!Platform.isLinux) return false;
-    if (_tabsBeingDetached.contains(detachViewId)) return false;
-
-    final registry = WindowRegistry.maybeOf(context);
-    if (registry == null) return false;
-
-    final tabs = sourceSession.tabs;
-    final detachIndex = tabs.indexWhere((tab) => tab.viewId == detachViewId);
-    if (detachIndex < 0 || tabs.length <= 1) return false;
-
-    _tabsBeingDetached.add(detachViewId);
-
-    final tabController = sourceSession.takeTab(detachViewId);
-    if (tabController == null) {
-      _tabsBeingDetached.remove(detachViewId);
-      return false;
-    }
-
-    DetachedBrowserWindowSession? detachedSession;
-    try {
-      detachedSession = DetachedBrowserWindowSession(initialTab: tabController);
-
-      final opened = _openDetachedWindowSession(
-        registry,
-        detachedSession,
-        initialPointerPosition: initialPointerPosition,
-        continueDragAfterDetach: continueDragAfterDetach,
-      );
-      if (!opened) {
-        throw StateError('Failed to open detached window session');
-      }
-
-      _tabsBeingDetached.remove(detachViewId);
-      return true;
-    } catch (_) {
-      sourceSession.insertTabAt(detachIndex, tabController, select: true);
-      detachedSession?.onWindowTitleChanged = null;
-      detachedSession?.onEmpty = null;
-      detachedSession?.dispose();
-      _tabsBeingDetached.remove(detachViewId);
-      return false;
-    }
+  static String _windowTitleFor(LadybirdController controller) {
+    final title = controller.titleNotifier.value.trim();
+    return title.isEmpty ? 'Tab' : title;
   }
 
-  static bool _openDetachedWindowSession(
-    WindowRegistry registry,
-    DetachedBrowserWindowSession session, {
-    Offset? initialPointerPosition,
-    bool continueDragAfterDetach = false,
-  }) {
-    final delegate = _DetachedTabWindowDelegate(
-      onDestroyed: () => _disposeDetachedSession(session, registry),
-    );
+  static void _disposeDetachedSession(int viewId, WindowRegistry registry) {
+    final session = _detachedSessionsByViewId.remove(viewId);
+    if (session == null) return;
 
-    final windowController = RegularWindowController(
-      preferredSize: const Size(1040, 760),
-      preferredConstraints: const BoxConstraints(minWidth: 640, minHeight: 480),
-      title: session.currentWindowTitle,
-      delegate: delegate,
-    );
-
-    windowController.enableCustomWindow();
-
-    void syncWindowTitle() {
-      windowController.setTitle(session.currentWindowTitle);
+    final entry = session.entry;
+    if (entry != null) {
+      registry.unregister(entry);
     }
 
-    session.onWindowTitleChanged = syncWindowTitle;
-    session.onEmpty = windowController.destroy;
-    syncWindowTitle();
-
-    final entry = WindowEntry(
-      controller: windowController,
-      builder: (context) {
-        return Navigator(
-          onGenerateInitialRoutes: (_, __) {
-            return [
-              MaterialPageRoute<void>(
-                builder: (_) {
-                  return DetachedTabWindowScreen(session: session);
-                },
-              ),
-            ];
-          },
-        );
-      },
-    );
-
-    _detachedSessions[session] = _DetachedTabWindowSession(
-      session: session,
-      entry: entry,
-    );
-    registry.register(entry);
-    windowController.activate();
-
-    if (continueDragAfterDetach && initialPointerPosition != null) {
-      _startCustomWindowMoveDrag(windowController, initialPointerPosition);
+    final titleListener = session.titleListener;
+    if (titleListener != null) {
+      session.tabController.titleNotifier.removeListener(titleListener);
     }
-
-    return true;
-  }
-
-  static void startWindowDragFromTab(
-    BuildContext context, {
-    required Offset globalPointerPosition,
-  }) {
-    final windowController = WindowScope.maybeOf(context);
-    if (windowController is RegularWindowController) {
-      final started = _startCustomWindowMoveDrag(
-        windowController,
-        globalPointerPosition,
-      );
-      if (started) return;
-    }
-
-    if (Platform.isLinux || Platform.isMacOS || Platform.isWindows) {
-      unawaited(windowManager.startDragging());
-    }
-  }
-
-  static void _disposeDetachedSession(
-    DetachedBrowserWindowSession session,
-    WindowRegistry registry,
-  ) {
-    final detachedSession = _detachedSessions.remove(session);
-    if (detachedSession == null) return;
-
-    registry.unregister(detachedSession.entry);
-    detachedSession.session.onWindowTitleChanged = null;
-    detachedSession.session.onEmpty = null;
-    detachedSession.session.dispose();
-  }
-
-  static bool _startCustomWindowMoveDrag(
-    BaseWindowController controller,
-    Offset globalPosition,
-  ) {
-    try {
-      controller.enableCustomWindow();
-      custom_window.CustomWindow.forController(
-        controller,
-      )?.startWindowMoveDrag(globalPosition);
-      return true;
-    } catch (_) {
-      return false;
-    }
+    session.tabController.dispose();
   }
 
   static bool prepareCloseTabNavigation(
@@ -295,10 +176,11 @@ class BrowserTabActions {
 }
 
 class _DetachedTabWindowSession {
-  _DetachedTabWindowSession({required this.session, required this.entry});
+  _DetachedTabWindowSession({required this.tabController, this.titleListener});
 
-  final DetachedBrowserWindowSession session;
-  final WindowEntry entry;
+  final LadybirdController tabController;
+  final VoidCallback? titleListener;
+  WindowEntry? entry;
 }
 
 class _DetachedTabWindowDelegate extends RegularWindowControllerDelegate {

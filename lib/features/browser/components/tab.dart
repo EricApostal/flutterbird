@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:ladybird/ladybird.dart';
 
 enum BrowserTabVariant { horizontal, arcSidebar }
 
@@ -11,8 +10,6 @@ class BrowserTab extends ConsumerStatefulWidget {
   final int viewId;
   final bool selected;
   final void Function() onTabClosed;
-  final VoidCallback? onTabSelected;
-  final LadybirdController? controllerOverride;
   final BrowserTabVariant variant;
   final double minWidth;
   final double? width;
@@ -23,8 +20,6 @@ class BrowserTab extends ConsumerStatefulWidget {
     required this.viewId,
     required this.selected,
     required this.onTabClosed,
-    this.onTabSelected,
-    this.controllerOverride,
     this.variant = BrowserTabVariant.horizontal,
     this.minWidth = 170,
     this.width,
@@ -40,12 +35,7 @@ class _BrowserTabState extends ConsumerState<BrowserTab> {
 
   @override
   Widget build(BuildContext context) {
-    final browserTab =
-        widget.controllerOverride ??
-        ref.watch(browserTabProvider(widget.viewId));
-    if (browserTab == null) {
-      return const SizedBox.shrink();
-    }
+    final browserTab = ref.watch(browserTabProvider(widget.viewId))!;
 
     final theme = Theme.of(context);
     final isSidebarVariant = widget.variant == BrowserTabVariant.arcSidebar;
@@ -85,11 +75,6 @@ class _BrowserTabState extends ConsumerState<BrowserTab> {
           borderRadius: borderRadius,
           onTap: () {
             HapticFeedback.lightImpact();
-            final onTabSelected = widget.onTabSelected;
-            if (onTabSelected != null) {
-              onTabSelected();
-              return;
-            }
             context.go('/browser/tab/${widget.viewId}');
           },
           child: Container(

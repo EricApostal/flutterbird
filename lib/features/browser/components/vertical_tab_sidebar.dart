@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:io';
 
 import 'package:bird_core/bird_core.dart';
@@ -38,8 +37,7 @@ class _BrowserVerticalTabSidebarState
   bool _animateNewTabs = false;
   final GlobalKey _sidebarTabListKey = GlobalKey();
   int? _draggingViewId;
-  bool _isDetachingDraggedTab = false;
-  int? _detachedDuringCurrentDragViewId;
+  Offset? _lastGlobalPointerPosition;
 
   @override
   void initState() {
@@ -77,9 +75,7 @@ class _BrowserVerticalTabSidebarState
     if (event is PointerMoveEvent ||
         event is PointerHoverEvent ||
         event is PointerUpEvent) {
-      if (event is PointerMoveEvent || event is PointerHoverEvent) {
-        _maybeDetachDraggedTab(event.position);
-      }
+      _lastGlobalPointerPosition = event.position;
     }
   }
 
@@ -88,54 +84,37 @@ class _BrowserVerticalTabSidebarState
       _draggingViewId = null;
       return;
     }
-    _detachedDuringCurrentDragViewId = null;
     _draggingViewId = tabs[index].viewId;
   }
 
-  void _handleTabReorderEnd() {
-    _draggingViewId = null;
-    _isDetachingDraggedTab = false;
-    _detachedDuringCurrentDragViewId = null;
-  }
-
-  void _maybeDetachDraggedTab(Offset pointerPosition) {
-    if (!Platform.isLinux) return;
-    if (_isDetachingDraggedTab) return;
-
-    final draggingViewId = _draggingViewId;
-    if (draggingViewId == null) return;
-
-    final tabs = ref.read(browserTabControllerProvider);
-    if (tabs.length <= 1) return;
-    if (!tabs.any((tab) => tab.viewId == draggingViewId)) {
+  Future<void> _handleTabReorderEnd(List<LadybirdController> tabs) async {
+    if (!Platform.isLinux) {
       _draggingViewId = null;
       return;
     }
 
+    final draggingViewId = _draggingViewId;
+    _draggingViewId = null;
+
+    if (draggingViewId == null) return;
+    if (!tabs.any((tab) => tab.viewId == draggingViewId)) return;
+
+    final pointerPosition = _lastGlobalPointerPosition;
+    if (pointerPosition == null) return;
+
     final sidebarRect = _sidebarTabListRect();
     if (sidebarRect == null) return;
 
-    final draggedOutsideHorizontally =
+    final droppedOutsideHorizontally =
         pointerPosition.dx < sidebarRect.left - _kDetachDragThreshold ||
         pointerPosition.dx > sidebarRect.right + _kDetachDragThreshold;
-    if (!draggedOutsideHorizontally) return;
+    if (!droppedOutsideHorizontally) return;
 
-    _isDetachingDraggedTab = true;
-    _detachedDuringCurrentDragViewId = draggingViewId;
-    _draggingViewId = null;
-
-    unawaited(
-      BrowserTabActions.detachTabToNewWindow(
-        ref,
-        context,
-        currentViewId: widget.currentViewId,
-        detachViewId: draggingViewId,
-        initialPointerPosition: pointerPosition,
-        continueDragAfterDetach: true,
-      ).whenComplete(() {
-        if (!mounted) return;
-        _isDetachingDraggedTab = false;
-      }),
+    await BrowserTabActions.detachTabToNewWindow(
+      ref,
+      context,
+      currentViewId: widget.currentViewId,
+      detachViewId: draggingViewId,
     );
   }
 
@@ -199,7 +178,7 @@ class _BrowserVerticalTabSidebarState
               itemCount: tabs.length,
               onReorderStart: (index) => _handleTabReorderStart(index, tabs),
               onReorderEnd: (_) {
-                _handleTabReorderEnd();
+                _handleTabReorderEnd(tabs);
               },
               proxyDecorator:
                   (Widget child, int index, Animation<double> animation) {
@@ -216,15 +195,6 @@ class _BrowserVerticalTabSidebarState
                   index: index,
                   viewId: id,
                   selected: id == widget.currentViewId,
-                  dragEnabled: tabs.length > 1,
-                  onTabPanStart: tabs.length == 1
-                      ? (details) {
-                          BrowserTabActions.startWindowDragFromTab(
-                            context,
-                            globalPointerPosition: details.globalPosition,
-                          );
-                        }
-                      : null,
                   width: _kSidebarWidth - 16,
                   height: _kTabHeight,
                   animateOnMount: _animateNewTabs,
@@ -242,9 +212,6 @@ class _BrowserVerticalTabSidebarState
                 );
               },
               onReorder: (oldIndex, newIndex) {
-                if (_detachedDuringCurrentDragViewId != null) {
-                  return;
-                }
                 if (oldIndex < newIndex) {
                   newIndex -= 1;
                 }
@@ -287,8 +254,6 @@ class _AnimatedSidebarTabItem extends StatefulWidget {
   final int index;
   final int viewId;
   final bool selected;
-  final bool dragEnabled;
-  final GestureDragStartCallback? onTabPanStart;
   final double width;
   final double height;
   final bool animateOnMount;
@@ -300,8 +265,6 @@ class _AnimatedSidebarTabItem extends StatefulWidget {
     required this.index,
     required this.viewId,
     required this.selected,
-    required this.dragEnabled,
-    this.onTabPanStart,
     required this.width,
     required this.height,
     required this.animateOnMount,
@@ -351,7 +314,7 @@ class _AnimatedSidebarTabItemState extends State<_AnimatedSidebarTabItem> {
   Widget build(BuildContext context) {
     return ReorderableDragStartListener(
       index: widget.index,
-      enabled: widget.dragEnabled && _isExpanded && !_isClosing,
+      enabled: _isExpanded && !_isClosing,
       child: ClipRect(
         child: AnimatedContainer(
           duration: _kSidebarTabAnimationDuration,
@@ -364,18 +327,14 @@ class _AnimatedSidebarTabItemState extends State<_AnimatedSidebarTabItem> {
               width: widget.width,
               child: IgnorePointer(
                 ignoring: _isClosing || !_isExpanded,
-                child: GestureDetector(
-                  behavior: HitTestBehavior.translucent,
-                  onPanStart: widget.onTabPanStart,
-                  child: BrowserTab(
-                    viewId: widget.viewId,
-                    selected: widget.selected,
-                    variant: BrowserTabVariant.arcSidebar,
-                    minWidth: widget.width,
-                    width: widget.width,
-                    minHeight: widget.height,
-                    onTabClosed: _handleClose,
-                  ),
+                child: BrowserTab(
+                  viewId: widget.viewId,
+                  selected: widget.selected,
+                  variant: BrowserTabVariant.arcSidebar,
+                  minWidth: widget.width,
+                  width: widget.width,
+                  minHeight: widget.height,
+                  onTabClosed: _handleClose,
                 ),
               ),
             ),
