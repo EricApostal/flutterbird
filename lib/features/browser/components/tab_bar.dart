@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
 
@@ -48,7 +49,8 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar>
   bool _animateNewTabs = false;
   final GlobalKey _tabStripViewportKey = GlobalKey();
   int? _draggingViewId;
-  Offset? _lastGlobalPointerPosition;
+  bool _isDetachingDraggedTab = false;
+  int? _detachedDuringCurrentDragViewId;
 
   @override
   void initState() {
@@ -104,7 +106,9 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar>
     if (event is PointerMoveEvent ||
         event is PointerHoverEvent ||
         event is PointerUpEvent) {
-      _lastGlobalPointerPosition = event.position;
+      if (event is PointerMoveEvent || event is PointerHoverEvent) {
+        _maybeDetachDraggedTab(event.position);
+      }
     }
   }
 
@@ -113,37 +117,54 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar>
       _draggingViewId = null;
       return;
     }
+    _detachedDuringCurrentDragViewId = null;
     _draggingViewId = tabs[index].viewId;
   }
 
-  Future<void> _handleTabReorderEnd(List<LadybirdController> tabs) async {
-    if (!Platform.isLinux) {
+  void _handleTabReorderEnd() {
+    _draggingViewId = null;
+    _isDetachingDraggedTab = false;
+    _detachedDuringCurrentDragViewId = null;
+  }
+
+  void _maybeDetachDraggedTab(Offset pointerPosition) {
+    if (!Platform.isLinux) return;
+    if (_isDetachingDraggedTab) return;
+
+    final draggingViewId = _draggingViewId;
+    if (draggingViewId == null) return;
+
+    final tabs = ref.read(browserTabControllerProvider);
+    if (tabs.length <= 1) return;
+    if (!tabs.any((tab) => tab.viewId == draggingViewId)) {
       _draggingViewId = null;
       return;
     }
 
-    final draggingViewId = _draggingViewId;
-    _draggingViewId = null;
-
-    if (draggingViewId == null) return;
-    if (!tabs.any((tab) => tab.viewId == draggingViewId)) return;
-
-    final pointerPosition = _lastGlobalPointerPosition;
-    if (pointerPosition == null) return;
-
     final tabStripRect = _tabStripViewportRect();
     if (tabStripRect == null) return;
 
-    final droppedOutsideVertically =
+    final draggedOutsideVertically =
         pointerPosition.dy < tabStripRect.top - _kDetachDragThreshold ||
         pointerPosition.dy > tabStripRect.bottom + _kDetachDragThreshold;
-    if (!droppedOutsideVertically) return;
+    if (!draggedOutsideVertically) return;
 
-    await BrowserTabActions.detachTabToNewWindow(
-      ref,
-      context,
-      currentViewId: widget.currentViewId,
-      detachViewId: draggingViewId,
+    _isDetachingDraggedTab = true;
+    _detachedDuringCurrentDragViewId = draggingViewId;
+    _draggingViewId = null;
+
+    unawaited(
+      BrowserTabActions.detachTabToNewWindow(
+        ref,
+        context,
+        currentViewId: widget.currentViewId,
+        detachViewId: draggingViewId,
+        initialPointerPosition: pointerPosition,
+        continueDragAfterDetach: true,
+      ).whenComplete(() {
+        if (!mounted) return;
+        _isDetachingDraggedTab = false;
+      }),
     );
   }
 
@@ -243,7 +264,7 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar>
                         onReorderStart: (index) =>
                             _handleTabReorderStart(index, tabs),
                         onReorderEnd: (_) {
-                          _handleTabReorderEnd(tabs);
+                          _handleTabReorderEnd();
                         },
                         itemBuilder: (context, index) {
                           if (includeAddButton && index == tabs.length) {
@@ -272,6 +293,16 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar>
                             selected: id == widget.currentViewId,
                             minWidth: _kMinTabWidth,
                             width: adaptiveTabWidth,
+                            dragEnabled: tabs.length > 1,
+                            onTabPanStart: tabs.length == 1
+                                ? (details) {
+                                    BrowserTabActions.startWindowDragFromTab(
+                                      context,
+                                      globalPointerPosition:
+                                          details.globalPosition,
+                                    );
+                                  }
+                                : null,
                             animateOnMount: _animateNewTabs,
                             animationConfig: _kTabAnimationConfig,
                             onCloseRequested: () {
@@ -301,6 +332,9 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar>
                             },
                         itemCount: tabs.length + (includeAddButton ? 1 : 0),
                         onReorder: (oldIndex, newIndex) {
+                          if (_detachedDuringCurrentDragViewId != null) {
+                            return;
+                          }
                           if (includeAddButton && oldIndex == tabs.length) {
                             return;
                           }
@@ -365,6 +399,8 @@ class _AnimatedBrowserTabItem extends StatefulWidget {
   final bool selected;
   final double minWidth;
   final double width;
+  final bool dragEnabled;
+  final GestureDragStartCallback? onTabPanStart;
   final bool animateOnMount;
   final BrowserTabAnimationConfig animationConfig;
   final bool Function() onCloseRequested;
@@ -377,6 +413,8 @@ class _AnimatedBrowserTabItem extends StatefulWidget {
     required this.selected,
     required this.minWidth,
     required this.width,
+    required this.dragEnabled,
+    this.onTabPanStart,
     required this.animateOnMount,
     required this.animationConfig,
     required this.onCloseRequested,
@@ -425,7 +463,7 @@ class _AnimatedBrowserTabItemState extends State<_AnimatedBrowserTabItem> {
   Widget build(BuildContext context) {
     return ReorderableDragStartListener(
       index: widget.index,
-      enabled: _isExpanded && !_isClosing,
+      enabled: widget.dragEnabled && _isExpanded && !_isClosing,
       child: ClipRect(
         child: AnimatedContainer(
           duration: widget.animationConfig.sizeDuration,
@@ -437,12 +475,16 @@ class _AnimatedBrowserTabItemState extends State<_AnimatedBrowserTabItem> {
               width: widget.width,
               child: IgnorePointer(
                 ignoring: _isClosing || !_isExpanded,
-                child: BrowserTab(
-                  viewId: widget.viewId,
-                  selected: widget.selected,
-                  minWidth: widget.minWidth,
-                  width: widget.width,
-                  onTabClosed: _handleClose,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.translucent,
+                  onPanStart: widget.onTabPanStart,
+                  child: BrowserTab(
+                    viewId: widget.viewId,
+                    selected: widget.selected,
+                    minWidth: widget.minWidth,
+                    width: widget.width,
+                    onTabClosed: _handleClose,
+                  ),
                 ),
               ),
             ),
