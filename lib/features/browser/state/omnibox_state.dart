@@ -53,9 +53,31 @@ class BrowserOmniboxState {
 
 @Riverpod(keepAlive: true)
 class BrowserOmnibox extends _$BrowserOmnibox {
+  static const String defaultSearchEngineLabel = 'DuckDuckGo';
+  static const String _defaultSearchEngineHost = 'duckduckgo.com';
+  static const String _defaultSearchEngineUrl =
+      'https://$_defaultSearchEngineHost/';
+
   @override
   BrowserOmniboxState build() {
     return const BrowserOmniboxState();
+  }
+
+  bool isDefaultSearchHome(String inputUrl) {
+    final value = inputUrl.trim();
+    if (value.isEmpty) return false;
+
+    final parsed = Uri.tryParse(value);
+    if (parsed == null || !parsed.hasScheme) return false;
+
+    final host = parsed.host.toLowerCase();
+    final isDefaultHost =
+        host == _defaultSearchEngineHost ||
+        host == 'www.$_defaultSearchEngineHost';
+    if (!isDefaultHost) return false;
+
+    final hasRootPath = parsed.path.isEmpty || parsed.path == '/';
+    return hasRootPath && parsed.query.isEmpty && parsed.fragment.isEmpty;
   }
 
   String normalizeUrl(String input) {
@@ -87,7 +109,7 @@ class BrowserOmnibox extends _$BrowserOmnibox {
     }
 
     final query = Uri.encodeQueryComponent(value);
-    return 'https://duckduckgo.com/?q=$query';
+    return '$_defaultSearchEngineUrl?q=$query';
   }
 
   bool isBookmarked(String url) {
@@ -220,7 +242,7 @@ class BrowserOmnibox extends _$BrowserOmnibox {
       items.add(
         OmniboxSuggestion(
           type: OmniboxSuggestionType.searchAction,
-          title: 'Search DuckDuckGo for "$query"',
+          title: 'Search $defaultSearchEngineLabel for "$query"',
           value: query,
           subtitle: 'Search suggestion',
         ),

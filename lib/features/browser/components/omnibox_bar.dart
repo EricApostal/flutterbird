@@ -16,13 +16,16 @@ class BrowserOmniboxBar extends ConsumerStatefulWidget {
 
 class _BrowserOmniboxBarState extends ConsumerState<BrowserOmniboxBar> {
   final FocusNode _omniboxFocusNode = FocusNode();
+  final TextEditingController _omniboxTextController = TextEditingController();
   LadybirdController? _trackedTabController;
   bool _suppressTrackedTextSync = false;
+  final Set<int> _hideDefaultSearchHomeForTabs = <int>{};
 
   @override
   void initState() {
     super.initState();
     _omniboxFocusNode.addListener(_onOmniboxFocusChanged);
+    _omniboxTextController.addListener(_onTrackedTextChanged);
     _syncTrackedTabController(widget.currentTabController);
   }
 
@@ -37,6 +40,8 @@ class _BrowserOmniboxBarState extends ConsumerState<BrowserOmniboxBar> {
   @override
   void dispose() {
     _syncTrackedTabController(null);
+    _omniboxTextController.removeListener(_onTrackedTextChanged);
+    _omniboxTextController.dispose();
     _omniboxFocusNode.removeListener(_onOmniboxFocusChanged);
     _omniboxFocusNode.dispose();
     super.dispose();
@@ -51,13 +56,17 @@ class _BrowserOmniboxBarState extends ConsumerState<BrowserOmniboxBar> {
     if (_trackedTabController == controller) return;
 
     _trackedTabController?.urlNotifier.removeListener(_onTrackedUrlChanged);
-    _trackedTabController?.textController.removeListener(_onTrackedTextChanged);
     _trackedTabController = controller;
 
     if (controller == null) return;
 
+    if (!controller.hasNavigatedInitial) {
+      _hideDefaultSearchHomeForTabs.add(controller.viewId);
+      _focusOmniboxForNewTab(controller);
+    }
+
     controller.urlNotifier.addListener(_onTrackedUrlChanged);
-    controller.textController.addListener(_onTrackedTextChanged);
+    _syncOmniboxTextFromControllerUrl(controller);
     final hasBookmarks = ref
         .read(browserOmniboxProvider.select((value) => value.bookmarks))
         .isNotEmpty;
@@ -71,11 +80,58 @@ class _BrowserOmniboxBarState extends ConsumerState<BrowserOmniboxBar> {
   void _onTrackedUrlChanged() {
     final controller = _trackedTabController;
     if (controller == null) return;
+    _syncHiddenDefaultHomeState(controller);
+    _syncOmniboxTextFromControllerUrl(controller);
     _scheduleSyncEngineOmnibox(
       controller,
       refreshBookmarks: false,
       refreshHistory: true,
     );
+  }
+
+  void _setOmniboxText(String value) {
+    if (_omniboxTextController.text == value) return;
+    _suppressTrackedTextSync = true;
+    _omniboxTextController.value = TextEditingValue(
+      text: value,
+      selection: TextSelection.collapsed(offset: value.length),
+    );
+    _suppressTrackedTextSync = false;
+  }
+
+  void _syncOmniboxTextFromControllerUrl(LadybirdController controller) {
+    final omnibox = ref.read(browserOmniboxProvider.notifier);
+    final currentUrl = controller.urlNotifier.value;
+    final shouldHideDefaultSearchHome =
+        _hideDefaultSearchHomeForTabs.contains(controller.viewId) &&
+        omnibox.isDefaultSearchHome(currentUrl);
+    final displayText = shouldHideDefaultSearchHome ? '' : currentUrl;
+    _setOmniboxText(displayText);
+  }
+
+  void _focusOmniboxForNewTab(LadybirdController controller) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _trackedTabController != controller) return;
+      _omniboxFocusNode.requestFocus();
+
+      final text = _omniboxTextController.text;
+      _omniboxTextController.selection = TextSelection(
+        baseOffset: 0,
+        extentOffset: text.length,
+      );
+    });
+  }
+
+  void _syncHiddenDefaultHomeState(LadybirdController controller) {
+    if (!_hideDefaultSearchHomeForTabs.contains(controller.viewId)) return;
+
+    final currentUrl = controller.urlNotifier.value;
+    if (currentUrl.trim().isEmpty) return;
+
+    final omnibox = ref.read(browserOmniboxProvider.notifier);
+    if (!omnibox.isDefaultSearchHome(currentUrl)) {
+      _hideDefaultSearchHomeForTabs.remove(controller.viewId);
+    }
   }
 
   void _onTrackedTextChanged() {
@@ -103,7 +159,7 @@ class _BrowserOmniboxBarState extends ConsumerState<BrowserOmniboxBar> {
       if (refreshHistory) {
         omnibox.refreshHistorySuggestionsFromEngine(
           controller,
-          controller.textController.text,
+          _omniboxTextController.text,
         );
       }
     });
@@ -157,6 +213,8 @@ class _BrowserOmniboxBarState extends ConsumerState<BrowserOmniboxBar> {
   }
 
   void _openBookmark(LadybirdController currentTabController, String url) {
+    _hideDefaultSearchHomeForTabs.remove(currentTabController.viewId);
+    _setOmniboxText(url);
     currentTabController.navigate(url);
   }
 
@@ -231,6 +289,9 @@ class _BrowserOmniboxBarState extends ConsumerState<BrowserOmniboxBar> {
     final target = omnibox.buildNavigationTarget(rawInput);
     if (target.isEmpty) return;
 
+    _omniboxFocusNode.unfocus();
+    _hideDefaultSearchHomeForTabs.remove(currentTabController.viewId);
+    _setOmniboxText(target);
     currentTabController.navigate(target);
   }
 
@@ -247,6 +308,9 @@ class _BrowserOmniboxBarState extends ConsumerState<BrowserOmniboxBar> {
 
     if (target.isEmpty) return;
 
+    _omniboxFocusNode.unfocus();
+    _hideDefaultSearchHomeForTabs.remove(currentTabController.viewId);
+    _setOmniboxText(target);
     currentTabController.navigate(target);
   }
 
@@ -486,16 +550,8 @@ class _BrowserOmniboxBarState extends ConsumerState<BrowserOmniboxBar> {
                   child: ValueListenableBuilder<String>(
                     valueListenable: currentTabController.urlNotifier,
                     builder: (context, url, child) {
-                      if (currentTabController.textController.text != url &&
-                          !_omniboxFocusNode.hasFocus) {
-                        _suppressTrackedTextSync = true;
-                        currentTabController.textController.text = url;
-                        _suppressTrackedTextSync = false;
-                      }
-
                       return RawAutocomplete<OmniboxSuggestion>(
-                        textEditingController:
-                            currentTabController.textController,
+                        textEditingController: _omniboxTextController,
                         focusNode: _omniboxFocusNode,
                         displayStringForOption: (option) => option.value,
                         optionsBuilder: (textEditingValue) {

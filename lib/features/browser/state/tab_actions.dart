@@ -13,6 +13,21 @@ class BrowserTabActions {
     return controller;
   }
 
+  static LadybirdController openExistingTab(
+    WidgetRef ref,
+    BuildContext context,
+    int existingViewId, {
+    bool activate = true,
+  }) {
+    final controller = ref
+        .read(browserTabControllerProvider.notifier)
+        .addExisting(existingViewId);
+    if (activate) {
+      context.go('/browser/tab/${controller.viewId}');
+    }
+    return controller;
+  }
+
   static bool prepareCloseTabNavigation(
     BuildContext context, {
     required int currentViewId,

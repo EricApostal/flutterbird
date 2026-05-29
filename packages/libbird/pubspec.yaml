@@ -12,6 +12,7 @@ environment:
 
 dependencies:
   code_assets: ^1.0.0
+  dart_mappable: ^4.8.0
   data_assets: ^0.19.6
   ffi: ^2.2.0
   flutter:
@@ -26,6 +27,8 @@ dev_dependencies:
     sdk: flutter
   flutter_lints: ^6.0.0
   ffigen: ^12.0.0
+  build_runner: ^2.15.0
+  dart_mappable_builder: ^4.9.0
 
 flutter:
   config:

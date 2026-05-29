@@ -1,12 +1,14 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter/gestures.dart';
 import 'package:ladybird/ladybird.dart';
+
 import 'keys.dart';
 
 class LadybirdView extends StatefulWidget {
   final LadybirdController controller;
+
   const LadybirdView({super.key, required this.controller});
 
   @override
@@ -110,6 +112,10 @@ class _LadybirdViewState extends State<LadybirdView>
     if (!widget.controller.hasNavigatedInitial) {
       widget.controller.hasNavigatedInitial = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
+        final currentUrl = widget.controller.urlNotifier.value.trim();
+        if (widget.controller.hasStartedNavigation || currentUrl.isNotEmpty) {
+          return;
+        }
         widget.controller.navigate(widget.controller.initialUrl);
       });
     }
@@ -213,8 +219,8 @@ class _LadybirdViewState extends State<LadybirdView>
     _momentumTicker?.stop();
     _lastPointerPos = event.localPosition;
 
-    int now = DateTime.now().millisecondsSinceEpoch;
-    int dt = now - _lastPanTime;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final dt = now - _lastPanTime;
 
     if (dt > 0 && dt < 100) {
       _momentumVelocity = event.panDelta;
@@ -240,8 +246,8 @@ class _LadybirdViewState extends State<LadybirdView>
     int type = event is KeyDownEvent ? 0 : 1;
     if (event is KeyRepeatEvent) type = 0;
 
-    int keycode = getLadybirdKeyCode(event.logicalKey);
-    int codePoint = event.character?.codeUnitAt(0) ?? 0;
+    final keycode = getLadybirdKeyCode(event.logicalKey);
+    final codePoint = event.character?.codeUnitAt(0) ?? 0;
 
     widget.controller.dispatchKeyEvent(
       type: type,
@@ -272,6 +278,7 @@ class _LadybirdViewState extends State<LadybirdView>
     if (_textureId == null) {
       return const Center(child: CircularProgressIndicator());
     }
+
     return SizedBox.expand(
       child: LayoutBuilder(
         builder: (context, constraints) {
@@ -282,7 +289,6 @@ class _LadybirdViewState extends State<LadybirdView>
           final paddedHeight = widget.controller.getSurfaceHeight() / density;
 
           return OverflowBox(
-            // color: Colors.red,
             alignment: Alignment.topLeft,
             minWidth: constraints.maxWidth,
             minHeight: constraints.maxHeight,
@@ -293,15 +299,8 @@ class _LadybirdViewState extends State<LadybirdView>
                 ? paddedHeight
                 : constraints.maxHeight,
             child: SizedBox(
-              // width: displayWidth / 2,
-              // height: displayHeight / 2,
               child: MouseRegion(
                 cursor: widget.controller.mouseCursorNotifier.value,
-                onEnter: (_) {
-                  // if (!_focusNode.hasFocus) {
-                  //   _focusNode.requestFocus();
-                  // }
-                },
                 child: Focus(
                   focusNode: _focusNode,
                   autofocus: true,
@@ -323,7 +322,6 @@ class _LadybirdViewState extends State<LadybirdView>
                       }
                     },
                     child: Texture(
-                      filterQuality: .high,
                       key: ValueKey(_textureId),
                       textureId: _textureId!,
                     ),

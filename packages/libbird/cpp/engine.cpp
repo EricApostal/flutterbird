@@ -17,6 +17,7 @@
 #endif
 
 #include <AK/BitCast.h>
+#include <AK/HashMap.h>
 #include <AK/JsonArray.h>
 #include <AK/JsonObject.h>
 #include <AK/LexicalPath.h>
@@ -118,7 +119,13 @@ public:
   CrossSiteNavigationCallback m_cross_site_navigation_callback = nullptr;
   LoadingStateChangeCallback m_loading_state_change_callback = nullptr;
   CursorChangeCallback m_cursor_change_callback = nullptr;
+  ContextMenuRequestCallback m_context_menu_request_callback = nullptr;
+  NewWebViewCallback m_new_web_view_callback = nullptr;
   bool m_is_loading{false};
+
+  std::mutex m_context_menu_mutex;
+  HashMap<int, WeakPtr<WebView::Action>> m_context_menu_actions;
+  int m_next_context_menu_action_token{1};
 
   static int to_cursor_type_for_flutter(Gfx::Cursor const &cursor) {
     return cursor.visit(
@@ -130,6 +137,115 @@ public:
           // a standard fallback.
           return static_cast<int>(Gfx::StandardCursor::Arrow);
         });
+  }
+
+  int register_context_menu_action(NonnullRefPtr<WebView::Action> const &action) {
+    int token = m_next_context_menu_action_token++;
+    m_context_menu_actions.set(token, action->make_weak_ptr());
+    return token;
+  }
+
+  JsonArray serialize_context_menu_items(WebView::Menu const &menu) {
+    JsonArray items;
+
+    for (auto const &menu_item : menu.items()) {
+      menu_item.visit(
+          [&](NonnullRefPtr<WebView::Action> const &action) {
+            if (!action->visible())
+              return;
+
+            JsonObject item;
+            item.set("kind"sv, "action"sv);
+            item.set("token"sv, register_context_menu_action(action));
+            item.set("text"sv, action->text());
+            item.set("enabled"sv, action->enabled());
+            item.set("checkable"sv, action->is_checkable());
+            if (action->is_checkable())
+              item.set("checked"sv, action->checked());
+            items.must_append(move(item));
+          },
+          [&](NonnullRefPtr<WebView::Menu> const &submenu) {
+            if (!submenu->visible())
+              return;
+
+            JsonObject item;
+            item.set("kind"sv, "submenu"sv);
+            item.set("text"sv, submenu->title());
+            item.set("items"sv,
+                     JsonValue(serialize_context_menu_items(*submenu)));
+            items.must_append(move(item));
+          },
+          [&](WebView::Separator) {
+            JsonObject item;
+            item.set("kind"sv, "separator"sv);
+            items.must_append(move(item));
+          });
+    }
+
+    return items;
+  }
+
+  void dispatch_context_menu_request(StringView type, Gfx::IntPoint position,
+                                     WebView::Menu &menu) {
+    ContextMenuRequestCallback callback = nullptr;
+    char *payload = nullptr;
+
+    {
+      std::lock_guard lock(m_context_menu_mutex);
+      m_context_menu_actions.clear();
+
+      JsonObject request;
+      request.set("type"sv, type);
+      request.set("x"sv, position.x());
+      request.set("y"sv, position.y());
+      request.set("items"sv, JsonValue(serialize_context_menu_items(menu)));
+
+      auto serialized = JsonValue(move(request)).serialized();
+      auto bytes = serialized.to_byte_string();
+      payload = strdup(bytes.characters());
+      callback = m_context_menu_request_callback;
+    }
+
+    if (!payload)
+      return;
+
+    if (callback)
+      callback(m_view_id, payload);
+    else
+      free(payload);
+  }
+
+  void set_context_menu_request_callback(
+      ContextMenuRequestCallback callback) {
+    std::lock_guard lock(m_context_menu_mutex);
+    m_context_menu_request_callback = callback;
+    if (!callback)
+      m_context_menu_actions.clear();
+  }
+
+  String create_child_web_view_handle(Optional<u64> page_index,
+                                      int &new_view_id);
+
+  bool activate_context_menu_action(int action_token) {
+    WeakPtr<WebView::Action> weak_action;
+
+    {
+      std::lock_guard lock(m_context_menu_mutex);
+      auto it = m_context_menu_actions.find(action_token);
+      if (it == m_context_menu_actions.end())
+        return false;
+      weak_action = it->value;
+    }
+
+    auto action = weak_action.strong_ref();
+    if (!action || !action->visible() || !action->enabled())
+      return false;
+
+    action->activate();
+
+    std::lock_guard lock(m_context_menu_mutex);
+    m_context_menu_actions.clear();
+    return true;
   }
 
   void update_loading_state(bool is_loading) {
@@ -314,6 +430,47 @@ public:
       if (m_cursor_change_callback)
         m_cursor_change_callback(to_cursor_type_for_flutter(cursor));
     };
+
+    on_new_web_view = [this](Web::HTML::ActivateTab activate_tab,
+                             Web::HTML::WebViewHints,
+                             Optional<u64> page_index) -> String {
+      int new_view_id = -1;
+      auto handle = create_child_web_view_handle(page_index, new_view_id);
+      if (handle.is_empty())
+        return {};
+
+      NewWebViewCallback callback = nullptr;
+      {
+        std::lock_guard lock(m_info_mutex);
+        callback = m_new_web_view_callback;
+      }
+
+      if (callback)
+        callback(new_view_id, activate_tab == Web::HTML::ActivateTab::Yes);
+
+      return handle;
+    };
+
+    page_context_menu().on_activation =
+        [this](Gfx::IntPoint position) {
+          dispatch_context_menu_request("page"sv, position,
+                                        page_context_menu());
+        };
+    link_context_menu().on_activation =
+        [this](Gfx::IntPoint position) {
+          dispatch_context_menu_request("link"sv, position,
+                                        link_context_menu());
+        };
+    image_context_menu().on_activation =
+        [this](Gfx::IntPoint position) {
+          dispatch_context_menu_request("image"sv, position,
+                                        image_context_menu());
+        };
+    media_context_menu().on_activation =
+        [this](Gfx::IntPoint position) {
+          dispatch_context_menu_request("media"sv, position,
+                                        media_context_menu());
+        };
   }
 
   void resize(int width, int height) {
@@ -324,6 +481,7 @@ public:
     client().async_set_viewport(m_client_state.page_index, size,
                                 m_device_pixel_ratio, is_fullscreen());
     client().async_set_window_size(m_client_state.page_index, size);
+    WebView::Application::the().update_compositor_viewport(client().compositor_context_id_for_page(m_client_state.page_index), viewport_size().to_type<int>(), Web::Compositor::WindowResizingInProgress::Yes);
   }
 
   void update_zoom_scale() {
@@ -381,6 +539,25 @@ private:
 #include <map>
 // View registry — owns all FlutterViewImpl instances.
 static std::map<int, AK::OwnPtr<FlutterViewImpl>> g_web_views;
+
+String FlutterViewImpl::create_child_web_view_handle(Optional<u64> page_index,
+                                                     int &new_view_id) {
+  new_view_id = -1;
+
+  auto created_view = FlutterViewImpl::create(g_next_view_id++).release_value();
+  if (page_index.has_value()) {
+    created_view->m_client_state.client = client();
+    created_view->m_client_state.page_index = page_index.value();
+    created_view->initialize_client(CreateNewClient::No);
+  } else {
+    created_view->initialize_client(CreateNewClient::Yes);
+  }
+
+  new_view_id = created_view->m_view_id;
+  auto handle = created_view->handle();
+  g_web_views[new_view_id] = std::move(created_view);
+  return handle;
+}
 
 class FlutterApplication : public WebView::Application {
   WEB_VIEW_APPLICATION(FlutterApplication)
@@ -757,16 +934,34 @@ int get_iosurface_height(int view_id) {
 void set_url_change_callback(int view_id, UrlChangeCallback callback) {
   auto it = g_web_views.find(view_id);
   if (it != g_web_views.end()) {
-    std::lock_guard lock(it->second->m_info_mutex);
-    it->second->m_url_change_callback = callback;
+    ByteString current_url;
+    bool has_valid_initial_url = false;
+    {
+      std::lock_guard lock(it->second->m_info_mutex);
+      it->second->m_url_change_callback = callback;
+      auto const& url = it->second->url();
+      has_valid_initial_url = !url.scheme().is_empty();
+      if (has_valid_initial_url)
+        current_url = url.to_string().to_byte_string();
+    }
+
+    if (callback && has_valid_initial_url)
+      callback(strdup(current_url.characters()));
   }
 }
 
 void set_title_change_callback(int view_id, TitleChangeCallback callback) {
   auto it = g_web_views.find(view_id);
   if (it != g_web_views.end()) {
-    std::lock_guard lock(it->second->m_info_mutex);
-    it->second->m_title_change_callback = callback;
+    ByteString current_title;
+    {
+      std::lock_guard lock(it->second->m_info_mutex);
+      it->second->m_title_change_callback = callback;
+      current_title = it->second->title().to_utf8().to_byte_string();
+    }
+
+    if (callback)
+      callback(strdup(current_title.characters()));
   }
 }
 
@@ -911,6 +1106,28 @@ void set_cursor_change_callback(int view_id, CursorChangeCallback callback) {
     std::lock_guard lock(it->second->m_info_mutex);
     it->second->m_cursor_change_callback = callback;
   }
+}
+
+void set_context_menu_request_callback(int view_id,
+                                       ContextMenuRequestCallback callback) {
+  auto it = g_web_views.find(view_id);
+  if (it != g_web_views.end())
+    it->second->set_context_menu_request_callback(callback);
+}
+
+void set_new_web_view_callback(int view_id, NewWebViewCallback callback) {
+  auto it = g_web_views.find(view_id);
+  if (it != g_web_views.end()) {
+    std::lock_guard lock(it->second->m_info_mutex);
+    it->second->m_new_web_view_callback = callback;
+  }
+}
+
+bool activate_context_menu_action(int view_id, int action_token) {
+  auto it = g_web_views.find(view_id);
+  if (it == g_web_views.end())
+    return false;
+  return it->second->activate_context_menu_action(action_token);
 }
 
 bool is_tab_loading(int view_id) {

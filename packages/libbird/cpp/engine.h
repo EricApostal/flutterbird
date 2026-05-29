@@ -77,6 +77,8 @@ typedef void (*FaviconChangeCallback)(const uint8_t *, int, int);
 typedef void (*CrossSiteNavigationCallback)(int view_id);
 typedef void (*LoadingStateChangeCallback)(bool is_loading);
 typedef void (*CursorChangeCallback)(int cursor_type);
+typedef void (*ContextMenuRequestCallback)(int view_id, char *menu_json);
+typedef void (*NewWebViewCallback)(int new_view_id, bool activate_tab);
 
 LADYBIRD_API void set_url_change_callback(int view_id,
                                           UrlChangeCallback callback);
@@ -92,6 +94,11 @@ set_loading_state_change_callback(int view_id,
                                   LoadingStateChangeCallback callback);
 LADYBIRD_API void set_cursor_change_callback(int view_id,
                                              CursorChangeCallback callback);
+LADYBIRD_API void set_context_menu_request_callback(
+  int view_id, ContextMenuRequestCallback callback);
+LADYBIRD_API void set_new_web_view_callback(int view_id,
+                                            NewWebViewCallback callback);
+LADYBIRD_API bool activate_context_menu_action(int view_id, int action_token);
 LADYBIRD_API bool is_tab_loading(int view_id);
 
 LADYBIRD_API void tick_ladybird();

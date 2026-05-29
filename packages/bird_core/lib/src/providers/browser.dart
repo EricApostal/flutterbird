@@ -8,6 +8,12 @@ part 'browser.g.dart';
 class BrowserTabController extends _$BrowserTabController {
   @override
   List<LadybirdController> build() {
+    ref.onDispose(() {
+      for (final controller in state) {
+        controller.dispose();
+      }
+    });
+
     return [LadybirdController()];
   }
 
@@ -20,9 +26,25 @@ class BrowserTabController extends _$BrowserTabController {
     return controller;
   }
 
+  LadybirdController addExisting(int viewId) {
+    final existing = state.firstWhereOrNull((e) => e.viewId == viewId);
+    if (existing != null) return existing;
+
+    final controller = LadybirdController.fromExistingViewId(viewId: viewId);
+    final newState = state.toList();
+    newState.add(controller);
+    state = newState;
+
+    return controller;
+  }
+
   void remove(int viewId) {
     final newState = state.toList();
-    newState.removeWhere((e) => e.viewId == viewId);
+    final index = newState.indexWhere((e) => e.viewId == viewId);
+    if (index < 0) return;
+
+    final controller = newState.removeAt(index);
+    controller.dispose();
     state = newState;
   }
 

@@ -1,9 +1,11 @@
+import 'dart:convert';
 import 'dart:ffi' as ffi;
 import 'package:ffi/ffi.dart';
 import 'package:flutter/material.dart';
 
 import 'package:flutter/services.dart';
 import 'package:ladybird/src/generated/engine_bindings.g.dart';
+import 'package:ladybird/src/models/context_menu.dart';
 import 'dart:ui' as ui;
 
 class LadybirdController {
@@ -15,7 +17,7 @@ class LadybirdController {
   late final int _viewId;
   final String initialUrl;
   bool hasNavigatedInitial = false;
-  final TextEditingController textController = TextEditingController();
+  bool hasStartedNavigation = false;
 
   late final ffi.NativeCallable<ffi.Void Function()> _resizeCallback;
   late final ffi.NativeCallable<ffi.Void Function(ffi.Pointer<ffi.Char>)>
@@ -32,6 +34,12 @@ class LadybirdController {
   _loadingStateChangeCallback;
   late final ffi.NativeCallable<ffi.Void Function(ffi.Int)>
   _cursorChangeCallback;
+  late final ffi.NativeCallable<
+    ffi.Void Function(ffi.Int, ffi.Pointer<ffi.Char>)
+  >
+  _contextMenuRequestCallback;
+  late final ffi.NativeCallable<ffi.Void Function(ffi.Int, ffi.Bool)>
+  _newWebViewCallback;
 
   static ffi.NativeCallable<DisplayDownloadConfirmationDialogCallbackFunction>?
   _displayDownloadConfirmationDialogCallback;
@@ -44,6 +52,8 @@ class LadybirdController {
 
   void Function()? onResize;
   void Function()? onCrossSiteNavigation;
+  void Function(LadybirdContextMenuRequest request)? onContextMenuRequest;
+  void Function(int newViewId, bool activateTab)? onNewWebView;
 
   final ValueNotifier<String> urlNotifier = ValueNotifier("");
   final ValueNotifier<String> titleNotifier = ValueNotifier("Tab");
@@ -59,7 +69,18 @@ class LadybirdController {
 
   LadybirdController({this.initialUrl = "https://www.duckduckgo.com/"}) {
     _bindings = LadybirdBindings(ffi.DynamicLibrary.process());
+    _initialize();
+  }
 
+  LadybirdController.fromExistingViewId({
+    required int viewId,
+    this.initialUrl = "https://www.duckduckgo.com/",
+  }) {
+    _bindings = LadybirdBindings(ffi.DynamicLibrary.process());
+    _initialize(existingViewId: viewId);
+  }
+
+  void _initialize({int? existingViewId}) {
     if (_displayErrorDialogCallback == null) {
       _bindings.set_ask_user_for_download_path_callback(
         ffi.Pointer.fromFunction(_onAskUserForDownloadPath),
@@ -84,7 +105,13 @@ class LadybirdController {
 
     _bindings.init_ladybird();
 
-    _viewId = _bindings.create_web_view();
+    _viewId = existingViewId ?? _bindings.create_web_view();
+    if (existingViewId != null) {
+      // This view is already created and navigated by the native on_new_web_view
+      // flow, so do not run Flutter's default initial-url navigation.
+      hasNavigatedInitial = true;
+      hasStartedNavigation = true;
+    }
 
     _resizeCallback = ffi.NativeCallable<ffi.Void Function()>.listener(
       _onResize,
@@ -145,6 +172,24 @@ class LadybirdController {
       _cursorChangeCallback.nativeFunction,
     );
 
+    _contextMenuRequestCallback =
+        ffi.NativeCallable<
+          ffi.Void Function(ffi.Int, ffi.Pointer<ffi.Char>)
+        >.listener(_onContextMenuRequest);
+    _bindings.set_context_menu_request_callback(
+      _viewId,
+      _contextMenuRequestCallback.nativeFunction,
+    );
+
+    _newWebViewCallback =
+        ffi.NativeCallable<ffi.Void Function(ffi.Int, ffi.Bool)>.listener(
+          _onNewWebView,
+        );
+    _bindings.set_new_web_view_callback(
+      _viewId,
+      _newWebViewCallback.nativeFunction,
+    );
+
     _refreshNavigationState();
 
     // _bindings.set_zoom(_viewId, 1.0);
@@ -154,7 +199,10 @@ class LadybirdController {
   void _onUrlChange(ffi.Pointer<ffi.Char> urlPointer) {
     if (urlPointer != ffi.nullptr) {
       final url = urlPointer.cast<Utf8>().toDartString();
-      textController.text = url;
+      if (url == ':') {
+        malloc.free(urlPointer);
+        return;
+      }
       urlNotifier.value = url;
       _refreshNavigationState();
       malloc.free(urlPointer);
@@ -221,6 +269,30 @@ class LadybirdController {
     }
   }
 
+  void _onContextMenuRequest(int viewId, ffi.Pointer<ffi.Char> menuJson) {
+    if (menuJson == ffi.nullptr) return;
+
+    try {
+      if (viewId != _viewId) return;
+
+      final jsonString = menuJson.cast<Utf8>().toDartString();
+      final decoded = jsonDecode(jsonString);
+      if (decoded is! Map) return;
+
+      final request = LadybirdContextMenuRequestMapper.fromMap(
+        Map<String, dynamic>.from(decoded),
+      );
+      onContextMenuRequest?.call(request);
+    } finally {
+      malloc.free(menuJson);
+    }
+  }
+
+  void _onNewWebView(int newViewId, bool activateTab) {
+    if (newViewId <= 0) return;
+    onNewWebView?.call(newViewId, activateTab);
+  }
+
   MouseCursor _mapNativeCursor(int cursorType) {
     switch (cursorType) {
       case 0: // None
@@ -276,11 +348,12 @@ class LadybirdController {
 
   void navigate(String url) {
     String parsedUrl = url;
+    hasStartedNavigation = true;
+    print("navigating to url: $url");
     // todo: more reliable system for other formats, such as file://
     // if (!url.startsWith("http")) {
     //   parsedUrl = "https://$url";
     // }
-    textController.text = parsedUrl;
     final ffi.Pointer<Utf8> charPointer = parsedUrl.toNativeUtf8();
     _bindings.navigate_to(_viewId, charPointer.cast<ffi.Char>());
     malloc.free(charPointer);
@@ -413,11 +486,16 @@ class LadybirdController {
     );
   }
 
+  bool activateContextMenuAction(int actionToken) {
+    return _bindings.activate_context_menu_action(_viewId, actionToken);
+  }
+
   void dispose() {
+    _bindings.set_new_web_view_callback(_viewId, ffi.nullptr);
+    _bindings.set_context_menu_request_callback(_viewId, ffi.nullptr);
     _bindings.set_cursor_change_callback(_viewId, ffi.nullptr);
     _bindings.set_cross_site_navigation_callback(_viewId, ffi.nullptr);
     _bindings.set_loading_state_change_callback(_viewId, ffi.nullptr);
-    textController.dispose();
     urlNotifier.dispose();
     titleNotifier.dispose();
     faviconNotifier.dispose();
@@ -432,6 +510,8 @@ class LadybirdController {
     _crossSiteNavigationCallback.close();
     _loadingStateChangeCallback.close();
     _cursorChangeCallback.close();
+    _contextMenuRequestCallback.close();
+    _newWebViewCallback.close();
     _bindings.destroy_web_view(_viewId);
   }
 }

@@ -348,6 +348,45 @@ class LadybirdBindings {
   late final _set_cursor_change_callback = _set_cursor_change_callbackPtr
       .asFunction<void Function(int, CursorChangeCallback)>();
 
+  void set_context_menu_request_callback(
+    int view_id,
+    ContextMenuRequestCallback callback,
+  ) {
+    return _set_context_menu_request_callback(view_id, callback);
+  }
+
+  late final _set_context_menu_request_callbackPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.Void Function(ffi.Int, ContextMenuRequestCallback)
+        >
+      >('set_context_menu_request_callback');
+  late final _set_context_menu_request_callback =
+      _set_context_menu_request_callbackPtr
+          .asFunction<void Function(int, ContextMenuRequestCallback)>();
+
+  void set_new_web_view_callback(int view_id, NewWebViewCallback callback) {
+    return _set_new_web_view_callback(view_id, callback);
+  }
+
+  late final _set_new_web_view_callbackPtr =
+      _lookup<
+        ffi.NativeFunction<ffi.Void Function(ffi.Int, NewWebViewCallback)>
+      >('set_new_web_view_callback');
+  late final _set_new_web_view_callback = _set_new_web_view_callbackPtr
+      .asFunction<void Function(int, NewWebViewCallback)>();
+
+  bool activate_context_menu_action(int view_id, int action_token) {
+    return _activate_context_menu_action(view_id, action_token);
+  }
+
+  late final _activate_context_menu_actionPtr =
+      _lookup<ffi.NativeFunction<ffi.Bool Function(ffi.Int, ffi.Int)>>(
+        'activate_context_menu_action',
+      );
+  late final _activate_context_menu_action = _activate_context_menu_actionPtr
+      .asFunction<bool Function(int, int)>();
+
   bool is_tab_loading(int view_id) {
     return _is_tab_loading(view_id);
   }
@@ -733,6 +772,18 @@ typedef CursorChangeCallback =
     ffi.Pointer<ffi.NativeFunction<CursorChangeCallbackFunction>>;
 typedef CursorChangeCallbackFunction = ffi.Void Function(ffi.Int cursor_type);
 typedef DartCursorChangeCallbackFunction = void Function(int cursor_type);
+typedef ContextMenuRequestCallback =
+    ffi.Pointer<ffi.NativeFunction<ContextMenuRequestCallbackFunction>>;
+typedef ContextMenuRequestCallbackFunction =
+    ffi.Void Function(ffi.Int view_id, ffi.Pointer<ffi.Char> menu_json);
+typedef DartContextMenuRequestCallbackFunction =
+    void Function(int view_id, ffi.Pointer<ffi.Char> menu_json);
+typedef NewWebViewCallback =
+    ffi.Pointer<ffi.NativeFunction<NewWebViewCallbackFunction>>;
+typedef NewWebViewCallbackFunction =
+    ffi.Void Function(ffi.Int new_view_id, ffi.Bool activate_tab);
+typedef DartNewWebViewCallbackFunction =
+    void Function(int new_view_id, bool activate_tab);
 typedef AskUserForDownloadPathCallback =
     ffi.Pointer<ffi.NativeFunction<AskUserForDownloadPathCallbackFunction>>;
 typedef AskUserForDownloadPathCallbackFunction =
