@@ -16,8 +16,6 @@ class LadybirdView extends StatefulWidget {
 class _LadybirdViewState extends State<LadybirdView>
     with SingleTickerProviderStateMixin {
   int? _textureId;
-  bool _textureRecreateInProgress = false;
-  bool _textureRecreateQueued = false;
   final FocusNode _focusNode = FocusNode();
 
   double _accumulatedWheelX = 0;
@@ -71,7 +69,6 @@ class _LadybirdViewState extends State<LadybirdView>
       _detachControllerListeners(oldWidget.controller);
 
       if (_textureId != null) {
-        print("unregister texture");
         oldWidget.controller.unregisterTexture(_textureId!);
         _textureId = null;
       }
@@ -83,7 +80,6 @@ class _LadybirdViewState extends State<LadybirdView>
   }
 
   Future<void> _recreateTexture() async {
-    _textureRecreateQueued = false;
     final int? oldTextureId = _textureId;
     final int textureId = await widget.controller.createTexture();
 
@@ -105,7 +101,7 @@ class _LadybirdViewState extends State<LadybirdView>
   void _onSizeChanged(Size size, double density) {
     if (size.width <= 0 || size.height <= 0) return;
     final physicalSize = Size(size.width * density, size.height * density);
-    print("setting size to ${physicalSize.width}");
+
     widget.controller.updateDevicePixelRatio(density);
     widget.controller.resizeWindow(physicalSize);
 
@@ -276,85 +272,67 @@ class _LadybirdViewState extends State<LadybirdView>
     if (_textureId == null) {
       return const Center(child: CircularProgressIndicator());
     }
-    return Scaffold(
-      // for debug
-      floatingActionButton: FloatingActionButton(
-        onPressed: () async {
-          setState(() {});
-        },
-        child: Icon(Icons.refresh_rounded),
-      ),
-      body: SizedBox.expand(
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final density = MediaQuery.devicePixelRatioOf(context);
-            _onSizeChanged(constraints.biggest, density);
+    return SizedBox.expand(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final density = MediaQuery.devicePixelRatioOf(context);
+          _onSizeChanged(constraints.biggest, density);
 
-            final paddedWidth = widget.controller.getSurfaceWidth() / density;
-            final paddedHeight = widget.controller.getSurfaceHeight() / density;
-            final displayWidth = paddedWidth > constraints.maxWidth
+          final paddedWidth = widget.controller.getSurfaceWidth() / density;
+          final paddedHeight = widget.controller.getSurfaceHeight() / density;
+
+          return OverflowBox(
+            // color: Colors.red,
+            alignment: Alignment.topLeft,
+            minWidth: constraints.maxWidth,
+            minHeight: constraints.maxHeight,
+            maxWidth: paddedWidth > constraints.maxWidth
                 ? paddedWidth
-                : constraints.maxWidth;
-            final displayHeight = paddedHeight > constraints.maxHeight
+                : constraints.maxWidth,
+            maxHeight: paddedHeight > constraints.maxHeight
                 ? paddedHeight
-                : constraints.maxHeight;
-
-            print("BUILDING WITH WIDTH: $displayWidth");
-            print("padded width = $paddedWidth");
-
-            return OverflowBox(
-              // color: Colors.red,
-              alignment: Alignment.topLeft,
-              minWidth: constraints.maxWidth,
-              minHeight: constraints.maxHeight,
-              maxWidth: paddedWidth > constraints.maxWidth
-                  ? paddedWidth
-                  : constraints.maxWidth,
-              maxHeight: paddedHeight > constraints.maxHeight
-                  ? paddedHeight
-                  : constraints.maxHeight,
-              child: SizedBox(
-                // width: displayWidth / 2,
-                // height: displayHeight / 2,
-                child: MouseRegion(
-                  cursor: widget.controller.mouseCursorNotifier.value,
-                  onEnter: (_) {
-                    // if (!_focusNode.hasFocus) {
-                    //   _focusNode.requestFocus();
-                    // }
-                  },
-                  child: Focus(
-                    focusNode: _focusNode,
-                    autofocus: true,
-                    onKeyEvent: _onKeyEvent,
-                    child: Listener(
-                      onPointerDown: (e) {
-                        _focusNode.requestFocus();
-                        _onPointerEvent(e, 0);
-                      },
-                      onPointerUp: (e) => _onPointerEvent(e, 1),
-                      onPointerMove: (e) => _onPointerEvent(e, 2),
-                      onPointerHover: (e) => _onPointerEvent(e, 2),
-                      onPointerPanZoomStart: _onPointerPanZoomStart,
-                      onPointerPanZoomUpdate: _onPointerPanZoomUpdate,
-                      onPointerPanZoomEnd: _onPointerPanZoomEnd,
-                      onPointerSignal: (e) {
-                        if (e is PointerScrollEvent) {
-                          _onPointerScroll(e);
-                        }
-                      },
-                      child: Texture(
-                        filterQuality: .high,
-                        key: ValueKey(_textureId),
-                        textureId: _textureId!,
-                      ),
+                : constraints.maxHeight,
+            child: SizedBox(
+              // width: displayWidth / 2,
+              // height: displayHeight / 2,
+              child: MouseRegion(
+                cursor: widget.controller.mouseCursorNotifier.value,
+                onEnter: (_) {
+                  // if (!_focusNode.hasFocus) {
+                  //   _focusNode.requestFocus();
+                  // }
+                },
+                child: Focus(
+                  focusNode: _focusNode,
+                  autofocus: true,
+                  onKeyEvent: _onKeyEvent,
+                  child: Listener(
+                    onPointerDown: (e) {
+                      _focusNode.requestFocus();
+                      _onPointerEvent(e, 0);
+                    },
+                    onPointerUp: (e) => _onPointerEvent(e, 1),
+                    onPointerMove: (e) => _onPointerEvent(e, 2),
+                    onPointerHover: (e) => _onPointerEvent(e, 2),
+                    onPointerPanZoomStart: _onPointerPanZoomStart,
+                    onPointerPanZoomUpdate: _onPointerPanZoomUpdate,
+                    onPointerPanZoomEnd: _onPointerPanZoomEnd,
+                    onPointerSignal: (e) {
+                      if (e is PointerScrollEvent) {
+                        _onPointerScroll(e);
+                      }
+                    },
+                    child: Texture(
+                      filterQuality: .high,
+                      key: ValueKey(_textureId),
+                      textureId: _textureId!,
                     ),
                   ),
                 ),
               ),
-            );
-          },
-        ),
+            ),
+          );
+        },
       ),
     );
   }

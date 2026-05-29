@@ -79,13 +79,14 @@ class _BrowserVerticalTabSidebarState
                 SizedBox(width: Platform.isMacOS ? _kMacControlsWidth : 8),
                 Expanded(
                   child: DragToMoveArea(
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        'Workspace',
-                        style: theme.textTheme.labelLarge,
-                      ),
-                    ),
+                    child: SizedBox(width: .infinity, height: .infinity),
+                    // child: Align(
+                    //   alignment: Alignment.centerLeft,
+                    //   child: Text(
+                    //     'Workspace',
+                    //     style: theme.textTheme.labelLarge,
+                    //   ),
+                    // ),
                   ),
                 ),
                 IconButton(

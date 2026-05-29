@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutterbird/features/router/controller.dart';
 import 'package:window_manager/window_manager.dart';
 
+import 'package:flutter/src/widgets/_window.dart';
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final isDesktop = Platform.isMacOS || Platform.isLinux || Platform.isWindows;
