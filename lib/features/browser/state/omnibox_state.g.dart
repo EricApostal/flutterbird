@@ -41,7 +41,7 @@ final class BrowserOmniboxProvider
   }
 }
 
-String _$browserOmniboxHash() => r'9f85bb616bebcb18b9f64976421c0f033750447f';
+String _$browserOmniboxHash() => r'7b6c66482ab153c4f4033a45c5a38c52d72aaabd';
 
 abstract class _$BrowserOmnibox extends $Notifier<BrowserOmniboxState> {
   BrowserOmniboxState build();

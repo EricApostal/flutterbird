@@ -26,10 +26,27 @@ class BrowserTabController extends _$BrowserTabController {
     state = newState;
   }
 
+  LadybirdController? take(int viewId) {
+    final newState = state.toList();
+    final index = newState.indexWhere((tab) => tab.viewId == viewId);
+    if (index < 0) return null;
+
+    final controller = newState.removeAt(index);
+    state = newState;
+    return controller;
+  }
+
   void reorder(int oldIndex, int newIndex) {
     final newState = state.toList();
     final item = newState.removeAt(oldIndex);
     newState.insert(newIndex, item);
+    state = newState;
+  }
+
+  void insertAt(int index, LadybirdController controller) {
+    final newState = state.toList();
+    final clampedIndex = index.clamp(0, newState.length);
+    newState.insert(clampedIndex, controller);
     state = newState;
   }
 }

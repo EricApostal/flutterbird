@@ -208,7 +208,7 @@ class _BrowserOmniboxBarState extends ConsumerState<BrowserOmniboxBar> {
                         bookmark.title,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.labelLarge,
+                        style: theme.textTheme.bodySmall,
                       ),
                     ],
                   ),

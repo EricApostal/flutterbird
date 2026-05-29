@@ -1,14 +1,27 @@
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:bird_core/bird_core.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutterbird/features/browser/components/omnibox_bar.dart';
 import 'package:flutterbird/features/browser/components/tab.dart';
-import 'package:go_router/go_router.dart';
+import 'package:flutterbird/features/browser/state/tab_actions.dart';
+import 'package:flutterbird/features/browser/state/tab_layout_mode.dart';
 import 'package:ladybird/ladybird.dart';
 import 'package:window_manager/window_manager.dart';
+
+class BrowserTabAnimationConfig {
+  final Duration sizeDuration;
+  final Curve sizeCurve;
+
+  const BrowserTabAnimationConfig({
+    this.sizeDuration = const Duration(milliseconds: 180),
+    this.sizeCurve = Curves.easeOutCubic,
+  });
+}
 
 class BrowserTabBar extends ConsumerStatefulWidget {
   final int currentViewId;
@@ -22,16 +35,40 @@ class BrowserTabBar extends ConsumerStatefulWidget {
 class _BrowserTabBarState extends ConsumerState<BrowserTabBar>
     with WindowListener {
   static const double _kMacControlsWidth = 78;
+  static const double _kWindowsControlsWidth = 138;
+  static const double _kMinTabWidth = 170;
+  static const double _kMaxTabWidth = 225;
+  static const double _kAddButtonWidth = 48;
+  static const double _kLayoutToggleButtonWidth = 40;
+  static const double _kDetachDragThreshold = 18;
+  static const BrowserTabAnimationConfig _kTabAnimationConfig =
+      BrowserTabAnimationConfig();
 
   bool _isWindowMaximized = false;
+  bool _animateNewTabs = false;
+  final GlobalKey _tabStripViewportKey = GlobalKey();
+  int? _draggingViewId;
+  Offset? _lastGlobalPointerPosition;
 
   @override
   void initState() {
     super.initState();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      setState(() {
+        _animateNewTabs = true;
+      });
+    });
+
     if (Platform.isMacOS || Platform.isLinux || Platform.isWindows) {
       windowManager.addListener(this);
       _refreshWindowState();
     }
+
+    GestureBinding.instance.pointerRouter.addGlobalRoute(
+      _handleGlobalPointerEvent,
+    );
   }
 
   @override
@@ -39,6 +76,9 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar>
     if (Platform.isMacOS || Platform.isLinux || Platform.isWindows) {
       windowManager.removeListener(this);
     }
+    GestureBinding.instance.pointerRouter.removeGlobalRoute(
+      _handleGlobalPointerEvent,
+    );
     super.dispose();
   }
 
@@ -59,31 +99,61 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar>
   @override
   void onWindowRestore() => _refreshWindowState();
 
-  void _openNewTab(BuildContext context) {
-    final controller = ref.read(browserTabControllerProvider.notifier).add();
-    context.go('/browser/tab/${controller.viewId}');
+  void _handleGlobalPointerEvent(PointerEvent event) {
+    if (_draggingViewId == null) return;
+    if (event is PointerMoveEvent ||
+        event is PointerHoverEvent ||
+        event is PointerUpEvent) {
+      _lastGlobalPointerPosition = event.position;
+    }
   }
 
-  void _closeTab(
-    BuildContext context,
-    int viewId,
-    List<LadybirdController> tabs,
-  ) {
-    final index = tabs.indexWhere((tab) => tab.viewId == viewId);
-    if (index < 0) return;
+  void _handleTabReorderStart(int index, List<LadybirdController> tabs) {
+    if (index < 0 || index >= tabs.length) {
+      _draggingViewId = null;
+      return;
+    }
+    _draggingViewId = tabs[index].viewId;
+  }
 
-    if (viewId == widget.currentViewId) {
-      if (tabs.length == 1) {
-        exit(0);
-      }
-      if (index == 0) {
-        context.go('/browser/tab/${tabs[1].viewId}');
-      } else {
-        context.go('/browser/tab/${tabs[index - 1].viewId}');
-      }
+  Future<void> _handleTabReorderEnd(List<LadybirdController> tabs) async {
+    if (!Platform.isLinux) {
+      _draggingViewId = null;
+      return;
     }
 
-    ref.read(browserTabControllerProvider.notifier).remove(viewId);
+    final draggingViewId = _draggingViewId;
+    _draggingViewId = null;
+
+    if (draggingViewId == null) return;
+    if (!tabs.any((tab) => tab.viewId == draggingViewId)) return;
+
+    final pointerPosition = _lastGlobalPointerPosition;
+    if (pointerPosition == null) return;
+
+    final tabStripRect = _tabStripViewportRect();
+    if (tabStripRect == null) return;
+
+    final droppedOutsideVertically =
+        pointerPosition.dy < tabStripRect.top - _kDetachDragThreshold ||
+        pointerPosition.dy > tabStripRect.bottom + _kDetachDragThreshold;
+    if (!droppedOutsideVertically) return;
+
+    await BrowserTabActions.detachTabToNewWindow(
+      ref,
+      context,
+      currentViewId: widget.currentViewId,
+      detachViewId: draggingViewId,
+    );
+  }
+
+  Rect? _tabStripViewportRect() {
+    final renderObject = _tabStripViewportKey.currentContext
+        ?.findRenderObject();
+    if (renderObject is! RenderBox || !renderObject.hasSize) return null;
+
+    final topLeft = renderObject.localToGlobal(Offset.zero);
+    return topLeft & renderObject.size;
   }
 
   @override
@@ -97,9 +167,10 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar>
       return const SizedBox.shrink();
     }
 
-    final isMacOS = Platform.isMacOS;
-
-    final leftPadding = isMacOS ? _kMacControlsWidth : 8.0;
+    final leadingControlsPadding = Platform.isMacOS ? _kMacControlsWidth : 8.0;
+    final trailingControlsPadding = Platform.isWindows
+        ? _kWindowsControlsWidth
+        : 8.0;
 
     return Column(
       children: [
@@ -108,71 +179,175 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar>
           child: Row(
             children: [
               DragToMoveArea(
-                child: SizedBox(height: .infinity, width: leftPadding),
+                child: SizedBox(
+                  height: double.infinity,
+                  width: leadingControlsPadding,
+                ),
               ),
-              Padding(
-                padding: EdgeInsets.only(left: leftPadding),
-                child: ReorderableListView.builder(
-                  shrinkWrap: true,
-                  padding: const EdgeInsets.only(top: 4, bottom: 4),
-                  scrollDirection: Axis.horizontal,
-                  buildDefaultDragHandles: false,
-                  itemBuilder: (context, index) {
-                    if (index == tabs.length) {
-                      return ReorderableDragStartListener(
-                        key: const ValueKey('add'),
-                        index: index,
-                        enabled: false,
-                        child: IconButton(
-                          icon: const Icon(Icons.add, size: 20),
-                          onPressed: () => _openNewTab(context),
-                        ),
-                      );
-                    }
-
-                    final id = tabs[index].viewId;
-                    return ReorderableDragStartListener(
-                      key: ValueKey(id),
-                      index: index,
-                      child: Padding(
-                        padding: const EdgeInsets.only(right: 2),
-                        child: BrowserTab(
-                          viewId: tabs[index].viewId,
-                          selected: id == widget.currentViewId,
-                          onTabClosed: () {
-                            HapticFeedback.lightImpact();
-                            _closeTab(context, id, tabs);
-                          },
-                        ),
-                      ),
-                    );
-                  },
-                  proxyDecorator:
-                      (Widget child, int index, Animation<double> animation) {
-                        return Material(
-                          color: Colors.transparent,
-                          elevation: 0,
-                          child: child,
-                        );
-                      },
-                  itemCount: tabs.length + 1,
-                  onReorder: (oldIndex, newIndex) {
-                    if (oldIndex == tabs.length) return;
-                    if (oldIndex < newIndex) {
-                      newIndex -= 1;
-                    }
-                    if (newIndex >= tabs.length) {
-                      newIndex = tabs.length - 1;
-                    }
+              SizedBox(
+                width: _kLayoutToggleButtonWidth,
+                child: IconButton(
+                  icon: Icon(Icons.dashboard),
+                  tooltip: 'Switch to vertical tabs',
+                  onPressed: () {
                     ref
-                        .read(browserTabControllerProvider.notifier)
-                        .reorder(oldIndex, newIndex);
+                        .read(browserTabLayoutModeControllerProvider.notifier)
+                        .setVertical();
                   },
                 ),
               ),
               Expanded(
-                child: DragToMoveArea(
-                  child: SizedBox(height: .infinity, width: double.infinity),
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final tabCount = tabs.isEmpty ? 1 : tabs.length;
+                    final pinAddButton =
+                        (tabs.length * _kMinTabWidth) + _kAddButtonWidth >
+                        constraints.maxWidth -
+                            trailingControlsPadding -
+                            _kLayoutToggleButtonWidth;
+                    final availableForTabViewport = math.max(
+                      0.0,
+                      constraints.maxWidth -
+                          trailingControlsPadding -
+                          _kLayoutToggleButtonWidth -
+                          (pinAddButton ? _kAddButtonWidth : 0.0),
+                    );
+                    final adaptiveTabWidth = math.min(
+                      _kMaxTabWidth,
+                      math.max(
+                        _kMinTabWidth,
+                        availableForTabViewport / tabCount,
+                      ),
+                    );
+                    final tabContentWidth =
+                        (adaptiveTabWidth * tabs.length) +
+                        (pinAddButton ? 0 : _kAddButtonWidth);
+                    final tabViewportWidth = math.min(
+                      availableForTabViewport,
+                      tabContentWidth,
+                    );
+                    final dragAreaWidth = math.max(
+                      trailingControlsPadding,
+                      constraints.maxWidth -
+                          tabViewportWidth -
+                          _kLayoutToggleButtonWidth -
+                          (pinAddButton ? _kAddButtonWidth : 0.0),
+                    );
+
+                    Widget buildTabList({required bool includeAddButton}) {
+                      return ReorderableListView.builder(
+                        shrinkWrap: true,
+                        padding: const EdgeInsets.only(top: 4, bottom: 4),
+                        scrollDirection: Axis.horizontal,
+                        buildDefaultDragHandles: false,
+                        onReorderStart: (index) =>
+                            _handleTabReorderStart(index, tabs),
+                        onReorderEnd: (_) {
+                          _handleTabReorderEnd(tabs);
+                        },
+                        itemBuilder: (context, index) {
+                          if (includeAddButton && index == tabs.length) {
+                            return ReorderableDragStartListener(
+                              key: const ValueKey('add'),
+                              index: index,
+                              enabled: false,
+                              child: SizedBox(
+                                width: _kAddButtonWidth,
+                                child: IconButton(
+                                  icon: const Icon(Icons.add, size: 20),
+                                  onPressed: () => BrowserTabActions.openNewTab(
+                                    ref,
+                                    context,
+                                  ),
+                                ),
+                              ),
+                            );
+                          }
+
+                          final id = tabs[index].viewId;
+                          return _AnimatedBrowserTabItem(
+                            key: ValueKey(id),
+                            index: index,
+                            viewId: tabs[index].viewId,
+                            selected: id == widget.currentViewId,
+                            minWidth: _kMinTabWidth,
+                            width: adaptiveTabWidth,
+                            animateOnMount: _animateNewTabs,
+                            animationConfig: _kTabAnimationConfig,
+                            onCloseRequested: () {
+                              HapticFeedback.lightImpact();
+                              return BrowserTabActions.prepareCloseTabNavigation(
+                                context,
+                                currentViewId: widget.currentViewId,
+                                closeViewId: id,
+                                tabs: tabs,
+                              );
+                            },
+                            onCloseCommitted: () =>
+                                BrowserTabActions.commitCloseTab(ref, id),
+                          );
+                        },
+                        proxyDecorator:
+                            (
+                              Widget child,
+                              int index,
+                              Animation<double> animation,
+                            ) {
+                              return Material(
+                                color: Colors.transparent,
+                                elevation: 0,
+                                child: child,
+                              );
+                            },
+                        itemCount: tabs.length + (includeAddButton ? 1 : 0),
+                        onReorder: (oldIndex, newIndex) {
+                          if (includeAddButton && oldIndex == tabs.length) {
+                            return;
+                          }
+                          if (oldIndex < newIndex) {
+                            newIndex -= 1;
+                          }
+                          final maxIndex = tabs.length - 1;
+                          if (newIndex > maxIndex) {
+                            newIndex = maxIndex;
+                          }
+                          if (newIndex < 0 || oldIndex == newIndex) return;
+                          ref
+                              .read(browserTabControllerProvider.notifier)
+                              .reorder(oldIndex, newIndex);
+                        },
+                      );
+                    }
+
+                    return Row(
+                      children: [
+                        SizedBox(
+                          key: _tabStripViewportKey,
+                          width: tabViewportWidth,
+                          child: buildTabList(includeAddButton: !pinAddButton),
+                        ),
+                        if (pinAddButton)
+                          SizedBox(
+                            width: _kAddButtonWidth,
+                            child: IconButton(
+                              icon: const Icon(Icons.add, size: 20),
+                              onPressed: () =>
+                                  BrowserTabActions.openNewTab(ref, context),
+                            ),
+                          ),
+
+                        SizedBox(
+                          width: dragAreaWidth,
+                          child: DragToMoveArea(
+                            child: SizedBox(
+                              height: double.infinity,
+                              width: double.infinity,
+                            ),
+                          ),
+                        ),
+                      ],
+                    );
+                  },
                 ),
               ),
             ],
@@ -180,6 +355,100 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar>
         ),
         BrowserOmniboxBar(currentTabController: currentTabController),
       ],
+    );
+  }
+}
+
+class _AnimatedBrowserTabItem extends StatefulWidget {
+  final int index;
+  final int viewId;
+  final bool selected;
+  final double minWidth;
+  final double width;
+  final bool animateOnMount;
+  final BrowserTabAnimationConfig animationConfig;
+  final bool Function() onCloseRequested;
+  final VoidCallback onCloseCommitted;
+
+  const _AnimatedBrowserTabItem({
+    super.key,
+    required this.index,
+    required this.viewId,
+    required this.selected,
+    required this.minWidth,
+    required this.width,
+    required this.animateOnMount,
+    required this.animationConfig,
+    required this.onCloseRequested,
+    required this.onCloseCommitted,
+  });
+
+  @override
+  State<_AnimatedBrowserTabItem> createState() =>
+      _AnimatedBrowserTabItemState();
+}
+
+class _AnimatedBrowserTabItemState extends State<_AnimatedBrowserTabItem> {
+  late bool _isExpanded;
+  bool _isClosing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _isExpanded = !widget.animateOnMount;
+
+    if (widget.animateOnMount) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || _isClosing || _isExpanded) return;
+        setState(() {
+          _isExpanded = true;
+        });
+      });
+    }
+  }
+
+  Future<void> _handleClose() async {
+    if (_isClosing) return;
+    if (!widget.onCloseRequested()) return;
+
+    setState(() {
+      _isClosing = true;
+      _isExpanded = false;
+    });
+
+    await Future<void>.delayed(widget.animationConfig.sizeDuration);
+    if (!mounted) return;
+    widget.onCloseCommitted();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ReorderableDragStartListener(
+      index: widget.index,
+      enabled: _isExpanded && !_isClosing,
+      child: ClipRect(
+        child: AnimatedContainer(
+          duration: widget.animationConfig.sizeDuration,
+          curve: widget.animationConfig.sizeCurve,
+          width: _isExpanded ? widget.width + 2 : 0,
+          child: Padding(
+            padding: const EdgeInsets.only(right: 2),
+            child: SizedBox(
+              width: widget.width,
+              child: IgnorePointer(
+                ignoring: _isClosing || !_isExpanded,
+                child: BrowserTab(
+                  viewId: widget.viewId,
+                  selected: widget.selected,
+                  minWidth: widget.minWidth,
+                  width: widget.width,
+                  onTabClosed: _handleClose,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

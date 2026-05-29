@@ -16,8 +16,6 @@ class LadybirdView extends StatefulWidget {
 class _LadybirdViewState extends State<LadybirdView>
     with SingleTickerProviderStateMixin {
   int? _textureId;
-  bool _textureRecreateInProgress = false;
-  bool _textureRecreateQueued = false;
   final FocusNode _focusNode = FocusNode();
   late final VoidCallback _loadingListener;
 
@@ -29,10 +27,38 @@ class _LadybirdViewState extends State<LadybirdView>
   Offset _lastPointerPos = Offset.zero;
   int _lastPanTime = 0;
 
+  void _onNativeResize() {
+    if (!mounted) return;
+    setState(() {});
+  }
+
+  void _onLoadingStateChanged() {
+    if (!mounted) return;
+  }
+
+  void _attachControllerListeners(LadybirdController controller) {
+    controller.onResize = _onNativeResize;
+    controller.isLoadingNotifier.addListener(_onLoadingStateChanged);
+    controller.mouseCursorNotifier.addListener(_onCursorChanged);
+  }
+
+  void _detachControllerListeners(LadybirdController controller) {
+    controller.mouseCursorNotifier.removeListener(_onCursorChanged);
+    controller.isLoadingNotifier.removeListener(_onLoadingStateChanged);
+    controller.onResize = null;
+  }
+
+  void _onCursorChanged() {
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
   @override
   void initState() {
     super.initState();
     _momentumTicker = createTicker(_onMomentumTick);
+    _attachControllerListeners(widget.controller);
     widget.controller.onResize = () {
       if (mounted) {
         _recreateTexture();
@@ -43,7 +69,6 @@ class _LadybirdViewState extends State<LadybirdView>
       print(
         '[Ladybird][Flutter] cross-site navigation process change for view ${widget.controller.viewId}; recreating texture',
       );
-      _recreateTextureFromCrossSiteNavigation();
     };
 
     _loadingListener = () {
@@ -60,23 +85,10 @@ class _LadybirdViewState extends State<LadybirdView>
   void didUpdateWidget(LadybirdView oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.controller != widget.controller) {
-      oldWidget.controller.onResize = null;
-      oldWidget.controller.onCrossSiteNavigation = null;
+      _detachControllerListeners(oldWidget.controller);
       oldWidget.controller.isLoadingNotifier.removeListener(_loadingListener);
 
-      widget.controller.onResize = () {
-        if (mounted) {
-          _recreateTexture();
-        }
-      };
-
-      widget.controller.onCrossSiteNavigation = () {
-        if (!mounted) return;
-        print(
-          '[Ladybird][Flutter] cross-site navigation process change for view ${widget.controller.viewId}; recreating texture',
-        );
-        _recreateTextureFromCrossSiteNavigation();
-      };
+      _attachControllerListeners(widget.controller);
       widget.controller.isLoadingNotifier.addListener(_loadingListener);
 
       _recreateTexture();
@@ -84,50 +96,28 @@ class _LadybirdViewState extends State<LadybirdView>
   }
 
   Future<void> _recreateTexture() async {
-    if (_textureRecreateInProgress) {
-      _textureRecreateQueued = true;
-      return;
-    }
+    final int? oldTextureId = _textureId;
+    final int textureId = await widget.controller.createTexture();
 
-    _textureRecreateInProgress = true;
-    try {
-      do {
-        _textureRecreateQueued = false;
-        final int? oldTextureId = _textureId;
-        final int textureId = await widget.controller.createTexture();
-
-        if (mounted) {
-          setState(() {
-            _textureId = textureId;
-          });
-          if (oldTextureId != null && oldTextureId != textureId) {
-            widget.controller.unregisterTexture(oldTextureId);
-          }
-        } else {
-          await widget.controller.unregisterTexture(textureId);
-          if (oldTextureId != null) {
-            await widget.controller.unregisterTexture(oldTextureId);
-          }
-        }
-      } while (_textureRecreateQueued && mounted);
-    } finally {
-      _textureRecreateInProgress = false;
-      _textureRecreateQueued = false;
-    }
-  }
-
-  Future<void> _recreateTextureFromCrossSiteNavigation() async {
-    if (!mounted) return;
-    await _recreateTexture();
     if (mounted) {
-      setState(() {});
+      setState(() {
+        _textureId = textureId;
+      });
+      if (oldTextureId != null && oldTextureId != textureId) {
+        widget.controller.unregisterTexture(oldTextureId);
+      }
+    } else {
+      await widget.controller.unregisterTexture(textureId);
+      if (oldTextureId != null) {
+        await widget.controller.unregisterTexture(oldTextureId);
+      }
     }
   }
 
   void _onSizeChanged(Size size, double density) {
     if (size.width <= 0 || size.height <= 0) return;
     final physicalSize = Size(size.width * density, size.height * density);
-    print("setting size to ${physicalSize.width}");
+
     widget.controller.updateDevicePixelRatio(density);
     widget.controller.resizeWindow(physicalSize);
 
@@ -283,8 +273,7 @@ class _LadybirdViewState extends State<LadybirdView>
 
   @override
   void dispose() {
-    widget.controller.onResize = null;
-    widget.controller.onCrossSiteNavigation = null;
+    _detachControllerListeners(widget.controller);
     widget.controller.isLoadingNotifier.removeListener(_loadingListener);
     _momentumTicker?.dispose();
     _focusNode.dispose();
@@ -308,60 +297,52 @@ class _LadybirdViewState extends State<LadybirdView>
 
           final paddedWidth = widget.controller.getSurfaceWidth() / density;
           final paddedHeight = widget.controller.getSurfaceHeight() / density;
-          final displayWidth = paddedWidth > constraints.maxWidth
-              ? paddedWidth
-              : constraints.maxWidth;
-          final displayHeight = paddedHeight > constraints.maxHeight
-              ? paddedHeight
-              : constraints.maxHeight;
 
-          print("BUILDING WITH WIDTH: $displayWidth");
-          print("padded width = $paddedWidth");
-
-          return ClipRect(
-            child: OverflowBox(
-              alignment: Alignment.topLeft,
-              minWidth: constraints.maxWidth,
-              minHeight: constraints.maxHeight,
-              maxWidth: paddedWidth > constraints.maxWidth
-                  ? paddedWidth
-                  : constraints.maxWidth,
-              maxHeight: paddedHeight > constraints.maxHeight
-                  ? paddedHeight
-                  : constraints.maxHeight,
-              child: SizedBox(
-                width: displayWidth,
-                height: displayHeight,
-                child: MouseRegion(
-                  onEnter: (_) {
-                    // if (!_focusNode.hasFocus) {
-                    //   _focusNode.requestFocus();
-                    // }
-                  },
-                  child: Focus(
-                    focusNode: _focusNode,
-                    autofocus: true,
-                    onKeyEvent: _onKeyEvent,
-                    child: Listener(
-                      onPointerDown: (e) {
-                        _focusNode.requestFocus();
-                        _onPointerEvent(e, 0);
-                      },
-                      onPointerUp: (e) => _onPointerEvent(e, 1),
-                      onPointerMove: (e) => _onPointerEvent(e, 2),
-                      onPointerHover: (e) => _onPointerEvent(e, 2),
-                      onPointerPanZoomStart: _onPointerPanZoomStart,
-                      onPointerPanZoomUpdate: _onPointerPanZoomUpdate,
-                      onPointerPanZoomEnd: _onPointerPanZoomEnd,
-                      onPointerSignal: (e) {
-                        if (e is PointerScrollEvent) {
-                          _onPointerScroll(e);
-                        }
-                      },
-                      child: Texture(
-                        key: ValueKey(_textureId),
-                        textureId: _textureId!,
-                      ),
+          return OverflowBox(
+            // color: Colors.red,
+            alignment: Alignment.topLeft,
+            minWidth: constraints.maxWidth,
+            minHeight: constraints.maxHeight,
+            maxWidth: paddedWidth > constraints.maxWidth
+                ? paddedWidth
+                : constraints.maxWidth,
+            maxHeight: paddedHeight > constraints.maxHeight
+                ? paddedHeight
+                : constraints.maxHeight,
+            child: SizedBox(
+              // width: displayWidth / 2,
+              // height: displayHeight / 2,
+              child: MouseRegion(
+                cursor: widget.controller.mouseCursorNotifier.value,
+                onEnter: (_) {
+                  // if (!_focusNode.hasFocus) {
+                  //   _focusNode.requestFocus();
+                  // }
+                },
+                child: Focus(
+                  focusNode: _focusNode,
+                  autofocus: true,
+                  onKeyEvent: _onKeyEvent,
+                  child: Listener(
+                    onPointerDown: (e) {
+                      _focusNode.requestFocus();
+                      _onPointerEvent(e, 0);
+                    },
+                    onPointerUp: (e) => _onPointerEvent(e, 1),
+                    onPointerMove: (e) => _onPointerEvent(e, 2),
+                    onPointerHover: (e) => _onPointerEvent(e, 2),
+                    onPointerPanZoomStart: _onPointerPanZoomStart,
+                    onPointerPanZoomUpdate: _onPointerPanZoomUpdate,
+                    onPointerPanZoomEnd: _onPointerPanZoomEnd,
+                    onPointerSignal: (e) {
+                      if (e is PointerScrollEvent) {
+                        _onPointerScroll(e);
+                      }
+                    },
+                    child: Texture(
+                      filterQuality: .high,
+                      key: ValueKey(_textureId),
+                      textureId: _textureId!,
                     ),
                   ),
                 ),

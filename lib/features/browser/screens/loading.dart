@@ -23,6 +23,6 @@ class _BrowserLoadingScreenState extends ConsumerState<BrowserLoadingScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(body: Center(child: CircularProgressIndicator()));
+    return Scaffold(body: Center(child: CircularProgressIndicator.adaptive()));
   }
 }
