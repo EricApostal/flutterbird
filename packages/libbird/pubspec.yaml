@@ -53,3 +53,15 @@ ffigen:
       - 'cpp/engine.h'
   compiler-opts:
     - '-Icpp'
+  functions:
+    leaf:
+      include:
+        - 'can_go_back'
+        - 'can_go_forward'
+        - 'is_tab_loading'
+        - 'is_current_view_bookmarked'
+        - 'get_iosurface_width'
+        - 'get_iosurface_height'
+        - 'get_view_url'
+        - 'get_bookmarks_json'
+        - 'history_autocomplete_json'

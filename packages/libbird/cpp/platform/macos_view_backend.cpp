@@ -86,6 +86,11 @@ bool MacOSViewBackend::on_iosurface_ready(IOSurfaceRef surface, int width,
   if (!surface || width <= 0 || height <= 0)
     return false;
 
+  size_t actual_surface_width = IOSurfaceGetWidth(surface);
+  size_t actual_surface_height = IOSurfaceGetHeight(surface);
+  
+  std::fprintf(stderr, "[Ladybird][macOS] on_iosurface_ready input_req: %dx%d, actual: %zux%zu\n", width, height, actual_surface_width, actual_surface_height);
+
   bool size_changed = false;
   bool has_pixel_buffer = false;
   {

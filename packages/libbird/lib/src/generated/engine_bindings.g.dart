@@ -254,7 +254,7 @@ class LadybirdBindings {
         'get_iosurface_width',
       );
   late final _get_iosurface_width = _get_iosurface_widthPtr
-      .asFunction<int Function(int)>();
+      .asFunction<int Function(int)>(isLeaf: true);
 
   int get_iosurface_height(int view_id) {
     return _get_iosurface_height(view_id);
@@ -265,7 +265,7 @@ class LadybirdBindings {
         'get_iosurface_height',
       );
   late final _get_iosurface_height = _get_iosurface_heightPtr
-      .asFunction<int Function(int)>();
+      .asFunction<int Function(int)>(isLeaf: true);
 
   void set_url_change_callback(int view_id, UrlChangeCallback callback) {
     return _set_url_change_callback(view_id, callback);
@@ -394,7 +394,7 @@ class LadybirdBindings {
   late final _is_tab_loadingPtr =
       _lookup<ffi.NativeFunction<ffi.Bool Function(ffi.Int)>>('is_tab_loading');
   late final _is_tab_loading = _is_tab_loadingPtr
-      .asFunction<bool Function(int)>();
+      .asFunction<bool Function(int)>(isLeaf: true);
 
   void tick_ladybird() {
     return _tick_ladybird();
@@ -434,7 +434,9 @@ class LadybirdBindings {
 
   late final _can_go_backPtr =
       _lookup<ffi.NativeFunction<ffi.Bool Function(ffi.Int)>>('can_go_back');
-  late final _can_go_back = _can_go_backPtr.asFunction<bool Function(int)>();
+  late final _can_go_back = _can_go_backPtr.asFunction<bool Function(int)>(
+    isLeaf: true,
+  );
 
   bool can_go_forward(int view_id) {
     return _can_go_forward(view_id);
@@ -443,7 +445,7 @@ class LadybirdBindings {
   late final _can_go_forwardPtr =
       _lookup<ffi.NativeFunction<ffi.Bool Function(ffi.Int)>>('can_go_forward');
   late final _can_go_forward = _can_go_forwardPtr
-      .asFunction<bool Function(int)>();
+      .asFunction<bool Function(int)>(isLeaf: true);
 
   ffi.Pointer<ffi.Char> get_view_url(int view_id) {
     return _get_view_url(view_id);
@@ -454,7 +456,7 @@ class LadybirdBindings {
         'get_view_url',
       );
   late final _get_view_url = _get_view_urlPtr
-      .asFunction<ffi.Pointer<ffi.Char> Function(int)>();
+      .asFunction<ffi.Pointer<ffi.Char> Function(int)>(isLeaf: true);
 
   ffi.Pointer<ffi.Char> get_bookmarks_json() {
     return _get_bookmarks_json();
@@ -465,7 +467,7 @@ class LadybirdBindings {
         'get_bookmarks_json',
       );
   late final _get_bookmarks_json = _get_bookmarks_jsonPtr
-      .asFunction<ffi.Pointer<ffi.Char> Function()>();
+      .asFunction<ffi.Pointer<ffi.Char> Function()>(isLeaf: true);
 
   void toggle_bookmark_for_view(int view_id) {
     return _toggle_bookmark_for_view(view_id);
@@ -487,7 +489,7 @@ class LadybirdBindings {
         'is_current_view_bookmarked',
       );
   late final _is_current_view_bookmarked = _is_current_view_bookmarkedPtr
-      .asFunction<bool Function(int)>();
+      .asFunction<bool Function(int)>(isLeaf: true);
 
   ffi.Pointer<ffi.Char> history_autocomplete_json(
     ffi.Pointer<ffi.Char> query,
@@ -503,7 +505,9 @@ class LadybirdBindings {
         >
       >('history_autocomplete_json');
   late final _history_autocomplete_json = _history_autocomplete_jsonPtr
-      .asFunction<ffi.Pointer<ffi.Char> Function(ffi.Pointer<ffi.Char>, int)>();
+      .asFunction<ffi.Pointer<ffi.Char> Function(ffi.Pointer<ffi.Char>, int)>(
+        isLeaf: true,
+      );
 
   void copy_selection(int view_id) {
     return _copy_selection(view_id);
