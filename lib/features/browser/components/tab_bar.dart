@@ -7,6 +7,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutterbird/features/browser/components/omnibox_bar.dart';
 import 'package:flutterbird/features/browser/components/tab.dart';
+import 'package:flutterbird/features/frontend/abstraction/frontend_layer.dart';
+import 'package:flutterbird/features/frontend/components/adaptive_widgets.dart';
 import 'package:flutterbird/features/browser/state/tab_actions.dart';
 import 'package:flutterbird/features/browser/state/tab_layout_mode.dart';
 import 'package:window_manager/window_manager.dart';
@@ -88,6 +90,13 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar>
 
   @override
   Widget build(BuildContext context) {
+    final frontend = FrontendScope.of(context);
+    final isFluent = frontend.flavor == FrontendFlavor.fluent;
+    final tabStripHeight = isFluent ? 40.0 : 45.0;
+    final tabListPadding = isFluent
+        ? const EdgeInsets.only(top: 2)
+        : const EdgeInsets.only(top: 4, bottom: 4);
+
     final tabs = ref.watch(browserTabControllerProvider);
     final currentTabController = ref.watch(
       browserTabProvider(widget.currentViewId),
@@ -105,7 +114,7 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar>
     return Column(
       children: [
         SizedBox(
-          height: 45,
+          height: tabStripHeight,
           child: Row(
             children: [
               DragToMoveArea(
@@ -116,8 +125,8 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar>
               ),
               SizedBox(
                 width: _kLayoutToggleButtonWidth,
-                child: IconButton(
-                  icon: Icon(Icons.dashboard),
+                child: FrontendIconButton(
+                  icon: const Icon(Icons.dashboard),
                   tooltip: 'Switch to vertical tabs',
                   onPressed: () {
                     ref
@@ -167,7 +176,7 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar>
                     Widget buildTabList({required bool includeAddButton}) {
                       return ReorderableListView.builder(
                         shrinkWrap: true,
-                        padding: const EdgeInsets.only(top: 4, bottom: 4),
+                        padding: tabListPadding,
                         scrollDirection: Axis.horizontal,
                         buildDefaultDragHandles: false,
                         itemBuilder: (context, index) {
@@ -176,15 +185,10 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar>
                               key: const ValueKey('add'),
                               index: index,
                               enabled: false,
-                              child: SizedBox(
-                                width: _kAddButtonWidth,
-                                child: IconButton(
-                                  icon: const Icon(Icons.add, size: 20),
-                                  onPressed: () => BrowserTabActions.openNewTab(
-                                    ref,
-                                    context,
-                                  ),
-                                ),
+                              child: FrontendIconButton(
+                                icon: const Icon(Icons.add, size: 20),
+                                onPressed: () =>
+                                    BrowserTabActions.openNewTab(ref, context),
                               ),
                             );
                           }
@@ -252,8 +256,8 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar>
                         ),
                         if (pinAddButton)
                           SizedBox(
-                            width: _kAddButtonWidth,
-                            child: IconButton(
+                            // width: _kAddButtonWidth,
+                            child: FrontendIconButton(
                               icon: const Icon(Icons.add, size: 20),
                               onPressed: () =>
                                   BrowserTabActions.openNewTab(ref, context),
@@ -347,32 +351,45 @@ class _AnimatedBrowserTabItemState extends State<_AnimatedBrowserTabItem> {
 
   @override
   Widget build(BuildContext context) {
-    return ReorderableDragStartListener(
-      index: widget.index,
-      enabled: _isExpanded && !_isClosing,
-      child: ClipRect(
-        child: AnimatedContainer(
-          duration: widget.animationConfig.sizeDuration,
-          curve: widget.animationConfig.sizeCurve,
-          width: _isExpanded ? widget.width + 2 : 0,
-          child: Padding(
-            padding: const EdgeInsets.only(right: 2),
-            child: SizedBox(
-              width: widget.width,
-              child: IgnorePointer(
-                ignoring: _isClosing || !_isExpanded,
-                child: BrowserTab(
-                  viewId: widget.viewId,
-                  selected: widget.selected,
-                  minWidth: widget.minWidth,
-                  width: widget.width,
-                  onTabClosed: _handleClose,
-                ),
+    final frontend = FrontendScope.of(context);
+    final useDelayedDragStart = frontend.flavor == FrontendFlavor.fluent;
+
+    final tabChild = ClipRect(
+      child: AnimatedContainer(
+        duration: widget.animationConfig.sizeDuration,
+        curve: widget.animationConfig.sizeCurve,
+        width: _isExpanded ? widget.width + 2 : 0,
+        child: Padding(
+          padding: const EdgeInsets.only(right: 2),
+          child: SizedBox(
+            width: widget.width,
+            child: IgnorePointer(
+              ignoring: _isClosing || !_isExpanded,
+              child: BrowserTab(
+                viewId: widget.viewId,
+                selected: widget.selected,
+                minWidth: widget.minWidth,
+                width: widget.width,
+                onTabClosed: _handleClose,
               ),
             ),
           ),
         ),
       ),
+    );
+
+    if (useDelayedDragStart) {
+      return ReorderableDelayedDragStartListener(
+        index: widget.index,
+        enabled: _isExpanded && !_isClosing,
+        child: tabChild,
+      );
+    }
+
+    return ReorderableDragStartListener(
+      index: widget.index,
+      enabled: _isExpanded && !_isClosing,
+      child: tabChild,
     );
   }
 }

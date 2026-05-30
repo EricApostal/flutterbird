@@ -1,12 +1,10 @@
 import 'dart:io';
 
-import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutterbird/features/frontend/abstraction/frontend_layer.dart';
 import 'package:flutterbird/features/router/controller.dart';
-import 'package:go_transitions/go_transitions.dart';
 import 'package:window_manager/window_manager.dart';
-
-import 'package:flutter/src/widgets/_window.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -39,47 +37,24 @@ void main() async {
   runApp(ProviderScope(child: const MainApp()));
 }
 
-class MainApp extends StatefulWidget {
+class MainApp extends StatelessWidget {
   const MainApp({super.key});
 
   @override
-  State<MainApp> createState() => _MainAppState();
-}
-
-class _MainAppState extends State<MainApp> {
-  @override
   Widget build(BuildContext context) {
-    final pageTransition = const PageTransitionsTheme(
-      builders: {
-        // TargetPlatform.android: GoTransitions.material,
-        TargetPlatform.fuchsia: GoTransitions.none,
-        TargetPlatform.iOS: GoTransitions.none,
-        TargetPlatform.linux: GoTransitions.none,
-        TargetPlatform.macOS: GoTransitions.none,
-        TargetPlatform.windows: GoTransitions.none,
-      },
-    );
+    final frontend = resolveFrontendLayer();
 
-    return MaterialApp.router(
+    return frontend.buildApp(
       routerConfig: routerController,
-      builder: (context, child) {
-        return PopScope(canPop: false, child: child ?? const SizedBox.shrink());
+      appBuilder: (context, child) {
+        return FrontendScope(
+          layer: frontend,
+          child: PopScope(
+            canPop: false,
+            child: child ?? const SizedBox.shrink(),
+          ),
+        );
       },
-      themeMode: .dark,
-
-      darkTheme: ThemeData(
-        pageTransitionsTheme: pageTransition,
-        colorScheme: .fromSeed(
-          brightness: .dark,
-          seedColor: Color.fromARGB(255, 35, 174, 255),
-        ),
-        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-      ),
-      theme: ThemeData(
-        pageTransitionsTheme: pageTransition,
-        colorScheme: .fromSeed(seedColor: Color.fromARGB(255, 35, 141, 255)),
-        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-      ),
     );
   }
 }

@@ -56,7 +56,7 @@ class __BrowserTabState extends State<_BrowserTab> {
               hintStyle: theme.textTheme.labelLarge!.copyWith(
                 color: theme.colorScheme.surfaceContainerHighest,
                 fontWeight: .w400,
-                fontSize: 13.5,
+                fontSize: 13,
               ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(radius),

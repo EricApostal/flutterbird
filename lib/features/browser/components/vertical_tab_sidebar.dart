@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutterbird/features/browser/components/tab.dart';
+import 'package:flutterbird/features/frontend/components/adaptive_widgets.dart';
 import 'package:flutterbird/features/browser/state/tab_actions.dart';
 import 'package:flutterbird/features/browser/state/tab_layout_mode.dart';
 import 'package:window_manager/window_manager.dart';
@@ -89,7 +90,7 @@ class _BrowserVerticalTabSidebarState
                     // ),
                   ),
                 ),
-                IconButton(
+                FrontendIconButton(
                   icon: const Icon(Icons.splitscreen_outlined, size: 18),
                   tooltip: 'Switch to horizontal tabs',
                   onPressed: () {
@@ -158,13 +159,25 @@ class _BrowserVerticalTabSidebarState
             padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
             child: SizedBox(
               width: double.infinity,
-              child: FilledButton.icon(
-                icon: const Icon(Icons.add, size: 18),
-                label: const Text('New Tab'),
-                style: FilledButton.styleFrom(
-                  backgroundColor: Colors.transparent,
-
-                  foregroundColor: theme.colorScheme.onSurface,
+              child: FrontendFilledButton(
+                backgroundColor: theme.colorScheme.surfaceContainerHigh,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.add,
+                      size: 18,
+                      color: theme.colorScheme.onSurface,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'New Tab',
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: theme.colorScheme.onSurface,
+                      ),
+                    ),
+                  ],
                 ),
                 onPressed: () => BrowserTabActions.openNewTab(ref, context),
               ),
