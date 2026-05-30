@@ -7,7 +7,7 @@ enum FrontendFlavor { material, fluent }
 
 const String _kFrontendEnvironment = String.fromEnvironment(
   'FLUTTERBIRD_FRONTEND',
-  defaultValue: 'fluent',
+  defaultValue: 'material',
 );
 
 FrontendFlavor _defaultFrontendFlavorFromEnvironment() {
