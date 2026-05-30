@@ -134,8 +134,6 @@ class FluentFrontendLayer extends FrontendLayer {
     final isDark = theme.brightness == Brightness.dark;
     final backgroundColor = selected
         ? bridgeTheme.colorScheme.surfaceContainerHigh
-        : sidebarVariant
-        ? theme.cardColor.withAlpha(isDark ? 220 : 235)
         : m.Colors.transparent;
     final fallbackTitleColor = isDark
         ? const m.Color(0xFFF5F5F5)
