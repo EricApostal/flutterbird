@@ -1,4 +1,5 @@
 import 'package:flutter/gestures.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
@@ -29,6 +30,7 @@ class _LadybirdViewState extends State<LadybirdView>
   int _lastPanTime = 0;
 
   void _onNativeResize() {
+    debugPrint("[LibBird] _onNativeResize called in Dart!");
     if (!mounted) return;
     setState(() {});
   }
@@ -103,6 +105,10 @@ class _LadybirdViewState extends State<LadybirdView>
   void _onSizeChanged(Size size, double density) {
     if (size.width <= 0 || size.height <= 0) return;
     final physicalSize = Size(size.width * density, size.height * density);
+
+    debugPrint(
+      "[LibBird] _onSizeChanged: flutterSize: $size, density: $density, physicalSize: $physicalSize",
+    );
 
     widget.controller.updateDevicePixelRatio(density);
     widget.controller.resizeWindow(physicalSize);
@@ -247,7 +253,41 @@ class _LadybirdViewState extends State<LadybirdView>
     }
   }
 
+  bool _isPlatformShortcutPressed() {
+    return switch (defaultTargetPlatform) {
+      TargetPlatform.iOS ||
+      TargetPlatform.macOS => HardwareKeyboard.instance.isMetaPressed,
+      _ => HardwareKeyboard.instance.isControlPressed,
+    };
+  }
+
+  bool _handleClipboardShortcut(KeyEvent event) {
+    if (event is! KeyDownEvent) {
+      return false;
+    }
+
+    if (!_isPlatformShortcutPressed()) {
+      return false;
+    }
+
+    if (event.logicalKey == LogicalKeyboardKey.keyC) {
+      widget.controller.copySelection();
+      return true;
+    }
+
+    if (event.logicalKey == LogicalKeyboardKey.keyV) {
+      widget.controller.pasteFromClipboard();
+      return true;
+    }
+
+    return false;
+  }
+
   KeyEventResult _onKeyEvent(FocusNode node, KeyEvent event) {
+    if (_handleClipboardShortcut(event)) {
+      return KeyEventResult.handled;
+    }
+
     int type = event is KeyDownEvent ? 0 : 1;
     if (event is KeyRepeatEvent) type = 0;
 
@@ -293,17 +333,19 @@ class _LadybirdViewState extends State<LadybirdView>
           final paddedWidth = widget.controller.getSurfaceWidth() / density;
           final paddedHeight = widget.controller.getSurfaceHeight() / density;
 
+          debugPrint(
+            "[LibBird] Window.build: constraints=$constraints, density=$density, paddedWidth=$paddedWidth, paddedHeight=$paddedHeight, surfaceWidth=${widget.controller.getSurfaceWidth()}",
+          );
+
           return OverflowBox(
             alignment: Alignment.topLeft,
-            minWidth: constraints.maxWidth,
-            minHeight: constraints.maxHeight,
-            maxWidth: paddedWidth > constraints.maxWidth
-                ? paddedWidth
-                : constraints.maxWidth,
-            maxHeight: paddedHeight > constraints.maxHeight
-                ? paddedHeight
-                : constraints.maxHeight,
+            minWidth: paddedWidth,
+            minHeight: paddedHeight,
+            maxWidth: paddedWidth,
+            maxHeight: paddedHeight,
             child: SizedBox(
+              width: paddedWidth,
+              height: paddedHeight,
               child: MouseRegion(
                 cursor: widget.controller.mouseCursorNotifier.value,
                 child: Focus(

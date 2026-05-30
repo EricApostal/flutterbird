@@ -124,6 +124,9 @@ LADYBIRD_API bool is_current_view_bookmarked(int view_id);
 // Caller owns returned memory and must free it.
 LADYBIRD_API char *history_autocomplete_json(const char *query, int limit);
 
+LADYBIRD_API void copy_selection(int view_id);
+LADYBIRD_API void paste_from_clipboard(int view_id);
+
 LADYBIRD_API void dispatch_mouse_event(int view_id, int type, int x, int y,
                                        int button, int buttons, int modifiers,
                                        double wheel_delta_x,

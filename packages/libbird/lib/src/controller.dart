@@ -381,6 +381,7 @@ class LadybirdController {
   void updateDevicePixelRatio(double ratio) {
     if (ratio <= 0) return;
     if (_lastDevicePixelRatio == ratio) return;
+    print("[LibBird] Controller.updateDevicePixelRatio: ratio=$ratio");
     _lastDevicePixelRatio = ratio;
     _bindings.set_zoom(_viewId, ratio);
   }
@@ -441,6 +442,14 @@ class LadybirdController {
     return json;
   }
 
+  void copySelection() {
+    _bindings.copy_selection(_viewId);
+  }
+
+  void pasteFromClipboard() {
+    _bindings.paste_from_clipboard(_viewId);
+  }
+
   Future<int> createTexture() async {
     return await _channel.invokeMethod('createTexture', _viewId);
   }
@@ -451,6 +460,7 @@ class LadybirdController {
 
   bool resizeWindow(Size size) {
     if (size == _lastSize) return false;
+    print("[LibBird] Controller.resizeWindow: size=$size");
     _lastSize = size;
     _bindings.resize_window(_viewId, size.width.round(), size.height.round());
     return true;

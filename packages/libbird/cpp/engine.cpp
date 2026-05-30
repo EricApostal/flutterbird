@@ -338,14 +338,18 @@ public:
                 m_view_id);
             m_last_mac_frame_source = MacFrameSource::IOSurface;
           }
-          if ((m_debug_paint_event_count % 120) == 1) {
+          if ((m_debug_paint_event_count % 30) == 1) {
+            auto const &bitmap_size = m_client_state.front_bitmap.last_painted_size.to_type<int>();
             std::fprintf(
                 stderr,
                 "[Ladybird][engine] view=%d paint#=%llu source=IOSurface "
-                "size=%dx%d\n",
+                "surface_size=%dx%d bitmap_size=%dx%d viewport_size=%dx%d m_zoom=%f\n",
                 m_view_id,
                 static_cast<unsigned long long>(m_debug_paint_event_count),
-                surface_width, surface_height);
+                surface_width, surface_height,
+                bitmap_size.width(), bitmap_size.height(),
+                m_viewport_width, m_viewport_height,
+                m_zoom);
           }
           return;
         }
@@ -474,6 +478,7 @@ public:
   }
 
   void resize(int width, int height) {
+    std::fprintf(stderr, "[LibBird] resize: incoming %dx%d, m_zoom: %f\n", width, height, m_zoom);
     m_viewport_width = width;
     m_viewport_height = height;
     auto size = Web::DevicePixelSize{width, height};
@@ -485,6 +490,7 @@ public:
   }
 
   void update_zoom_scale() {
+    std::fprintf(stderr, "[LibBird] update_zoom_scale: m_zoom: %f\n", m_zoom);
     sync_device_pixel_ratio();
     client().async_set_viewport(m_client_state.page_index, viewport_size(),
                                 m_device_pixel_ratio, is_fullscreen());
@@ -910,6 +916,7 @@ void navigate_to(int view_id, const char *url) {
 void set_zoom(int view_id, double zoom) {
   if (zoom <= 0.0)
     return;
+  std::fprintf(stderr, "[LibBird] set_zoom: view_id=%d, zoom=%f\n", view_id, zoom);
   auto it = g_web_views.find(view_id);
   if (it != g_web_views.end()) {
     it->second->m_zoom = zoom;
@@ -1100,6 +1107,25 @@ char *history_autocomplete_json(const char *query, int limit) {
   auto json = JsonValue(move(suggestions)).serialized();
   auto bytes = json.to_byte_string();
   return strdup(bytes.characters());
+}
+
+void copy_selection(int view_id) {
+  auto it = g_web_views.find(view_id);
+  if (it == g_web_views.end())
+    return;
+
+  if (auto text = it->second->selected_text(); !text.is_empty()) {
+    WebView::Application::the().insert_clipboard_entry(
+        {std::move(text), "text/plain"_string});
+  }
+}
+
+void paste_from_clipboard(int view_id) {
+  auto it = g_web_views.find(view_id);
+  if (it == g_web_views.end())
+    return;
+
+  it->second->paste_text_from_clipboard();
 }
 
 void set_loading_state_change_callback(int view_id,
