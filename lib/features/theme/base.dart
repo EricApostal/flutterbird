@@ -40,7 +40,7 @@ TextTheme getBaseTextTheme(TextTheme baseTextTheme) {
     ),
     bodyMedium: baseTextTheme.bodyMedium?.copyWith(
       fontWeight: FontWeight.w500,
-      fontSize: 14.5,
+      fontSize: 13,
     ),
     bodySmall: baseTextTheme.bodySmall?.copyWith(
       fontWeight: FontWeight.w500,

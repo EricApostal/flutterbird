@@ -171,7 +171,6 @@ class MaterialFrontendLayer extends FrontendLayer {
           vertical: 12,
         ),
         hintStyle: theme.textTheme.bodyMedium?.copyWith(
-          fontSize: 13,
           color: theme.colorScheme.onSurface.withAlpha(150),
         ),
         enabledBorder: m.OutlineInputBorder(
