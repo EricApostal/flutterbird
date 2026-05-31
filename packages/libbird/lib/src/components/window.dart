@@ -40,7 +40,7 @@ class _LadybirdViewState extends State<LadybirdView>
   }
 
   void _attachControllerListeners(LadybirdController controller) {
-    controller.onResize = _onNativeResize;
+    controller.addResizeListener(_onNativeResize);
     controller.isLoadingNotifier.addListener(_onLoadingStateChanged);
     controller.mouseCursorNotifier.addListener(_onCursorChanged);
   }
@@ -48,7 +48,7 @@ class _LadybirdViewState extends State<LadybirdView>
   void _detachControllerListeners(LadybirdController controller) {
     controller.mouseCursorNotifier.removeListener(_onCursorChanged);
     controller.isLoadingNotifier.removeListener(_onLoadingStateChanged);
-    controller.onResize = null;
+    controller.removeResizeListener(_onNativeResize);
   }
 
   void _onCursorChanged() {
@@ -323,6 +323,7 @@ class _LadybirdViewState extends State<LadybirdView>
     if (_textureId == null) {
       return const Center(child: CircularProgressIndicator());
     }
+    print("outer build");
 
     return SizedBox.expand(
       child: LayoutBuilder(
@@ -337,40 +338,42 @@ class _LadybirdViewState extends State<LadybirdView>
             "[LibBird] Window.build: constraints=$constraints, density=$density, paddedWidth=$paddedWidth, paddedHeight=$paddedHeight, surfaceWidth=${widget.controller.getSurfaceWidth()}",
           );
 
-          return OverflowBox(
-            alignment: Alignment.topLeft,
-            minWidth: paddedWidth,
-            minHeight: paddedHeight,
-            maxWidth: paddedWidth,
-            maxHeight: paddedHeight,
-            child: SizedBox(
-              width: paddedWidth,
-              height: paddedHeight,
-              child: MouseRegion(
-                cursor: widget.controller.mouseCursorNotifier.value,
-                child: Focus(
-                  focusNode: _focusNode,
-                  autofocus: true,
-                  onKeyEvent: _onKeyEvent,
-                  child: Listener(
-                    onPointerDown: (e) {
-                      _focusNode.requestFocus();
-                      _onPointerEvent(e, 0);
-                    },
-                    onPointerUp: (e) => _onPointerEvent(e, 1),
-                    onPointerMove: (e) => _onPointerEvent(e, 2),
-                    onPointerHover: (e) => _onPointerEvent(e, 2),
-                    onPointerPanZoomStart: _onPointerPanZoomStart,
-                    onPointerPanZoomUpdate: _onPointerPanZoomUpdate,
-                    onPointerPanZoomEnd: _onPointerPanZoomEnd,
-                    onPointerSignal: (e) {
-                      if (e is PointerScrollEvent) {
-                        _onPointerScroll(e);
-                      }
-                    },
-                    child: Texture(
-                      key: ValueKey(_textureId),
-                      textureId: _textureId!,
+          return ClipRect(
+            child: OverflowBox(
+              alignment: Alignment.topLeft,
+              minWidth: paddedWidth,
+              minHeight: paddedHeight,
+              maxWidth: paddedWidth,
+              maxHeight: paddedHeight,
+              child: SizedBox(
+                width: paddedWidth,
+                height: paddedHeight,
+                child: MouseRegion(
+                  cursor: widget.controller.mouseCursorNotifier.value,
+                  child: Focus(
+                    focusNode: _focusNode,
+                    autofocus: true,
+                    onKeyEvent: _onKeyEvent,
+                    child: Listener(
+                      onPointerDown: (e) {
+                        _focusNode.requestFocus();
+                        _onPointerEvent(e, 0);
+                      },
+                      onPointerUp: (e) => _onPointerEvent(e, 1),
+                      onPointerMove: (e) => _onPointerEvent(e, 2),
+                      onPointerHover: (e) => _onPointerEvent(e, 2),
+                      onPointerPanZoomStart: _onPointerPanZoomStart,
+                      onPointerPanZoomUpdate: _onPointerPanZoomUpdate,
+                      onPointerPanZoomEnd: _onPointerPanZoomEnd,
+                      onPointerSignal: (e) {
+                        if (e is PointerScrollEvent) {
+                          _onPointerScroll(e);
+                        }
+                      },
+                      child: Texture(
+                        key: ValueKey(_textureId),
+                        textureId: _textureId!,
+                      ),
                     ),
                   ),
                 ),

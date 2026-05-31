@@ -51,6 +51,7 @@ class LadybirdController {
   static void Function(String)? onDisplayErrorDialog;
 
   void Function()? onResize;
+  final Set<VoidCallback> _resizeListeners = <VoidCallback>{};
   void Function()? onCrossSiteNavigation;
   void Function(LadybirdContextMenuRequest request)? onContextMenuRequest;
   void Function(int newViewId, bool activateTab)? onNewWebView;
@@ -78,6 +79,14 @@ class LadybirdController {
   }) {
     _bindings = LadybirdBindings(ffi.DynamicLibrary.process());
     _initialize(existingViewId: viewId);
+  }
+
+  void addResizeListener(VoidCallback listener) {
+    _resizeListeners.add(listener);
+  }
+
+  void removeResizeListener(VoidCallback listener) {
+    _resizeListeners.remove(listener);
   }
 
   void _initialize({int? existingViewId}) {
@@ -117,6 +126,9 @@ class LadybirdController {
       _onResize,
     );
     _bindings.set_resize_callback(_viewId, _resizeCallback.nativeFunction);
+    debugPrint(
+      '[LibBird] set_resize_callback view=$_viewId callback=0x${_resizeCallback.nativeFunction.address.toRadixString(16)}',
+    );
 
     _urlChangeCallback =
         ffi.NativeCallable<ffi.Void Function(ffi.Pointer<ffi.Char>)>.listener(
@@ -253,7 +265,13 @@ class LadybirdController {
   }
 
   void _onResize() {
+    debugPrint(
+      '[LibBird] controller _onResize view=$_viewId hasHandler=${onResize != null} listeners=${_resizeListeners.length}',
+    );
     onResize?.call();
+    for (final listener in _resizeListeners.toList(growable: false)) {
+      listener();
+    }
   }
 
   void _onCrossSiteNavigation(int viewId) {

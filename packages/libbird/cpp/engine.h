@@ -61,6 +61,8 @@ LADYBIRD_API void set_frame_callback(int view_id, FrameCallback callback,
 
 LADYBIRD_API void set_resize_callback(int view_id, ResizeCallback callback);
 
+LADYBIRD_API void notify_resize_callback(int view_id);
+
 LADYBIRD_API void resize_window(int view_id, int width, int height);
 
 LADYBIRD_API void navigate_to(int view_id, const char *url);

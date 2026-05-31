@@ -261,6 +261,14 @@ public:
 
   void sync_device_pixel_ratio() { m_device_pixel_ratio = m_zoom; }
 
+  Web::DevicePixelSize logical_window_size() const {
+    auto scale = m_device_pixel_ratio > 0 ? m_device_pixel_ratio : 1.0;
+    return {
+        static_cast<int>((static_cast<double>(m_viewport_width) / scale) + 0.5),
+        static_cast<int>((static_cast<double>(m_viewport_height) / scale) + 0.5),
+    };
+  }
+
   void configure_client_process() {
     auto theme_path = LexicalPath::join(WebView::s_ladybird_resource_root,
                                         "themes"sv, "Default.ini"sv);
@@ -271,7 +279,8 @@ public:
     client().async_update_system_theme(m_client_state.page_index, theme);
     client().async_set_viewport(m_client_state.page_index, viewport_size(),
                                 m_device_pixel_ratio, is_fullscreen());
-    client().async_set_window_size(m_client_state.page_index, viewport_size());
+    client().async_set_window_size(m_client_state.page_index,
+                     logical_window_size());
 
     Web::DevicePixelRect screen_rect{0, 0, 1920, 1080};
     client().async_update_screen_rects(m_client_state.page_index,
@@ -352,6 +361,8 @@ public:
                 m_zoom);
           }
           return;
+        } else {
+          std::fprintf(stdout,"surface not ready?");
         }
       }
 #endif
@@ -485,7 +496,8 @@ public:
     sync_device_pixel_ratio();
     client().async_set_viewport(m_client_state.page_index, size,
                                 m_device_pixel_ratio, is_fullscreen());
-    client().async_set_window_size(m_client_state.page_index, size);
+    client().async_set_window_size(m_client_state.page_index,
+                                   logical_window_size());
     WebView::Application::the().update_compositor_viewport(client().compositor_context_id_for_page(m_client_state.page_index), viewport_size().to_type<int>(), Web::Compositor::WindowResizingInProgress::Yes);
   }
 
@@ -891,7 +903,37 @@ void set_resize_callback(int view_id, ResizeCallback callback) {
   if (it != g_web_views.end()) {
     std::lock_guard lock(it->second->m_backend->callback_mutex);
     it->second->m_backend->resize_callback = callback;
+    std::fprintf(stderr,
+                 "[Ladybird][engine] set_resize_callback view=%d callback=%p\n",
+                 view_id, reinterpret_cast<void *>(callback));
+  } else {
+    std::fprintf(stderr,
+                 "[Ladybird][engine] set_resize_callback missing view=%d callback=%p\n",
+                 view_id, reinterpret_cast<void *>(callback));
   }
+}
+
+void notify_resize_callback(int view_id) {
+  auto it = g_web_views.find(view_id);
+  if (it == g_web_views.end()) {
+    std::fprintf(stderr,
+                 "[Ladybird][engine] notify_resize_callback missing view=%d\n",
+                 view_id);
+    return;
+  }
+
+  ResizeCallback callback = nullptr;
+  {
+    std::lock_guard lock(it->second->m_backend->callback_mutex);
+    callback = it->second->m_backend->resize_callback;
+  }
+
+  std::fprintf(stderr,
+               "[Ladybird][engine] notify_resize_callback view=%d callback=%p\n",
+               view_id, reinterpret_cast<void *>(callback));
+
+  if (callback)
+    callback();
 }
 
 void resize_window(int view_id, int width, int height) {
