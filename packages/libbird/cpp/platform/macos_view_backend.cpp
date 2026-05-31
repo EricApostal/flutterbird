@@ -86,11 +86,6 @@ bool MacOSViewBackend::on_iosurface_ready(IOSurfaceRef surface, int width,
   if (!surface || width <= 0 || height <= 0)
     return false;
 
-  size_t actual_surface_width = IOSurfaceGetWidth(surface);
-  size_t actual_surface_height = IOSurfaceGetHeight(surface);
-  
-  std::fprintf(stderr, "[Ladybird][macOS] on_iosurface_ready input_req: %dx%d, actual: %zux%zu\n", width, height, actual_surface_width, actual_surface_height);
-
   bool size_changed = false;
   bool has_pixel_buffer = false;
   {
@@ -99,12 +94,25 @@ bool MacOSViewBackend::on_iosurface_ready(IOSurfaceRef surface, int width,
     m_width = width;
     m_height = height;
 
-    auto *new_pixel_buffer = create_pixel_buffer_from_iosurface(surface);
-    if (m_pixel_buffer) {
-      CVPixelBufferRelease(m_pixel_buffer);
-      m_pixel_buffer = nullptr;
+    if (surface != m_surface || !m_pixel_buffer) {
+      auto *new_pixel_buffer = create_pixel_buffer_from_iosurface(surface);
+      if (!new_pixel_buffer)
+        return false;
+
+      if (m_pixel_buffer) {
+        CVPixelBufferRelease(m_pixel_buffer);
+        m_pixel_buffer = nullptr;
+      }
+      if (m_surface) {
+        CFRelease(m_surface);
+        m_surface = nullptr;
+      }
+
+      m_pixel_buffer = new_pixel_buffer;
+      m_surface = surface;
+      CFRetain(m_surface);
     }
-    m_pixel_buffer = new_pixel_buffer;
+
     has_pixel_buffer = (m_pixel_buffer != nullptr);
     if (has_pixel_buffer)
       ++m_generation;
@@ -122,6 +130,10 @@ MacOSViewBackend::~MacOSViewBackend() {
     CVPixelBufferRelease(m_pixel_buffer);
     m_pixel_buffer = nullptr;
   }
+  if (m_surface) {
+    CFRelease(m_surface);
+    m_surface = nullptr;
+  }
 }
 
 void MacOSViewBackend::on_bitmap_ready(AK::RefPtr<Gfx::Bitmap const> bitmap) {
@@ -135,6 +147,11 @@ void MacOSViewBackend::on_bitmap_ready(AK::RefPtr<Gfx::Bitmap const> bitmap) {
     m_bitmap = std::move(bitmap);
     m_width = m_bitmap->width();
     m_height = m_bitmap->height();
+
+    if (m_surface) {
+      CFRelease(m_surface);
+      m_surface = nullptr;
+    }
 
     auto *new_pixel_buffer = create_pixel_buffer_from_bitmap(*m_bitmap);
     if (m_pixel_buffer) {

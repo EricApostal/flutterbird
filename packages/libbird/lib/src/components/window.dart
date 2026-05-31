@@ -30,7 +30,6 @@ class _LadybirdViewState extends State<LadybirdView>
   int _lastPanTime = 0;
 
   void _onNativeResize() {
-    debugPrint("[LibBird] _onNativeResize called in Dart!");
     if (!mounted) return;
     setState(() {});
   }
@@ -150,19 +149,19 @@ class _LadybirdViewState extends State<LadybirdView>
       }
     }
 
-    // final density = MediaQuery.devicePixelRatioOf(context);
-    // widget.controller.dispatchMouseEvent(
-    //   type: type,
-    //   x: (event.localPosition.dx * density).toInt(),
-    //   y: (event.localPosition.dy * density).toInt(),
-    //   button: button,
-    //   buttons: event.buttons,
-    //   modifiers: getModifiersForEvent(
-    //     HardwareKeyboard.instance.logicalKeysPressed,
-    //   ),
-    //   wheelDeltaX: 0,
-    //   wheelDeltaY: 0,
-    // );
+    final density = MediaQuery.devicePixelRatioOf(context);
+    widget.controller.dispatchMouseEvent(
+      type: type,
+      x: (event.localPosition.dx * density).toInt(),
+      y: (event.localPosition.dy * density).toInt(),
+      button: button,
+      buttons: event.buttons,
+      modifiers: getModifiersForEvent(
+        HardwareKeyboard.instance.logicalKeysPressed,
+      ),
+      wheelDeltaX: 0,
+      wheelDeltaY: 0,
+    );
   }
 
   void _dispatchWheelDelta(Offset localPosition, double deltaX, double deltaY) {

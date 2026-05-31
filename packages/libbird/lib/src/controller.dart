@@ -126,9 +126,6 @@ class LadybirdController {
       _onResize,
     );
     _bindings.set_resize_callback(_viewId, _resizeCallback.nativeFunction);
-    debugPrint(
-      '[LibBird] set_resize_callback view=$_viewId callback=0x${_resizeCallback.nativeFunction.address.toRadixString(16)}',
-    );
 
     _urlChangeCallback =
         ffi.NativeCallable<ffi.Void Function(ffi.Pointer<ffi.Char>)>.listener(
@@ -265,9 +262,6 @@ class LadybirdController {
   }
 
   void _onResize() {
-    debugPrint(
-      '[LibBird] controller _onResize view=$_viewId hasHandler=${onResize != null} listeners=${_resizeListeners.length}',
-    );
     onResize?.call();
     for (final listener in _resizeListeners.toList(growable: false)) {
       listener();

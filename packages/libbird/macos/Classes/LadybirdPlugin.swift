@@ -91,9 +91,6 @@ public class LadybirdPlugin: NSObject, FlutterPlugin {
     guard let observer else { return }
     CFRunLoopAddObserver(CFRunLoopGetMain(), observer, .commonModes)
     runLoopObserver = observer
-
-    // Prime one pass at startup.
-    requestLadybirdPump()
   }
 
   deinit {

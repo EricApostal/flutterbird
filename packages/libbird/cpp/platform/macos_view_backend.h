@@ -55,6 +55,7 @@ private:
   mutable std::mutex m_mutex;
   // CPU fallback bitmap (used until the IOSurface path is ready):
   AK::RefPtr<Gfx::Bitmap const> m_bitmap;
+  IOSurfaceRef m_surface{nullptr};
   // GPU texture path (TODO):
   CVPixelBufferRef m_pixel_buffer{nullptr};
   uint64_t m_generation{0};
