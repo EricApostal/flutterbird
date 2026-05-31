@@ -2,7 +2,7 @@ import Cocoa
 import CoreVideo
 import FlutterMacOS
 
-private let assumedPumpInterval = 1.0 / 120.0
+private let assumedPumpInterval = 1.0 / 144.0
 private let generationResetThreshold: UInt64 = 256
 private let queueStallGenerationThreshold: UInt64 = 120
 

@@ -9,7 +9,7 @@ import 'package:ladybird/src/models/context_menu.dart';
 import 'dart:ui' as ui;
 
 class LadybirdController {
-  static const double assumedRefreshRate = 120.0;
+  static const double assumedRefreshRate = 144.0;
 
   final MethodChannel _channel = MethodChannel('ladybird');
   late final LadybirdBindings _bindings;
