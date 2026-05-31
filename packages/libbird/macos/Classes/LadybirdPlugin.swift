@@ -13,15 +13,6 @@ func tick_ladybird()
 @_silgen_name("get_frame_generation")
 func get_frame_generation(_ view_id: Int32) -> UInt64
 
-@_silgen_name("get_iosurface_width")
-func get_iosurface_width(_ view_id: Int32) -> Int32
-
-@_silgen_name("get_iosurface_height")
-func get_iosurface_height(_ view_id: Int32) -> Int32
-
-@_silgen_name("notify_resize_callback")
-func notify_resize_callback(_ view_id: Int32)
-
 @_silgen_name("set_frame_callback")
 func set_frame_callback(
   _ view_id: Int32, _ callback: (@convention(c) (UnsafeMutableRawPointer?) -> Void)?,
@@ -242,8 +233,6 @@ public class LadybirdPlugin: NSObject, FlutterPlugin {
           ctx.stateLock.unlock()
 
           guard isActive else { return }
-          print("[Ladybird][macOS] notifyResize view=\(ctx.viewId) textureId=\(ctx.textureId)")
-          notify_resize_callback(ctx.viewId)
           reg.textureFrameAvailable(textureId)
         }
 
