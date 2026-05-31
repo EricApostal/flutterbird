@@ -470,6 +470,19 @@ class LadybirdController {
     await _channel.invokeMethod('unregisterTexture', textureId);
   }
 
+  Future<Map<String, Object?>?> getTextureDiagnostics(int textureId) async {
+    try {
+      return await _channel.invokeMapMethod<String, Object?>(
+        'getTextureDiagnostics',
+        textureId,
+      );
+    } on MissingPluginException {
+      return null;
+    } on PlatformException {
+      return null;
+    }
+  }
+
   bool resizeWindow(Size size) {
     if (size == _lastSize) return false;
     print("[LibBird] Controller.resizeWindow: size=$size");

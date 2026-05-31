@@ -63,6 +63,9 @@ public class LadybirdPlugin: NSObject, FlutterPlugin {
   var contextPtrs: [Int64: UnsafeMutableRawPointer] = [:]
   var activeTexturesForView: [Int32: Int64] = [:]
   private let pumpStateLock = NSLock()
+  private var displayLinkTicks: UInt64 = 0
+  private var pumpRequests: UInt64 = 0
+  private var pumpExecutions: UInt64 = 0
   private var pumpInProgress = false
   private var pumpRequested = false
 
@@ -121,6 +124,9 @@ public class LadybirdPlugin: NSObject, FlutterPlugin {
         { _, _, _, _, _, userInfo in
           guard let userInfo else { return kCVReturnError }
           let plugin = Unmanaged<LadybirdPlugin>.fromOpaque(userInfo).takeUnretainedValue()
+          plugin.pumpStateLock.lock()
+          plugin.displayLinkTicks += 1
+          plugin.pumpStateLock.unlock()
           DispatchQueue.main.async {
             plugin.requestLadybirdPump()
           }
@@ -155,6 +161,7 @@ public class LadybirdPlugin: NSObject, FlutterPlugin {
 
   private func requestLadybirdPump() {
     pumpStateLock.lock()
+    pumpRequests += 1
     if pumpInProgress {
       pumpRequested = true
       pumpStateLock.unlock()
@@ -164,6 +171,10 @@ public class LadybirdPlugin: NSObject, FlutterPlugin {
     pumpStateLock.unlock()
 
     while true {
+      pumpStateLock.lock()
+      pumpExecutions += 1
+      pumpStateLock.unlock()
+
       tick_ladybird()
 
       pumpStateLock.lock()
@@ -297,6 +308,43 @@ public class LadybirdPlugin: NSObject, FlutterPlugin {
       set_frame_callback(viewId, callback, ctxPtr)
 
       result(textureId)
+    case "getTextureDiagnostics":
+      guard let num = call.arguments as? NSNumber else {
+        result(FlutterError(code: "INVALID_ARGS", message: "Expected texture ID", details: nil))
+        return
+      }
+
+      let textureId = num.int64Value
+      guard let ptr = contextPtrs[textureId] else {
+        result(nil)
+        return
+      }
+
+      let ctx = Unmanaged<TextureContext>.fromOpaque(ptr).takeUnretainedValue()
+      ctx.stateLock.lock()
+      let diagnostics: [String: Any] = [
+        "textureId": textureId,
+        "viewId": Int(ctx.viewId),
+        "isActive": ctx.isActive,
+        "frameNotifyQueued": ctx.frameNotifyQueued,
+        "queuedGeneration": Int64(ctx.queuedGeneration),
+        "lastFrameGeneration": Int64(ctx.lastFrameGeneration),
+        "nativeFrameCallbacks": Int64(ctx.nativeFrameCallbacks),
+        "queuedDrops": Int64(ctx.queuedDrops),
+        "deliveredFrames": Int64(ctx.deliveredFrames),
+      ]
+      ctx.stateLock.unlock()
+
+      pumpStateLock.lock()
+      let driverDiagnostics: [String: Any] = [
+        "displayLinkTicks": Int64(displayLinkTicks),
+        "pumpRequests": Int64(pumpRequests),
+        "pumpExecutions": Int64(pumpExecutions),
+        "hasDisplayLink": displayLink != nil,
+      ]
+      pumpStateLock.unlock()
+
+      result(diagnostics.merging(driverDiagnostics) { _, new in new })
     case "unregisterTexture":
       guard let registry = textureRegistry else {
         result(FlutterError(code: "UNAVAILABLE", message: "Texture registry is null", details: nil))

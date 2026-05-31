@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/gestures.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -20,6 +22,10 @@ class _LadybirdViewState extends State<LadybirdView>
     with SingleTickerProviderStateMixin {
   int? _textureId;
   final FocusNode _focusNode = FocusNode();
+  Timer? _frameDiagnosticsTimer;
+  bool _frameDiagnosticsPollInFlight = false;
+  _FrameDiagnosticsSnapshot? _frameDiagnostics;
+  _RawFrameDiagnostics? _lastFrameDiagnosticsRaw;
 
   double _accumulatedWheelX = 0;
   double _accumulatedWheelY = 0;
@@ -28,6 +34,9 @@ class _LadybirdViewState extends State<LadybirdView>
   Offset _momentumVelocity = Offset.zero;
   Offset _lastPointerPos = Offset.zero;
   int _lastPanTime = 0;
+
+  bool get _showFrameDiagnostics =>
+      defaultTargetPlatform == TargetPlatform.macOS;
 
   void _onNativeResize() {
     if (!mounted) return;
@@ -76,6 +85,8 @@ class _LadybirdViewState extends State<LadybirdView>
         _textureId = null;
       }
 
+      _stopFrameDiagnostics();
+
       _attachControllerListeners(widget.controller);
 
       _recreateTexture();
@@ -90,6 +101,7 @@ class _LadybirdViewState extends State<LadybirdView>
       setState(() {
         _textureId = textureId;
       });
+      _startFrameDiagnosticsIfNeeded();
       if (oldTextureId != null && oldTextureId != textureId) {
         widget.controller.unregisterTexture(oldTextureId);
       }
@@ -310,11 +322,68 @@ class _LadybirdViewState extends State<LadybirdView>
     _detachControllerListeners(widget.controller);
     _momentumTicker?.dispose();
     _focusNode.dispose();
+    _stopFrameDiagnostics();
 
     if (_textureId != null) {
       widget.controller.unregisterTexture(_textureId!);
     }
     super.dispose();
+  }
+
+  void _startFrameDiagnosticsIfNeeded() {
+    _frameDiagnosticsTimer?.cancel();
+    _frameDiagnosticsTimer = null;
+    _frameDiagnosticsPollInFlight = false;
+    _frameDiagnostics = null;
+    _lastFrameDiagnosticsRaw = null;
+
+    if (!_showFrameDiagnostics || _textureId == null) {
+      return;
+    }
+
+    _pollFrameDiagnostics();
+    _frameDiagnosticsTimer = Timer.periodic(
+      const Duration(milliseconds: 250),
+      (_) => _pollFrameDiagnostics(),
+    );
+  }
+
+  void _stopFrameDiagnostics() {
+    _frameDiagnosticsTimer?.cancel();
+    _frameDiagnosticsTimer = null;
+    _frameDiagnosticsPollInFlight = false;
+    _frameDiagnostics = null;
+    _lastFrameDiagnosticsRaw = null;
+  }
+
+  Future<void> _pollFrameDiagnostics() async {
+    final textureId = _textureId;
+    if (!_showFrameDiagnostics ||
+        textureId == null ||
+        _frameDiagnosticsPollInFlight) {
+      return;
+    }
+
+    _frameDiagnosticsPollInFlight = true;
+    try {
+      final raw = await widget.controller.getTextureDiagnostics(textureId);
+      if (!mounted || textureId != _textureId || raw == null) {
+        return;
+      }
+
+      final next = _RawFrameDiagnostics.fromMap(raw, sampledAt: DateTime.now());
+      final snapshot = _FrameDiagnosticsSnapshot.fromRaw(
+        next,
+        previous: _lastFrameDiagnosticsRaw,
+      );
+
+      setState(() {
+        _lastFrameDiagnosticsRaw = next;
+        _frameDiagnostics = snapshot;
+      });
+    } finally {
+      _frameDiagnosticsPollInFlight = false;
+    }
   }
 
   @override
@@ -368,9 +437,19 @@ class _LadybirdViewState extends State<LadybirdView>
                           _onPointerScroll(e);
                         }
                       },
-                      child: Texture(
-                        key: ValueKey(_textureId),
-                        textureId: _textureId!,
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          Texture(
+                            key: ValueKey(_textureId),
+                            textureId: _textureId!,
+                          ),
+                          if (_showFrameDiagnostics &&
+                              _frameDiagnostics != null)
+                            _FrameDiagnosticsOverlay(
+                              snapshot: _frameDiagnostics!,
+                            ),
+                        ],
                       ),
                     ),
                   ),
@@ -379,6 +458,203 @@ class _LadybirdViewState extends State<LadybirdView>
             ),
           );
         },
+      ),
+    );
+  }
+}
+
+class _RawFrameDiagnostics {
+  const _RawFrameDiagnostics({
+    required this.sampledAt,
+    required this.lastFrameGeneration,
+    required this.nativeFrameCallbacks,
+    required this.deliveredFrames,
+    required this.queuedDrops,
+    required this.displayLinkTicks,
+    required this.pumpRequests,
+    required this.pumpExecutions,
+    required this.hasDisplayLink,
+    required this.frameNotifyQueued,
+  });
+
+  final DateTime sampledAt;
+  final int lastFrameGeneration;
+  final int nativeFrameCallbacks;
+  final int deliveredFrames;
+  final int queuedDrops;
+  final int displayLinkTicks;
+  final int pumpRequests;
+  final int pumpExecutions;
+  final bool hasDisplayLink;
+  final bool frameNotifyQueued;
+
+  factory _RawFrameDiagnostics.fromMap(
+    Map<String, Object?> map, {
+    required DateTime sampledAt,
+  }) {
+    int readInt(String key) => (map[key] as num?)?.toInt() ?? 0;
+
+    return _RawFrameDiagnostics(
+      sampledAt: sampledAt,
+      lastFrameGeneration: readInt('lastFrameGeneration'),
+      nativeFrameCallbacks: readInt('nativeFrameCallbacks'),
+      deliveredFrames: readInt('deliveredFrames'),
+      queuedDrops: readInt('queuedDrops'),
+      displayLinkTicks: readInt('displayLinkTicks'),
+      pumpRequests: readInt('pumpRequests'),
+      pumpExecutions: readInt('pumpExecutions'),
+      hasDisplayLink: map['hasDisplayLink'] as bool? ?? false,
+      frameNotifyQueued: map['frameNotifyQueued'] as bool? ?? false,
+    );
+  }
+}
+
+class _FrameDiagnosticsSnapshot {
+  const _FrameDiagnosticsSnapshot({
+    required this.lastFrameGeneration,
+    required this.nativeCallbacksPerSecond,
+    required this.deliveredFramesPerSecond,
+    required this.queuedDropsPerSecond,
+    required this.displayLinkTicksPerSecond,
+    required this.pumpRequestsPerSecond,
+    required this.pumpExecutionsPerSecond,
+    required this.deliveryRatio,
+    required this.hasDisplayLink,
+    required this.frameNotifyQueued,
+  });
+
+  final int lastFrameGeneration;
+  final double nativeCallbacksPerSecond;
+  final double deliveredFramesPerSecond;
+  final double queuedDropsPerSecond;
+  final double displayLinkTicksPerSecond;
+  final double pumpRequestsPerSecond;
+  final double pumpExecutionsPerSecond;
+  final double deliveryRatio;
+  final bool hasDisplayLink;
+  final bool frameNotifyQueued;
+
+  factory _FrameDiagnosticsSnapshot.fromRaw(
+    _RawFrameDiagnostics current, {
+    _RawFrameDiagnostics? previous,
+  }) {
+    double perSecond(int currentValue, int previousValue, double seconds) {
+      if (seconds <= 0) return 0;
+      final delta = currentValue >= previousValue
+          ? currentValue - previousValue
+          : 0;
+      return delta / seconds;
+    }
+
+    if (previous == null) {
+      return _FrameDiagnosticsSnapshot(
+        lastFrameGeneration: current.lastFrameGeneration,
+        nativeCallbacksPerSecond: 0,
+        deliveredFramesPerSecond: 0,
+        queuedDropsPerSecond: 0,
+        displayLinkTicksPerSecond: 0,
+        pumpRequestsPerSecond: 0,
+        pumpExecutionsPerSecond: 0,
+        deliveryRatio: 0,
+        hasDisplayLink: current.hasDisplayLink,
+        frameNotifyQueued: current.frameNotifyQueued,
+      );
+    }
+
+    final elapsedMicroseconds = current.sampledAt
+        .difference(previous.sampledAt)
+        .inMicroseconds;
+    final seconds = elapsedMicroseconds > 0
+        ? elapsedMicroseconds / Duration.microsecondsPerSecond
+        : 0.0;
+
+    final nativePerSecond = perSecond(
+      current.nativeFrameCallbacks,
+      previous.nativeFrameCallbacks,
+      seconds,
+    );
+    final deliveredPerSecond = perSecond(
+      current.deliveredFrames,
+      previous.deliveredFrames,
+      seconds,
+    );
+    final nativeDelta =
+        current.nativeFrameCallbacks >= previous.nativeFrameCallbacks
+        ? current.nativeFrameCallbacks - previous.nativeFrameCallbacks
+        : 0;
+    final deliveredDelta = current.deliveredFrames >= previous.deliveredFrames
+        ? current.deliveredFrames - previous.deliveredFrames
+        : 0;
+
+    return _FrameDiagnosticsSnapshot(
+      lastFrameGeneration: current.lastFrameGeneration,
+      nativeCallbacksPerSecond: nativePerSecond,
+      deliveredFramesPerSecond: deliveredPerSecond,
+      queuedDropsPerSecond: perSecond(
+        current.queuedDrops,
+        previous.queuedDrops,
+        seconds,
+      ),
+      displayLinkTicksPerSecond: perSecond(
+        current.displayLinkTicks,
+        previous.displayLinkTicks,
+        seconds,
+      ),
+      pumpRequestsPerSecond: perSecond(
+        current.pumpRequests,
+        previous.pumpRequests,
+        seconds,
+      ),
+      pumpExecutionsPerSecond: perSecond(
+        current.pumpExecutions,
+        previous.pumpExecutions,
+        seconds,
+      ),
+      deliveryRatio: nativeDelta > 0 ? deliveredDelta / nativeDelta : 0,
+      hasDisplayLink: current.hasDisplayLink,
+      frameNotifyQueued: current.frameNotifyQueued,
+    );
+  }
+}
+
+class _FrameDiagnosticsOverlay extends StatelessWidget {
+  const _FrameDiagnosticsOverlay({required this.snapshot});
+
+  final _FrameDiagnosticsSnapshot snapshot;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final textStyle = theme.textTheme.labelSmall?.copyWith(
+      color: Colors.white,
+      fontFamily: 'monospace',
+      height: 1.2,
+    );
+
+    final lines = <String>[
+      'gen ${snapshot.lastFrameGeneration}',
+      'native ${snapshot.nativeCallbacksPerSecond.toStringAsFixed(1)}/s',
+      'delivered ${snapshot.deliveredFramesPerSecond.toStringAsFixed(1)}/s',
+      'coalesced ${snapshot.queuedDropsPerSecond.toStringAsFixed(1)}/s',
+      'pump ${snapshot.pumpExecutionsPerSecond.toStringAsFixed(1)}/s',
+      'vsync ${snapshot.displayLinkTicksPerSecond.toStringAsFixed(1)}/s ${snapshot.hasDisplayLink ? 'on' : 'off'}',
+      'queued ${snapshot.frameNotifyQueued ? 'yes' : 'no'}',
+      'delivery ${(snapshot.deliveryRatio * 100).toStringAsFixed(0)}%',
+    ];
+
+    return IgnorePointer(
+      child: Align(
+        alignment: Alignment.topLeft,
+        child: Container(
+          margin: const EdgeInsets.all(12),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          decoration: BoxDecoration(
+            color: Colors.black.withOpacity(0.72),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.white24),
+          ),
+          child: Text(lines.join('\n'), style: textStyle),
+        ),
       ),
     );
   }
