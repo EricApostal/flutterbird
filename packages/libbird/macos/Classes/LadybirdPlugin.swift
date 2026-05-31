@@ -2,8 +2,7 @@ import Cocoa
 import CoreVideo
 import FlutterMacOS
 
-private let assumedRefreshRate: Double = 120.0
-private let assumedPumpInterval = 1.0 / assumedRefreshRate
+private let assumedPumpInterval = 1.0 / 120.0
 private let generationResetThreshold: UInt64 = 256
 private let queueStallGenerationThreshold: UInt64 = 120
 
@@ -20,15 +19,6 @@ func get_frame_generation(_ view_id: Int32) -> UInt64
 func set_frame_callback(
   _ view_id: Int32, _ callback: (@convention(c) (UnsafeMutableRawPointer?) -> Void)?,
   _ context: UnsafeMutableRawPointer?
-)
-
-@_silgen_name("set_display_metadata")
-func set_display_metadata(
-  _ view_id: Int32,
-  _ has_display_id: Bool,
-  _ display_id: UInt64,
-  _ refresh_rate: Double,
-  _ maximum_frames_per_second: Double
 )
 
 class LadybirdTexture: NSObject, FlutterTexture {
@@ -74,7 +64,6 @@ public class LadybirdPlugin: NSObject, FlutterPlugin {
   var pumpTimer: Timer?
   var contextPtrs: [Int64: UnsafeMutableRawPointer] = [:]
   var activeTexturesForView: [Int32: Int64] = [:]
-  var maximumFramesPerSecondOverrides: [Int32: Double] = [:]
   private let pumpStateLock = NSLock()
   private var displayLinkTicks: UInt64 = 0
   private var pumpRequests: UInt64 = 0
@@ -158,39 +147,6 @@ public class LadybirdPlugin: NSObject, FlutterPlugin {
     self.displayLink = nil
   }
 
-  private func activeScreen() -> NSScreen? {
-    NSApp.keyWindow?.screen
-      ?? NSApp.mainWindow?.screen
-      ?? NSApp.windows.first?.screen
-      ?? NSScreen.main
-  }
-
-  private func displayId(for screen: NSScreen?) -> UInt64? {
-    guard
-      let screen,
-      let screenNumber =
-        screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber
-    else {
-      return nil
-    }
-
-    return screenNumber.uint64Value
-  }
-
-  private func syncDisplayMetadata(forViewId viewId: Int32) {
-    let displayRefreshRate = assumedRefreshRate
-    let maximumFramesPerSecond =
-      maximumFramesPerSecondOverrides[viewId] ?? displayRefreshRate
-
-    set_display_metadata(
-      viewId,
-      false,
-      0,
-      displayRefreshRate,
-      maximumFramesPerSecond
-    )
-  }
-
   private func requestLadybirdPump() {
     pumpStateLock.lock()
     pumpRequests += 1
@@ -244,7 +200,6 @@ public class LadybirdPlugin: NSObject, FlutterPlugin {
       let ctxPtr = Unmanaged.passRetained(ctx).toOpaque()
       contextPtrs[textureId] = ctxPtr
       activeTexturesForView[viewId] = textureId
-      syncDisplayMetadata(forViewId: viewId)
       updatePumpDriver()
       print("[Ladybird][macOS] createTexture view=\(viewId) textureId=\(textureId) ctx=\(ctxPtr)")
 
@@ -341,35 +296,6 @@ public class LadybirdPlugin: NSObject, FlutterPlugin {
       set_frame_callback(viewId, callback, ctxPtr)
 
       result(textureId)
-    case "syncDisplayMetadata":
-      guard let num = call.arguments as? NSNumber else {
-        result(FlutterError(code: "INVALID_ARGS", message: "Expected view ID", details: nil))
-        return
-      }
-
-      syncDisplayMetadata(forViewId: num.int32Value)
-      result(nil)
-    case "setMaximumFramesPerSecond":
-      guard let args = call.arguments as? [String: Any] else {
-        result(FlutterError(code: "INVALID_ARGS", message: "Expected arguments map", details: nil))
-        return
-      }
-      guard let viewIdNumber = args["viewId"] as? NSNumber else {
-        result(FlutterError(code: "INVALID_ARGS", message: "Expected viewId", details: nil))
-        return
-      }
-
-      let viewId = viewIdNumber.int32Value
-      let maximumFramesPerSecond = (args["maximumFramesPerSecond"] as? NSNumber)?.doubleValue
-
-      if let maximumFramesPerSecond, maximumFramesPerSecond > 0 {
-        maximumFramesPerSecondOverrides[viewId] = maximumFramesPerSecond
-      } else {
-        maximumFramesPerSecondOverrides.removeValue(forKey: viewId)
-      }
-
-      syncDisplayMetadata(forViewId: viewId)
-      result(nil)
     case "getTextureDiagnostics":
       guard let num = call.arguments as? NSNumber else {
         result(FlutterError(code: "INVALID_ARGS", message: "Expected texture ID", details: nil))
@@ -440,7 +366,6 @@ public class LadybirdPlugin: NSObject, FlutterPlugin {
           )
         }
 
-        maximumFramesPerSecondOverrides.removeValue(forKey: ctx.viewId)
         self.updatePumpDriver()
       }
 

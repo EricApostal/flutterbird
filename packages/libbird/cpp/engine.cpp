@@ -83,7 +83,7 @@ static std::unique_ptr<ViewBackend> create_view_backend() {
 
 class FlutterViewImpl final : public WebView::ViewImplementation {
 public:
-  static constexpr double kAssumedRefreshRate = 120.0;
+  static constexpr double kDefaultRefreshRate = 60.0;
 
   enum class MacFrameSource {
     Unknown,
@@ -108,7 +108,7 @@ public:
   std::unique_ptr<ViewBackend> m_backend;
   uint64_t m_debug_paint_event_count{0};
   Optional<u64> m_display_id;
-  double m_display_refresh_rate{kAssumedRefreshRate};
+  double m_display_refresh_rate{kDefaultRefreshRate};
 
 #ifdef __APPLE__
   MacFrameSource m_last_mac_frame_source{MacFrameSource::Unknown};
@@ -559,7 +559,6 @@ public:
 private:
   explicit FlutterViewImpl(int view_id) : m_view_id(view_id) {
     m_backend = create_view_backend();
-    m_maximum_frames_per_second = kAssumedRefreshRate;
   }
 
   virtual Web::DevicePixelSize viewport_size() const override {

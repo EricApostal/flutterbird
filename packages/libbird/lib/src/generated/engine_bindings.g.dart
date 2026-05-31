@@ -245,6 +245,37 @@ class LadybirdBindings {
       );
   late final _set_zoom = _set_zoomPtr.asFunction<void Function(int, double)>();
 
+  void set_display_metadata(
+    int view_id,
+    bool has_display_id,
+    int display_id,
+    double refresh_rate,
+    double maximum_frames_per_second,
+  ) {
+    return _set_display_metadata(
+      view_id,
+      has_display_id,
+      display_id,
+      refresh_rate,
+      maximum_frames_per_second,
+    );
+  }
+
+  late final _set_display_metadataPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.Void Function(
+            ffi.Int,
+            ffi.Bool,
+            ffi.Uint64,
+            ffi.Double,
+            ffi.Double,
+          )
+        >
+      >('set_display_metadata');
+  late final _set_display_metadata = _set_display_metadataPtr
+      .asFunction<void Function(int, bool, int, double, double)>();
+
   int get_iosurface_width(int view_id) {
     return _get_iosurface_width(view_id);
   }
