@@ -3,6 +3,7 @@ import FlutterMacOS
 
 private let generationResetThreshold: UInt64 = 256
 private let queueStallGenerationThreshold: UInt64 = 120
+private let fallbackPumpInterval: TimeInterval = 1.0 / 60.0
 
 @_silgen_name("get_latest_pixel_buffer")
 func get_latest_pixel_buffer(_ view_id: Int32) -> UnsafeMutableRawPointer?
@@ -58,6 +59,7 @@ class TextureContext {
 public class LadybirdPlugin: NSObject, FlutterPlugin {
   var textureRegistry: FlutterTextureRegistry?
   var runLoopObserver: CFRunLoopObserver?
+  var fallbackPumpTimer: Timer?
   var contextPtrs: [Int64: UnsafeMutableRawPointer] = [:]
   var activeTexturesForView: [Int32: Int64] = [:]
   private let pumpStateLock = NSLock()
@@ -94,10 +96,31 @@ public class LadybirdPlugin: NSObject, FlutterPlugin {
   }
 
   deinit {
+    fallbackPumpTimer?.invalidate()
+    fallbackPumpTimer = nil
     if let observer = runLoopObserver {
       CFRunLoopRemoveObserver(CFRunLoopGetMain(), observer, .commonModes)
       runLoopObserver = nil
     }
+  }
+
+  private func updateFallbackPumpTimer() {
+    let needsFallbackPump = !activeTexturesForView.isEmpty
+
+    if needsFallbackPump {
+      guard fallbackPumpTimer == nil else { return }
+
+      let timer = Timer(timeInterval: fallbackPumpInterval, repeats: true) { [weak self] _ in
+        self?.requestLadybirdPump()
+      }
+      timer.tolerance = fallbackPumpInterval * 0.25
+      RunLoop.main.add(timer, forMode: .common)
+      fallbackPumpTimer = timer
+      return
+    }
+
+    fallbackPumpTimer?.invalidate()
+    fallbackPumpTimer = nil
   }
 
   private func requestLadybirdPump() {
@@ -148,6 +171,7 @@ public class LadybirdPlugin: NSObject, FlutterPlugin {
       let ctxPtr = Unmanaged.passRetained(ctx).toOpaque()
       contextPtrs[textureId] = ctxPtr
       activeTexturesForView[viewId] = textureId
+      updateFallbackPumpTimer()
       print("[Ladybird][macOS] createTexture view=\(viewId) textureId=\(textureId) ctx=\(ctxPtr)")
 
       let callback: @convention(c) (UnsafeMutableRawPointer?) -> Void = { contextPtr in
@@ -275,6 +299,8 @@ public class LadybirdPlugin: NSObject, FlutterPlugin {
             "[Ladybird][macOS] keeping frame callback view=\(ctx.viewId) removedTexture=\(textureId) activeTexture=\(active)"
           )
         }
+
+        self.updateFallbackPumpTimer()
       }
 
       result(nil)
