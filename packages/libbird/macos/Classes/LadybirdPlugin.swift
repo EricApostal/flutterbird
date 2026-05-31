@@ -1,9 +1,9 @@
 import Cocoa
+import CoreVideo
 import FlutterMacOS
 
 private let generationResetThreshold: UInt64 = 256
 private let queueStallGenerationThreshold: UInt64 = 120
-private let fallbackPumpInterval: TimeInterval = 1.0 / 60.0
 
 @_silgen_name("get_latest_pixel_buffer")
 func get_latest_pixel_buffer(_ view_id: Int32) -> UnsafeMutableRawPointer?
@@ -59,7 +59,7 @@ class TextureContext {
 public class LadybirdPlugin: NSObject, FlutterPlugin {
   var textureRegistry: FlutterTextureRegistry?
   var runLoopObserver: CFRunLoopObserver?
-  var fallbackPumpTimer: Timer?
+  var displayLink: CVDisplayLink?
   var contextPtrs: [Int64: UnsafeMutableRawPointer] = [:]
   var activeTexturesForView: [Int32: Int64] = [:]
   private let pumpStateLock = NSLock()
@@ -96,31 +96,61 @@ public class LadybirdPlugin: NSObject, FlutterPlugin {
   }
 
   deinit {
-    fallbackPumpTimer?.invalidate()
-    fallbackPumpTimer = nil
+    stopDisplayLink()
     if let observer = runLoopObserver {
       CFRunLoopRemoveObserver(CFRunLoopGetMain(), observer, .commonModes)
       runLoopObserver = nil
     }
   }
 
-  private func updateFallbackPumpTimer() {
-    let needsFallbackPump = !activeTexturesForView.isEmpty
+  private func updatePumpDriver() {
+    let needsDisplayLink = !activeTexturesForView.isEmpty
 
-    if needsFallbackPump {
-      guard fallbackPumpTimer == nil else { return }
+    if needsDisplayLink {
+      guard displayLink == nil else { return }
 
-      let timer = Timer(timeInterval: fallbackPumpInterval, repeats: true) { [weak self] _ in
-        self?.requestLadybirdPump()
+      var createdDisplayLink: CVDisplayLink?
+      let createStatus = CVDisplayLinkCreateWithActiveCGDisplays(&createdDisplayLink)
+      guard createStatus == kCVReturnSuccess, let createdDisplayLink else {
+        print("[Ladybird][macOS] failed to create display link status=\(createStatus)")
+        return
       }
-      timer.tolerance = fallbackPumpInterval * 0.25
-      RunLoop.main.add(timer, forMode: .common)
-      fallbackPumpTimer = timer
+
+      let callbackStatus = CVDisplayLinkSetOutputCallback(
+        createdDisplayLink,
+        { _, _, _, _, _, userInfo in
+          guard let userInfo else { return kCVReturnError }
+          let plugin = Unmanaged<LadybirdPlugin>.fromOpaque(userInfo).takeUnretainedValue()
+          DispatchQueue.main.async {
+            plugin.requestLadybirdPump()
+          }
+          return kCVReturnSuccess
+        },
+        Unmanaged.passUnretained(self).toOpaque()
+      )
+      guard callbackStatus == kCVReturnSuccess else {
+        print("[Ladybird][macOS] failed to set display link callback status=\(callbackStatus)")
+        return
+      }
+
+      let startStatus = CVDisplayLinkStart(createdDisplayLink)
+      guard startStatus == kCVReturnSuccess else {
+        print("[Ladybird][macOS] failed to start display link status=\(startStatus)")
+        return
+      }
+
+      displayLink = createdDisplayLink
+      requestLadybirdPump()
       return
     }
 
-    fallbackPumpTimer?.invalidate()
-    fallbackPumpTimer = nil
+    stopDisplayLink()
+  }
+
+  private func stopDisplayLink() {
+    guard let displayLink else { return }
+    CVDisplayLinkStop(displayLink)
+    self.displayLink = nil
   }
 
   private func requestLadybirdPump() {
@@ -171,7 +201,7 @@ public class LadybirdPlugin: NSObject, FlutterPlugin {
       let ctxPtr = Unmanaged.passRetained(ctx).toOpaque()
       contextPtrs[textureId] = ctxPtr
       activeTexturesForView[viewId] = textureId
-      updateFallbackPumpTimer()
+      updatePumpDriver()
       print("[Ladybird][macOS] createTexture view=\(viewId) textureId=\(textureId) ctx=\(ctxPtr)")
 
       let callback: @convention(c) (UnsafeMutableRawPointer?) -> Void = { contextPtr in
@@ -300,7 +330,7 @@ public class LadybirdPlugin: NSObject, FlutterPlugin {
           )
         }
 
-        self.updateFallbackPumpTimer()
+        self.updatePumpDriver()
       }
 
       result(nil)
