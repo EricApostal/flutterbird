@@ -67,6 +67,11 @@ LADYBIRD_API void navigate_to(int view_id, const char *url);
 
 LADYBIRD_API void set_zoom(int view_id, double zoom);
 
+LADYBIRD_API void set_display_metadata(int view_id, bool has_display_id,
+                                       uint64_t display_id,
+                                       double refresh_rate,
+                                       double maximum_frames_per_second);
+
 LADYBIRD_API int get_iosurface_width(int view_id);
 
 LADYBIRD_API int get_iosurface_height(int view_id);

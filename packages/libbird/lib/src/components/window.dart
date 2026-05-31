@@ -24,7 +24,8 @@ class _LadybirdViewState extends State<LadybirdView>
   final FocusNode _focusNode = FocusNode();
   Timer? _frameDiagnosticsTimer;
   bool _frameDiagnosticsPollInFlight = false;
-  _FrameDiagnosticsSnapshot? _frameDiagnostics;
+  final ValueNotifier<_FrameDiagnosticsSnapshot?> _frameDiagnosticsNotifier =
+      ValueNotifier(null);
   _RawFrameDiagnostics? _lastFrameDiagnosticsRaw;
 
   double _accumulatedWheelX = 0;
@@ -323,6 +324,7 @@ class _LadybirdViewState extends State<LadybirdView>
     _momentumTicker?.dispose();
     _focusNode.dispose();
     _stopFrameDiagnostics();
+    _frameDiagnosticsNotifier.dispose();
 
     if (_textureId != null) {
       widget.controller.unregisterTexture(_textureId!);
@@ -334,7 +336,7 @@ class _LadybirdViewState extends State<LadybirdView>
     _frameDiagnosticsTimer?.cancel();
     _frameDiagnosticsTimer = null;
     _frameDiagnosticsPollInFlight = false;
-    _frameDiagnostics = null;
+    _frameDiagnosticsNotifier.value = null;
     _lastFrameDiagnosticsRaw = null;
 
     if (!_showFrameDiagnostics || _textureId == null) {
@@ -352,7 +354,7 @@ class _LadybirdViewState extends State<LadybirdView>
     _frameDiagnosticsTimer?.cancel();
     _frameDiagnosticsTimer = null;
     _frameDiagnosticsPollInFlight = false;
-    _frameDiagnostics = null;
+    _frameDiagnosticsNotifier.value = null;
     _lastFrameDiagnosticsRaw = null;
   }
 
@@ -377,10 +379,8 @@ class _LadybirdViewState extends State<LadybirdView>
         previous: _lastFrameDiagnosticsRaw,
       );
 
-      setState(() {
-        _lastFrameDiagnosticsRaw = next;
-        _frameDiagnostics = snapshot;
-      });
+      _lastFrameDiagnosticsRaw = next;
+      _frameDiagnosticsNotifier.value = snapshot;
     } finally {
       _frameDiagnosticsPollInFlight = false;
     }
@@ -444,10 +444,17 @@ class _LadybirdViewState extends State<LadybirdView>
                             key: ValueKey(_textureId),
                             textureId: _textureId!,
                           ),
-                          if (_showFrameDiagnostics &&
-                              _frameDiagnostics != null)
-                            _FrameDiagnosticsOverlay(
-                              snapshot: _frameDiagnostics!,
+                          if (_showFrameDiagnostics)
+                            ValueListenableBuilder<_FrameDiagnosticsSnapshot?>(
+                              valueListenable: _frameDiagnosticsNotifier,
+                              builder: (context, snapshot, child) {
+                                if (snapshot == null) {
+                                  return const SizedBox.shrink();
+                                }
+                                return _FrameDiagnosticsOverlay(
+                                  snapshot: snapshot,
+                                );
+                              },
                             ),
                         ],
                       ),

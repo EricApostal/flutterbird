@@ -2,6 +2,8 @@ import Cocoa
 import CoreVideo
 import FlutterMacOS
 
+private let assumedRefreshRate: Double = 120.0
+private let assumedPumpInterval = 1.0 / assumedRefreshRate
 private let generationResetThreshold: UInt64 = 256
 private let queueStallGenerationThreshold: UInt64 = 120
 
@@ -18,6 +20,15 @@ func get_frame_generation(_ view_id: Int32) -> UInt64
 func set_frame_callback(
   _ view_id: Int32, _ callback: (@convention(c) (UnsafeMutableRawPointer?) -> Void)?,
   _ context: UnsafeMutableRawPointer?
+)
+
+@_silgen_name("set_display_metadata")
+func set_display_metadata(
+  _ view_id: Int32,
+  _ has_display_id: Bool,
+  _ display_id: UInt64,
+  _ refresh_rate: Double,
+  _ maximum_frames_per_second: Double
 )
 
 class LadybirdTexture: NSObject, FlutterTexture {
@@ -60,8 +71,10 @@ public class LadybirdPlugin: NSObject, FlutterPlugin {
   var textureRegistry: FlutterTextureRegistry?
   var runLoopObserver: CFRunLoopObserver?
   var displayLink: CVDisplayLink?
+  var pumpTimer: Timer?
   var contextPtrs: [Int64: UnsafeMutableRawPointer] = [:]
   var activeTexturesForView: [Int32: Int64] = [:]
+  var maximumFramesPerSecondOverrides: [Int32: Double] = [:]
   private let pumpStateLock = NSLock()
   private var displayLinkTicks: UInt64 = 0
   private var pumpRequests: UInt64 = 0
@@ -90,7 +103,8 @@ public class LadybirdPlugin: NSObject, FlutterPlugin {
       true,
       0
     ) { [weak self] _, _ in
-      self?.requestLadybirdPump()
+      guard let self, self.displayLink == nil else { return }
+      self.requestLadybirdPump()
     }
 
     guard let observer else { return }
@@ -100,6 +114,7 @@ public class LadybirdPlugin: NSObject, FlutterPlugin {
 
   deinit {
     stopDisplayLink()
+    stopPumpTimer()
     if let observer = runLoopObserver {
       CFRunLoopRemoveObserver(CFRunLoopGetMain(), observer, .commonModes)
       runLoopObserver = nil
@@ -110,53 +125,70 @@ public class LadybirdPlugin: NSObject, FlutterPlugin {
     let needsDisplayLink = !activeTexturesForView.isEmpty
 
     if needsDisplayLink {
-      guard displayLink == nil else { return }
-
-      var createdDisplayLink: CVDisplayLink?
-      let createStatus = CVDisplayLinkCreateWithActiveCGDisplays(&createdDisplayLink)
-      guard createStatus == kCVReturnSuccess, let createdDisplayLink else {
-        print("[Ladybird][macOS] failed to create display link status=\(createStatus)")
-        return
-      }
-
-      let callbackStatus = CVDisplayLinkSetOutputCallback(
-        createdDisplayLink,
-        { _, _, _, _, _, userInfo in
-          guard let userInfo else { return kCVReturnError }
-          let plugin = Unmanaged<LadybirdPlugin>.fromOpaque(userInfo).takeUnretainedValue()
-          plugin.pumpStateLock.lock()
-          plugin.displayLinkTicks += 1
-          plugin.pumpStateLock.unlock()
-          DispatchQueue.main.async {
-            plugin.requestLadybirdPump()
-          }
-          return kCVReturnSuccess
-        },
-        Unmanaged.passUnretained(self).toOpaque()
-      )
-      guard callbackStatus == kCVReturnSuccess else {
-        print("[Ladybird][macOS] failed to set display link callback status=\(callbackStatus)")
-        return
-      }
-
-      let startStatus = CVDisplayLinkStart(createdDisplayLink)
-      guard startStatus == kCVReturnSuccess else {
-        print("[Ladybird][macOS] failed to start display link status=\(startStatus)")
-        return
-      }
-
-      displayLink = createdDisplayLink
+      stopDisplayLink()
+      startPumpTimer()
       requestLadybirdPump()
       return
     }
 
     stopDisplayLink()
+    stopPumpTimer()
+  }
+
+  private func startPumpTimer() {
+    guard pumpTimer == nil else { return }
+
+    let timer = Timer(timeInterval: assumedPumpInterval, repeats: true) {
+      [weak self] _ in
+      self?.requestLadybirdPump()
+    }
+    timer.tolerance = assumedPumpInterval * 0.1
+    RunLoop.main.add(timer, forMode: .common)
+    pumpTimer = timer
+  }
+
+  private func stopPumpTimer() {
+    pumpTimer?.invalidate()
+    pumpTimer = nil
   }
 
   private func stopDisplayLink() {
     guard let displayLink else { return }
     CVDisplayLinkStop(displayLink)
     self.displayLink = nil
+  }
+
+  private func activeScreen() -> NSScreen? {
+    NSApp.keyWindow?.screen
+      ?? NSApp.mainWindow?.screen
+      ?? NSApp.windows.first?.screen
+      ?? NSScreen.main
+  }
+
+  private func displayId(for screen: NSScreen?) -> UInt64? {
+    guard
+      let screen,
+      let screenNumber =
+        screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber
+    else {
+      return nil
+    }
+
+    return screenNumber.uint64Value
+  }
+
+  private func syncDisplayMetadata(forViewId viewId: Int32) {
+    let displayRefreshRate = assumedRefreshRate
+    let maximumFramesPerSecond =
+      maximumFramesPerSecondOverrides[viewId] ?? displayRefreshRate
+
+    set_display_metadata(
+      viewId,
+      false,
+      0,
+      displayRefreshRate,
+      maximumFramesPerSecond
+    )
   }
 
   private func requestLadybirdPump() {
@@ -212,6 +244,7 @@ public class LadybirdPlugin: NSObject, FlutterPlugin {
       let ctxPtr = Unmanaged.passRetained(ctx).toOpaque()
       contextPtrs[textureId] = ctxPtr
       activeTexturesForView[viewId] = textureId
+      syncDisplayMetadata(forViewId: viewId)
       updatePumpDriver()
       print("[Ladybird][macOS] createTexture view=\(viewId) textureId=\(textureId) ctx=\(ctxPtr)")
 
@@ -308,6 +341,35 @@ public class LadybirdPlugin: NSObject, FlutterPlugin {
       set_frame_callback(viewId, callback, ctxPtr)
 
       result(textureId)
+    case "syncDisplayMetadata":
+      guard let num = call.arguments as? NSNumber else {
+        result(FlutterError(code: "INVALID_ARGS", message: "Expected view ID", details: nil))
+        return
+      }
+
+      syncDisplayMetadata(forViewId: num.int32Value)
+      result(nil)
+    case "setMaximumFramesPerSecond":
+      guard let args = call.arguments as? [String: Any] else {
+        result(FlutterError(code: "INVALID_ARGS", message: "Expected arguments map", details: nil))
+        return
+      }
+      guard let viewIdNumber = args["viewId"] as? NSNumber else {
+        result(FlutterError(code: "INVALID_ARGS", message: "Expected viewId", details: nil))
+        return
+      }
+
+      let viewId = viewIdNumber.int32Value
+      let maximumFramesPerSecond = (args["maximumFramesPerSecond"] as? NSNumber)?.doubleValue
+
+      if let maximumFramesPerSecond, maximumFramesPerSecond > 0 {
+        maximumFramesPerSecondOverrides[viewId] = maximumFramesPerSecond
+      } else {
+        maximumFramesPerSecondOverrides.removeValue(forKey: viewId)
+      }
+
+      syncDisplayMetadata(forViewId: viewId)
+      result(nil)
     case "getTextureDiagnostics":
       guard let num = call.arguments as? NSNumber else {
         result(FlutterError(code: "INVALID_ARGS", message: "Expected texture ID", details: nil))
@@ -378,6 +440,7 @@ public class LadybirdPlugin: NSObject, FlutterPlugin {
           )
         }
 
+        maximumFramesPerSecondOverrides.removeValue(forKey: ctx.viewId)
         self.updatePumpDriver()
       }
 

@@ -28,7 +28,7 @@ Pod::Spec.new do |s|
   s.source_files        = 'Classes/**/*'
   s.public_header_files = 'Classes/**/*.h'
 
-  s.platform     = :osx, '11.0'
+  s.platform     = :osx, '12.0'
   s.swift_version = '5.0'
   s.dependency 'FlutterMacOS'
 

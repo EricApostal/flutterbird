@@ -83,6 +83,8 @@ static std::unique_ptr<ViewBackend> create_view_backend() {
 
 class FlutterViewImpl final : public WebView::ViewImplementation {
 public:
+  static constexpr double kAssumedRefreshRate = 120.0;
+
   enum class MacFrameSource {
     Unknown,
     IOSurface,
@@ -105,6 +107,8 @@ public:
   // Platform rendering backend (LinuxViewBackend / MacOSViewBackend).
   std::unique_ptr<ViewBackend> m_backend;
   uint64_t m_debug_paint_event_count{0};
+  Optional<u64> m_display_id;
+  double m_display_refresh_rate{kAssumedRefreshRate};
 
 #ifdef __APPLE__
   MacFrameSource m_last_mac_frame_source{MacFrameSource::Unknown};
@@ -272,10 +276,38 @@ public:
     client().async_set_viewport(m_client_state.page_index, viewport_size(),
                                 m_device_pixel_ratio, is_fullscreen());
     client().async_set_window_size(m_client_state.page_index, viewport_size());
+    client().async_set_maximum_frames_per_second(m_client_state.page_index,
+                                                 m_maximum_frames_per_second);
+
+    auto compositor_context_id =
+        client().compositor_context_id_for_page(m_client_state.page_index);
+    WebView::Application::the().update_compositor_display_metadata(
+        compositor_context_id, m_display_id, m_display_refresh_rate);
 
     Web::DevicePixelRect screen_rect{0, 0, 1920, 1080};
     client().async_update_screen_rects(m_client_state.page_index,
                                        {{screen_rect}}, 0);
+  }
+
+  void set_display_metadata(Optional<u64> display_id, double refresh_rate,
+                            double maximum_frames_per_second) {
+    auto const sanitized_refresh_rate = refresh_rate > 0.0 ? refresh_rate : 60.0;
+    auto const sanitized_maximum_frames_per_second =
+        maximum_frames_per_second > 0.0 ? maximum_frames_per_second
+                                        : sanitized_refresh_rate;
+
+    m_display_id = display_id;
+    m_display_refresh_rate = sanitized_refresh_rate;
+    m_maximum_frames_per_second = sanitized_maximum_frames_per_second;
+
+    if (!m_client_state.client)
+      return;
+
+    client().async_set_maximum_frames_per_second(m_client_state.page_index,
+                                                 m_maximum_frames_per_second);
+    WebView::Application::the().update_compositor_display_metadata(
+        client().compositor_context_id_for_page(m_client_state.page_index),
+        m_display_id, m_display_refresh_rate);
   }
 
   virtual void initialize_client(
@@ -527,6 +559,7 @@ public:
 private:
   explicit FlutterViewImpl(int view_id) : m_view_id(view_id) {
     m_backend = create_view_backend();
+    m_maximum_frames_per_second = kAssumedRefreshRate;
   }
 
   virtual Web::DevicePixelSize viewport_size() const override {
@@ -922,6 +955,26 @@ void set_zoom(int view_id, double zoom) {
     it->second->m_zoom = zoom;
     it->second->update_zoom_scale();
   }
+}
+
+void set_display_metadata(int view_id, bool has_display_id, uint64_t display_id,
+                          double refresh_rate,
+                          double maximum_frames_per_second) {
+  auto it = g_web_views.find(view_id);
+  if (it == g_web_views.end())
+    return;
+
+  Optional<u64> optional_display_id;
+  if (has_display_id)
+    optional_display_id = display_id;
+
+  std::fprintf(stderr,
+               "[LibBird] set_display_metadata: view_id=%d has_display_id=%d display_id=%llu refresh_rate=%f max_fps=%f\n",
+               view_id, has_display_id ? 1 : 0,
+               static_cast<unsigned long long>(display_id), refresh_rate,
+               maximum_frames_per_second);
+  it->second->set_display_metadata(optional_display_id, refresh_rate,
+                                   maximum_frames_per_second);
 }
 
 int get_iosurface_width(int view_id) {

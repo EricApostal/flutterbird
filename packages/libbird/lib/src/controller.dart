@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:ffi' as ffi;
 import 'package:ffi/ffi.dart';
@@ -396,6 +397,7 @@ class LadybirdController {
     print("[LibBird] Controller.updateDevicePixelRatio: ratio=$ratio");
     _lastDevicePixelRatio = ratio;
     _bindings.set_zoom(_viewId, ratio);
+    unawaited(syncDisplayMetadata());
   }
 
   void reload() {
@@ -470,6 +472,30 @@ class LadybirdController {
     await _channel.invokeMethod('unregisterTexture', textureId);
   }
 
+  Future<void> syncDisplayMetadata() async {
+    try {
+      await _channel.invokeMethod('syncDisplayMetadata', _viewId);
+    } on MissingPluginException {
+      return;
+    } on PlatformException {
+      return;
+    }
+  }
+
+  Future<void> setMaximumFramesPerSecond(double? maximumFramesPerSecond) async {
+    try {
+      await _channel.invokeMethod('setMaximumFramesPerSecond', {
+        'viewId': _viewId,
+        if (maximumFramesPerSecond != null)
+          'maximumFramesPerSecond': maximumFramesPerSecond,
+      });
+    } on MissingPluginException {
+      return;
+    } on PlatformException {
+      return;
+    }
+  }
+
   Future<Map<String, Object?>?> getTextureDiagnostics(int textureId) async {
     try {
       return await _channel.invokeMapMethod<String, Object?>(
@@ -488,6 +514,7 @@ class LadybirdController {
     print("[LibBird] Controller.resizeWindow: size=$size");
     _lastSize = size;
     _bindings.resize_window(_viewId, size.width.round(), size.height.round());
+    unawaited(syncDisplayMetadata());
     return true;
   }
 
