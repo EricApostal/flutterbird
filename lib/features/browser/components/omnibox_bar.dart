@@ -1,11 +1,41 @@
 import 'dart:convert';
 
+import 'package:bird_core/bird_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutterbird/features/browser/components/browser_context_menu.dart';
+import 'package:flutterbird/features/browser/state/tab_actions.dart';
+import 'package:flutterbird/features/browser/state/tab_layout_mode.dart';
 import 'package:flutterbird/features/frontend/abstraction/frontend_layer.dart';
 import 'package:flutterbird/features/frontend/components/adaptive_widgets.dart';
 import 'package:flutterbird/features/browser/state/omnibox_state.dart';
+import 'package:go_router/go_router.dart';
 import 'package:ladybird/ladybird.dart';
+
+enum _ToolbarMenuAction {
+  newTab,
+  closeCurrentTab,
+  copySelection,
+  pasteFromClipboard,
+  goBack,
+  goForward,
+  reload,
+  openNextTab,
+  openPreviousTab,
+  toggleBookmark,
+  openBookmark,
+  toggleTabLayout,
+}
+
+class _ToolbarMenuSelection {
+  const _ToolbarMenuSelection.action(this.action) : bookmarkUrl = null;
+
+  const _ToolbarMenuSelection.openBookmark(this.bookmarkUrl)
+    : action = _ToolbarMenuAction.openBookmark;
+
+  final _ToolbarMenuAction action;
+  final String? bookmarkUrl;
+}
 
 class BrowserOmniboxBar extends ConsumerStatefulWidget {
   final LadybirdController currentTabController;
@@ -19,6 +49,7 @@ class BrowserOmniboxBar extends ConsumerStatefulWidget {
 class _BrowserOmniboxBarState extends ConsumerState<BrowserOmniboxBar> {
   final FocusNode _omniboxFocusNode = FocusNode();
   final TextEditingController _omniboxTextController = TextEditingController();
+  final GlobalKey _toolbarMenuButtonKey = GlobalKey();
   LadybirdController? _trackedTabController;
   bool _suppressTrackedTextSync = false;
   final Set<int> _hideDefaultSearchHomeForTabs = <int>{};
@@ -248,6 +279,209 @@ class _BrowserOmniboxBarState extends ConsumerState<BrowserOmniboxBar> {
     _hideDefaultSearchHomeForTabs.remove(currentTabController.viewId);
     _setOmniboxText(url);
     currentTabController.navigate(url);
+  }
+
+  void _navigateToAdjacentTab({
+    required LadybirdController currentTabController,
+    required bool next,
+  }) {
+    final tabs = ref.read(browserTabControllerProvider);
+    if (tabs.length <= 1) return;
+
+    final currentIndex = tabs.indexWhere(
+      (tab) => tab.viewId == currentTabController.viewId,
+    );
+    if (currentIndex < 0) return;
+
+    final destinationIndex = next
+        ? (currentIndex + 1) % tabs.length
+        : (currentIndex - 1 + tabs.length) % tabs.length;
+    context.go('/browser/tab/${tabs[destinationIndex].viewId}');
+  }
+
+  List<BrowserContextMenuItem> _buildToolbarContextMenuItems(
+    BrowserOmnibox omnibox,
+    LadybirdController currentTabController,
+    List<BrowserBookmark> bookmarks,
+  ) {
+    BrowserContextMenuItem actionItem({
+      required _ToolbarMenuAction action,
+      required String label,
+      bool enabled = true,
+    }) {
+      return BrowserContextMenuItem.action(
+        label: label,
+        value: _ToolbarMenuSelection.action(action),
+        enabled: enabled,
+      );
+    }
+
+    final normalizedUrl = omnibox.normalizeUrl(
+      currentTabController.urlNotifier.value,
+    );
+    final hasUrl = normalizedUrl.isNotEmpty;
+    final isBookmarked = currentTabController.isCurrentViewBookmarked();
+    final canGoBack = currentTabController.canGoBack();
+    final canGoForward = currentTabController.canGoForward();
+
+    final bookmarkItems = <BrowserContextMenuItem>[
+      actionItem(
+        action: _ToolbarMenuAction.toggleBookmark,
+        label: isBookmarked ? 'Remove Bookmark' : 'Add Bookmark',
+        enabled: hasUrl,
+      ),
+    ];
+
+    if (bookmarks.isEmpty) {
+      bookmarkItems.add(
+        const BrowserContextMenuItem.action(
+          label: 'No bookmarks yet',
+          value: null,
+          enabled: false,
+        ),
+      );
+    } else {
+      final visibleBookmarks = bookmarks.take(6).toList(growable: false);
+      for (final bookmark in visibleBookmarks) {
+        bookmarkItems.add(
+          BrowserContextMenuItem.action(
+            label: bookmark.title,
+            value: _ToolbarMenuSelection.openBookmark(bookmark.url),
+          ),
+        );
+      }
+    }
+
+    final isVerticalLayout =
+        ref.read(browserTabLayoutModeControllerProvider) ==
+        BrowserTabLayoutMode.vertical;
+    return [
+      actionItem(action: _ToolbarMenuAction.newTab, label: 'New Tab'),
+      actionItem(
+        action: _ToolbarMenuAction.closeCurrentTab,
+        label: 'Close Current Tab',
+      ),
+      const BrowserContextMenuItem.separator(),
+      actionItem(
+        action: _ToolbarMenuAction.copySelection,
+        label: 'Copy Selection',
+      ),
+      actionItem(action: _ToolbarMenuAction.pasteFromClipboard, label: 'Paste'),
+      const BrowserContextMenuItem.separator(),
+      actionItem(
+        action: _ToolbarMenuAction.goBack,
+        label: 'Back',
+        enabled: canGoBack,
+      ),
+      actionItem(
+        action: _ToolbarMenuAction.goForward,
+        label: 'Forward',
+        enabled: canGoForward,
+      ),
+      actionItem(action: _ToolbarMenuAction.reload, label: 'Reload'),
+      actionItem(
+        action: _ToolbarMenuAction.openNextTab,
+        label: 'Open Next Tab',
+      ),
+      actionItem(
+        action: _ToolbarMenuAction.openPreviousTab,
+        label: 'Open Previous Tab',
+      ),
+      const BrowserContextMenuItem.separator(),
+      ...bookmarkItems,
+      const BrowserContextMenuItem.separator(),
+      actionItem(
+        action: _ToolbarMenuAction.toggleTabLayout,
+        label: isVerticalLayout
+            ? 'Switch to Horizontal Tabs'
+            : 'Switch to Vertical Tabs',
+      ),
+    ];
+  }
+
+  Future<void> _showToolbarContextMenu(
+    BrowserOmnibox omnibox,
+    LadybirdController currentTabController,
+    List<BrowserBookmark> bookmarks,
+  ) async {
+    final buttonContext = _toolbarMenuButtonKey.currentContext;
+    if (buttonContext == null) return;
+
+    final buttonRenderObject = buttonContext.findRenderObject();
+    if (buttonRenderObject is! RenderBox) return;
+
+    final buttonOrigin = buttonRenderObject.localToGlobal(Offset.zero);
+    final selected = await BrowserContextMenuPresenter.show(
+      context: context,
+      anchorRect: buttonOrigin & buttonRenderObject.size,
+      items: _buildToolbarContextMenuItems(
+        omnibox,
+        currentTabController,
+        bookmarks,
+      ),
+    );
+
+    if (selected is _ToolbarMenuSelection) {
+      _onToolbarMenuSelected(omnibox, currentTabController, selected);
+    }
+  }
+
+  void _onToolbarMenuSelected(
+    BrowserOmnibox omnibox,
+    LadybirdController currentTabController,
+    _ToolbarMenuSelection selection,
+  ) {
+    switch (selection.action) {
+      case _ToolbarMenuAction.newTab:
+        BrowserTabActions.openNewTab(ref, context);
+        break;
+      case _ToolbarMenuAction.closeCurrentTab:
+        BrowserTabActions.closeTabImmediately(
+          ref,
+          context,
+          currentViewId: currentTabController.viewId,
+          closeViewId: currentTabController.viewId,
+        );
+        break;
+      case _ToolbarMenuAction.copySelection:
+        currentTabController.copySelection();
+        break;
+      case _ToolbarMenuAction.pasteFromClipboard:
+        currentTabController.pasteFromClipboard();
+        break;
+      case _ToolbarMenuAction.goBack:
+        currentTabController.goBack();
+        break;
+      case _ToolbarMenuAction.goForward:
+        currentTabController.goForward();
+        break;
+      case _ToolbarMenuAction.reload:
+        currentTabController.reload();
+        break;
+      case _ToolbarMenuAction.openNextTab:
+        _navigateToAdjacentTab(
+          currentTabController: currentTabController,
+          next: true,
+        );
+        break;
+      case _ToolbarMenuAction.openPreviousTab:
+        _navigateToAdjacentTab(
+          currentTabController: currentTabController,
+          next: false,
+        );
+        break;
+      case _ToolbarMenuAction.toggleBookmark:
+        omnibox.toggleBookmarkForCurrentView(currentTabController);
+        break;
+      case _ToolbarMenuAction.openBookmark:
+        final bookmarkUrl = selection.bookmarkUrl;
+        if (bookmarkUrl == null || bookmarkUrl.isEmpty) return;
+        _openBookmark(currentTabController, bookmarkUrl);
+        break;
+      case _ToolbarMenuAction.toggleTabLayout:
+        ref.read(browserTabLayoutModeControllerProvider.notifier).toggle();
+        break;
+    }
   }
 
   Widget _buildBookmarksToolbar(
@@ -725,6 +959,19 @@ class _BrowserOmniboxBarState extends ConsumerState<BrowserOmniboxBar> {
                       );
                     },
                   ),
+                ),
+                const SizedBox(width: 6),
+                FrontendIconButton(
+                  key: _toolbarMenuButtonKey,
+                  tooltip: 'Open menu',
+                  icon: const Icon(Icons.menu, size: 20),
+                  onPressed: () {
+                    _showToolbarContextMenu(
+                      omniboxController,
+                      currentTabController,
+                      bookmarks,
+                    );
+                  },
                 ),
               ],
             ),
