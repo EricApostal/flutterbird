@@ -551,7 +551,8 @@ public:
     enqueue_input_event(
         Web::KeyEvent{type, static_cast<Web::UIEvents::KeyCode>(keycode),
                       static_cast<Web::UIEvents::KeyModifier>(modifiers),
-                      code_point, repeat, nullptr});
+                      // TODO: implement should_insert_text
+                      code_point, repeat, false});
   }
 
   virtual ~FlutterViewImpl() = default;
@@ -615,7 +616,7 @@ public:
     return false;
   }
 
-  virtual NonnullOwnPtr<Core::EventLoop> create_platform_event_loop() override {
+  virtual Core::EventLoop &create_platform_event_loop() override {
     return WebView::Application::create_platform_event_loop();
   }
 
