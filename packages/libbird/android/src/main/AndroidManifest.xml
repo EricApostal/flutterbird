@@ -5,26 +5,6 @@
   <uses-permission android:name="android.permission.INTERNET" />
   <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
-  <application>
-    <service
-      android:name=".CompositorService"
-      android:enabled="true"
-      android:exported="false"
-      android:process=":Compositor" />
-    <service
-      android:name=".WebContentService"
-      android:enabled="true"
-      android:exported="false"
-      android:process=":WebContent" />
-    <service
-      android:name=".RequestServerService"
-      android:enabled="true"
-      android:exported="false"
-      android:process=":RequestServer" />
-    <service
-      android:name=".ImageDecoderService"
-      android:enabled="true"
-      android:exported="false"
-      android:process=":ImageDecoder" />
+  <application android:extractNativeLibs="true">
   </application>
 </manifest>

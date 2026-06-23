@@ -37,6 +37,11 @@ typedef struct {
   uint64_t generation;
 } LadybirdLinuxDmaBufFrame;
 
+LADYBIRD_API void configure_android_runtime(const char *resource_root,
+                                            const char *user_dir,
+                                            const char *native_library_dir,
+                                            const char *certificates_path);
+
 LADYBIRD_API void init_ladybird();
 
 LADYBIRD_API int create_web_view();
@@ -68,8 +73,7 @@ LADYBIRD_API void navigate_to(int view_id, const char *url);
 LADYBIRD_API void set_zoom(int view_id, double zoom);
 
 LADYBIRD_API void set_display_metadata(int view_id, bool has_display_id,
-                                       uint64_t display_id,
-                                       double refresh_rate,
+                                       uint64_t display_id, double refresh_rate,
                                        double maximum_frames_per_second);
 
 LADYBIRD_API int get_iosurface_width(int view_id);
@@ -99,8 +103,9 @@ set_loading_state_change_callback(int view_id,
                                   LoadingStateChangeCallback callback);
 LADYBIRD_API void set_cursor_change_callback(int view_id,
                                              CursorChangeCallback callback);
-LADYBIRD_API void set_context_menu_request_callback(
-  int view_id, ContextMenuRequestCallback callback);
+LADYBIRD_API void
+set_context_menu_request_callback(int view_id,
+                                  ContextMenuRequestCallback callback);
 LADYBIRD_API void set_new_web_view_callback(int view_id,
                                             NewWebViewCallback callback);
 LADYBIRD_API bool activate_context_menu_action(int view_id, int action_token);

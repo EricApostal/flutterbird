@@ -1,69 +1,6 @@
 group = "dev.flutterbird.ladybird"
 version = "1.0-SNAPSHOT"
 
-var buildDir = layout.buildDirectory.get()
-var cacheDir = System.getenv("LADYBIRD_CACHE_DIR") ?: "$buildDir/caches"
-var sourceDir = layout.projectDirectory.dir("../third_party/ladybird").toString()
-
-data class Sdl3JavaInputs(val jar: File?, val sourceDirs: List<File>)
-
-fun Project.resolveSdl3JavaInputs(sourceDir: String): Sdl3JavaInputs {
-    val jar =
-            fileTree("$sourceDir/Build/vcpkg/packages") {
-                include("**/SDL3.jar")
-                include("**/SDL3-*.jar")
-                exclude("**/*-sources.jar")
-            }
-                    .files
-                    .minByOrNull { it.path }
-
-    val sourceDirs =
-            if (jar == null) {
-                fileTree("$sourceDir/Build/vcpkg/buildtrees/sdl3") {
-                    include("**/android-project/app/src/main/java/**/*.java")
-                }
-                        .files
-                        .mapNotNull { file ->
-                            var current: File? = file
-                            while (current != null && current.name != "java") {
-                                current = current.parentFile
-                            }
-                            current
-                        }
-                        .distinct()
-                        .sortedBy { it.path }
-            } else {
-                emptyList()
-            }
-
-    return Sdl3JavaInputs(jar = jar, sourceDirs = sourceDirs)
-}
-
-fun verifySdl3JavaInputs(inputs: Sdl3JavaInputs) {
-    check(inputs.jar != null || inputs.sourceDirs.isNotEmpty()) {
-        "Unable to locate SDL Android Java sources. Expected either packaged SDL3 Java artifacts or unpacked SDL buildtree sources under Build/vcpkg."
-    }
-}
-
-
-var hostToolsTask =
-        tasks.register<Exec>("buildLagomTools") {
-            commandLine = listOf("./BuildLagomTools.sh")
-            environment =
-                    mapOf(
-                            "BUILD_DIR" to buildDir,
-                            "CACHE_DIR" to cacheDir,
-                            "PATH" to System.getenv("PATH")!!
-                    )
-        }
-
-tasks.named("preBuild").dependsOn(hostToolsTask)
-
-tasks.named("prepareKotlinBuildScriptModel").dependsOn(hostToolsTask)
-
-// unsure sounds problematic
-// kotlin { compilerOptions { jvmTarget = JvmTarget.fromTarget("11") } }
-
 buildscript {
     repositories {
         google()
@@ -85,6 +22,10 @@ plugins {
     id("com.android.library")
 }
 
+val packageBuildDir = layout.buildDirectory.get().asFile
+val cacheDir = System.getenv("LADYBIRD_CACHE_DIR") ?: "$packageBuildDir/caches"
+val sourceDir = layout.projectDirectory.dir("../third_party/ladybird").asFile.absolutePath
+
 val ensureLadybirdSource = tasks.register<Exec>("ensureLadybirdSource") {
     workingDir = layout.projectDirectory.asFile
     commandLine = listOf("bash", "../tool/ensure_ladybird_source.sh")
@@ -92,11 +33,29 @@ val ensureLadybirdSource = tasks.register<Exec>("ensureLadybirdSource") {
 
 val buildLagomTools = tasks.register<Exec>("buildLagomTools") {
     dependsOn(ensureLadybirdSource)
-    workingDir = file(sourceDir)
-    commandLine = listOf("Meta/ladybird.py", "install", "--preset", "Host_Tools")
+    workingDir = layout.projectDirectory.asFile
+    commandLine = listOf("bash", "./BuildLagomTools.sh")
     environment = mapOf(
+        "BUILD_DIR" to packageBuildDir.absolutePath,
+        "CACHE_DIR" to cacheDir,
         "PATH" to System.getenv("PATH")!!
     )
+}
+
+val packageLadybirdAssets = tasks.register<Zip>("packageLadybirdAssets") {
+    dependsOn(ensureLadybirdSource)
+    from("$sourceDir/Base/res")
+    archiveFileName.set("ladybird-assets.zip")
+    destinationDirectory.set(layout.buildDirectory.dir("generated/ladybirdAssets"))
+}
+
+tasks.matching { it.name == "preBuild" }.configureEach {
+    dependsOn(buildLagomTools)
+    dependsOn(packageLadybirdAssets)
+}
+
+tasks.matching { it.name.startsWith("merge") && it.name.endsWith("Assets") }.configureEach {
+    dependsOn(packageLadybirdAssets)
 }
 
 
@@ -135,6 +94,8 @@ android {
                  */
                 targets +=
                         listOf(
+                        "ladybird_plugin",
+                        "engine",
                                 "ladybird",
                                 "Compositor",
                                 "ImageDecoder",
@@ -159,5 +120,18 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    sourceSets {
+        getByName("main") {
+            assets.srcDir(layout.buildDirectory.dir("generated/ladybirdAssets"))
+        }
+    }
+
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+            keepDebugSymbols.add("**/libWebContent.so")
+        }
     }
 }

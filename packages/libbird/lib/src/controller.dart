@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:ffi' as ffi;
+import 'dart:io';
 import 'package:ffi/ffi.dart';
 import 'package:flutter/material.dart';
 
@@ -7,6 +8,13 @@ import 'package:flutter/services.dart';
 import 'package:ladybird/src/generated/engine_bindings.g.dart';
 import 'package:ladybird/src/models/context_menu.dart';
 import 'dart:ui' as ui;
+
+ffi.DynamicLibrary _openLadybirdLibrary() {
+  if (Platform.isAndroid) {
+    return ffi.DynamicLibrary.open('libengine.so');
+  }
+  return ffi.DynamicLibrary.process();
+}
 
 class LadybirdController {
   static const double assumedRefreshRate = 144.0;
@@ -71,7 +79,7 @@ class LadybirdController {
   int get viewId => _viewId;
 
   LadybirdController({this.initialUrl = "https://www.duckduckgo.com/"}) {
-    _bindings = LadybirdBindings(ffi.DynamicLibrary.process());
+    _bindings = LadybirdBindings(_openLadybirdLibrary());
     _initialize();
   }
 
@@ -79,7 +87,7 @@ class LadybirdController {
     required int viewId,
     this.initialUrl = "https://www.duckduckgo.com/",
   }) {
-    _bindings = LadybirdBindings(ffi.DynamicLibrary.process());
+    _bindings = LadybirdBindings(_openLadybirdLibrary());
     _initialize(existingViewId: viewId);
   }
 

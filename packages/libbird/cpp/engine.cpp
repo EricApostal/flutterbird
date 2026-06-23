@@ -1,5 +1,6 @@
 #include "engine.h"
 #include "LibWebView/Application.h"
+#include <AK/ByteString.h>
 #include <cstdio>
 #include <memory>
 #include <mutex>
@@ -23,6 +24,7 @@
 #include <AK/LexicalPath.h>
 #include <AK/OwnPtr.h>
 #include <AK/StringView.h>
+#include <LibCore/Environment.h>
 #include <LibCore/EventLoop.h>
 #include <LibCore/ResourceImplementation.h>
 #include <LibCore/ResourceImplementationFile.h>
@@ -64,6 +66,90 @@ AskUserForDownloadPathCallback g_ask_user_for_download_path_callback = nullptr;
 DisplayDownloadConfirmationDialogCallback
     g_display_download_confirmation_dialog_callback = nullptr;
 DisplayErrorDialogCallback g_display_error_dialog_callback = nullptr;
+
+#ifdef __ANDROID__
+struct AndroidRuntimeConfig {
+  ByteString resource_root;
+  ByteString user_dir;
+  ByteString native_library_dir;
+  ByteString certificates_path;
+
+  bool is_valid() const {
+    return !resource_root.is_empty() && !user_dir.is_empty();
+  }
+};
+
+static std::mutex g_android_runtime_mutex;
+static AndroidRuntimeConfig g_android_runtime_config;
+
+static AndroidRuntimeConfig snapshot_android_runtime_config() {
+  std::lock_guard lock(g_android_runtime_mutex);
+  return g_android_runtime_config;
+}
+
+extern "C" void configure_android_runtime(const char *resource_root,
+                                          const char *user_dir,
+                                          const char *native_library_dir,
+                                          const char *certificates_path) {
+  std::lock_guard lock(g_android_runtime_mutex);
+  g_android_runtime_config.resource_root =
+      resource_root ? ByteString(resource_root) : ByteString{};
+  g_android_runtime_config.user_dir =
+      user_dir ? ByteString(user_dir) : ByteString{};
+  g_android_runtime_config.native_library_dir =
+      native_library_dir ? ByteString(native_library_dir) : ByteString{};
+  g_android_runtime_config.certificates_path =
+      certificates_path ? ByteString(certificates_path) : ByteString{};
+}
+
+static void apply_android_runtime_config(AndroidRuntimeConfig const &config) {
+  auto const config_dir = ByteString::formatted("{}/config", config.user_dir);
+  auto const data_dir = ByteString::formatted("{}/userdata", config.user_dir);
+  auto const runtime_dir = ByteString::formatted("{}/runtime", config.user_dir);
+  auto const cache_dir = ByteString::formatted("{}/cache", config.user_dir);
+
+  MUST(Core::Environment::set("LADYBIRD_RESOURCE_ROOT"sv, config.resource_root,
+                              Core::Environment::Overwrite::Yes));
+  MUST(Core::Environment::set("HOME"sv, config.user_dir,
+                              Core::Environment::Overwrite::Yes));
+  MUST(Core::Environment::set("XDG_CONFIG_HOME"sv, config_dir,
+                              Core::Environment::Overwrite::Yes));
+  MUST(Core::Environment::set("XDG_DATA_HOME"sv, data_dir,
+                              Core::Environment::Overwrite::Yes));
+  MUST(Core::Environment::set("XDG_RUNTIME_DIR"sv, runtime_dir,
+                              Core::Environment::Overwrite::Yes));
+  MUST(Core::Environment::set("TMPDIR"sv, cache_dir,
+                              Core::Environment::Overwrite::Yes));
+
+  if (!config.certificates_path.is_empty()) {
+    MUST(Core::Environment::set("SSL_CERT_FILE"sv, config.certificates_path,
+                                Core::Environment::Overwrite::Yes));
+  }
+
+  if (!config.native_library_dir.is_empty()) {
+    if (auto existing_library_path =
+            Core::Environment::get("LD_LIBRARY_PATH"sv);
+        existing_library_path.has_value()) {
+      MUST(Core::Environment::set(
+          "LD_LIBRARY_PATH"sv,
+          ByteString::formatted("{}:{}", config.native_library_dir,
+                                *existing_library_path),
+          Core::Environment::Overwrite::Yes));
+    } else {
+      MUST(Core::Environment::set("LD_LIBRARY_PATH"sv,
+                                  config.native_library_dir,
+                                  Core::Environment::Overwrite::Yes));
+    }
+  }
+
+  WebView::s_ladybird_resource_root = config.resource_root;
+  Core::ResourceImplementation::install(make<Core::ResourceImplementationFile>(
+      MUST(String::from_byte_string(config.resource_root))));
+}
+#else
+extern "C" void configure_android_runtime(const char *, const char *,
+                                          const char *, const char *) {}
+#endif
 
 // ---------------------------------------------------------------------------
 // Platform backend factory
@@ -609,10 +695,16 @@ public:
 
   virtual void create_platform_arguments(Core::ArgsParser &) override {}
   virtual void create_platform_options(
-      WebView::BrowserOptions &browser_options, WebView::RequestServerOptions &,
+      WebView::BrowserOptions &browser_options,
+      WebView::RequestServerOptions &request_server_options,
       WebView::WebContentOptions &web_content_options) override {
 #ifdef __linux__
     browser_options.disable_sandbox = WebView::DisableSandbox::Yes;
+#endif
+#ifdef __ANDROID__
+    auto const config = snapshot_android_runtime_config();
+    if (!config.certificates_path.is_empty())
+      request_server_options.certificates.append(config.certificates_path);
 #endif
     web_content_options.force_cpu_painting = WebView::ForceCPUPainting::Yes;
   }
@@ -709,6 +801,18 @@ void init_ladybird() {
 
 #ifdef __APPLE__
   // Do nothing on macos, it should default properly
+#elif defined(__ANDROID__)
+  auto const android_config = snapshot_android_runtime_config();
+  if (!android_config.is_valid()) {
+    std::fprintf(
+        stderr,
+        "[Ladybird][Android] Runtime not configured before init_ladybird()\n");
+    return;
+  }
+
+  apply_android_runtime_config(android_config);
+  if (!android_config.native_library_dir.is_empty())
+    lib_path = android_config.native_library_dir;
 #else
   auto current_executable_path = Core::System::current_executable_path();
   if (!current_executable_path.is_error()) {
@@ -1062,7 +1166,8 @@ void go_back(int view_id) {
   // std::lock_guard<std::mutex> lock(g_web_views_mutex);
   auto it = g_web_views.find(view_id);
   if (it != g_web_views.end()) {
-    it->second->traverse_the_history_by_delta(-1);
+    [[maybe_unused]] auto result =
+        it->second->traverse_the_history_by_delta(-1);
   }
 }
 
@@ -1070,7 +1175,7 @@ void go_forward(int view_id) {
   // std::lock_guard<std::mutex> lock(g_web_views_mutex);
   auto it = g_web_views.find(view_id);
   if (it != g_web_views.end()) {
-    it->second->traverse_the_history_by_delta(1);
+    [[maybe_unused]] auto result = it->second->traverse_the_history_by_delta(1);
   }
 }
 
