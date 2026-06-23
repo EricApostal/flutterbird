@@ -335,8 +335,7 @@ public:
 #ifndef __APPLE__
 #ifdef USE_VULKAN_DMABUF_IMAGES
       auto *linux_backend = static_cast<LinuxViewBackend *>(m_backend.get());
-      if (auto const &dmabuf = shared_image_buffer->linux_dmabuf_handle();
-          dmabuf.has_value()) {
+      if (auto const &dmabuf = shared_image_buffer->linux_dmabuf_handle()) {
         linux_backend->set_linux_dmabuf_frame(
             dmabuf->file.fd(), dmabuf->size.width(), dmabuf->size.height(),
             static_cast<int>(dmabuf->pitch), dmabuf->drm_format,
@@ -609,9 +608,14 @@ public:
   virtual ~FlutterApplication() override = default;
 
   virtual void create_platform_arguments(Core::ArgsParser &) override {}
-  virtual void create_platform_options(WebView::BrowserOptions &,
-                                       WebView::RequestServerOptions &,
-                                       WebView::WebContentOptions &) override {}
+  virtual void create_platform_options(
+      WebView::BrowserOptions &browser_options, WebView::RequestServerOptions &,
+      WebView::WebContentOptions &web_content_options) override {
+#ifdef __linux__
+    browser_options.disable_sandbox = WebView::DisableSandbox::Yes;
+#endif
+    web_content_options.force_cpu_painting = WebView::ForceCPUPainting::Yes;
+  }
 
   virtual bool should_capture_web_content_output() const override {
     return false;
@@ -742,6 +746,7 @@ void init_ladybird() {
 
   if (auto const &browser_options = WebView::Application::browser_options();
       !browser_options.headless_mode.has_value()) {
+
     if (browser_options.force_new_process == WebView::ForceNewProcess::No) {
       auto disposition = s_browser_process->connect(browser_options.raw_urls,
                                                     browser_options.new_window);
