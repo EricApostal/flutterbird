@@ -187,6 +187,7 @@ else()
     set_target_properties(engine PROPERTIES
         PREFIX "lib"
         SUFFIX ".so"
-        INSTALL_RPATH "$ORIGIN/../lib"
+        BUILD_WITH_INSTALL_RPATH TRUE
+        INSTALL_RPATH "$ORIGIN"
     )
 endif()

@@ -1,0 +1,15 @@
+# Route 1: Ladybird Engine Source Files
+# Tells clangd to use Ladybird's standalone compile commands for its internal files
+If:
+  PathMatch: .*/third_party/ladybird/.*
+CompileFlags:
+  CompilationDatabase: packages/libbird/third_party/ladybird/Build/release
+
+---
+
+# Route 2: Your Flutter Plugin Files (engine.cpp, etc.)
+# Tells clangd to use Flutter's generated compile commands for your integration code
+If:
+  PathMatch: .*/(linux|cpp|packages/libbird/linux)/.*
+CompileFlags:
+  CompilationDatabase: build/linux/x64/debug

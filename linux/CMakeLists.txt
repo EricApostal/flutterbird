@@ -69,6 +69,25 @@ set_target_properties(${BINARY_NAME}
   RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/intermediates_do_not_run"
 )
 
+# Prefer DT_RPATH over DT_RUNPATH so bundled libs are considered for indirect
+# dependencies loaded through system GTK (for example, libxml2 from Ladybird).
+target_link_options(${BINARY_NAME} PRIVATE "-Wl,--disable-new-dtags")
+
+# Find the specific libxml2 built by vcpkg for Ladybird to prevent system collision
+set(LADYBIRD_VCPKG_LIB_DIR "${CMAKE_CURRENT_SOURCE_DIR}/flutter/ephemeral/.plugin_symlinks/ladybird/third_party/ladybird/Build/release/vcpkg_installed/x64-linux-dynamic/lib")
+
+find_library(VCPKG_XML2_LIB
+  NAMES xml2 libxml2.so libxml2.so.2
+  PATHS "${LADYBIRD_VCPKG_LIB_DIR}"
+  NO_DEFAULT_PATH
+)
+
+if(VCPKG_XML2_LIB)
+  target_link_libraries(${BINARY_NAME} PRIVATE ${VCPKG_XML2_LIB})
+else()
+  message(FATAL_ERROR "Could not find vcpkg libxml2 path natively at ${LADYBIRD_VCPKG_LIB_DIR}")
+endif()
+
 
 # Generated plugin build rules, which manage building the plugins and adding
 # them to the application.

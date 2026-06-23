@@ -133,9 +133,7 @@ public:
 
   static int to_cursor_type_for_flutter(Gfx::Cursor const &cursor) {
     return cursor.visit(
-        [](Gfx::StandardCursor standard) {
-          return static_cast<int>(standard);
-        },
+        [](Gfx::StandardCursor standard) { return static_cast<int>(standard); },
         [](Gfx::ImageCursor const &) {
           // Flutter cannot consume custom pixel cursors via this API, so use
           // a standard fallback.
@@ -143,7 +141,8 @@ public:
         });
   }
 
-  int register_context_menu_action(NonnullRefPtr<WebView::Action> const &action) {
+  int register_context_menu_action(
+      NonnullRefPtr<WebView::Action> const &action) {
     int token = m_next_context_menu_action_token++;
     m_context_menu_actions.set(token, action->make_weak_ptr());
     return token;
@@ -219,8 +218,7 @@ public:
       free(payload);
   }
 
-  void set_context_menu_request_callback(
-      ContextMenuRequestCallback callback) {
+  void set_context_menu_request_callback(ContextMenuRequestCallback callback) {
     std::lock_guard lock(m_context_menu_mutex);
     m_context_menu_request_callback = callback;
     if (!callback)
@@ -291,7 +289,8 @@ public:
 
   void set_display_metadata(Optional<u64> display_id, double refresh_rate,
                             double maximum_frames_per_second) {
-    auto const sanitized_refresh_rate = refresh_rate > 0.0 ? refresh_rate : 60.0;
+    auto const sanitized_refresh_rate =
+        refresh_rate > 0.0 ? refresh_rate : 60.0;
     auto const sanitized_maximum_frames_per_second =
         maximum_frames_per_second > 0.0 ? maximum_frames_per_second
                                         : sanitized_refresh_rate;
@@ -371,16 +370,17 @@ public:
             m_last_mac_frame_source = MacFrameSource::IOSurface;
           }
           if ((m_debug_paint_event_count % 30) == 1) {
-            auto const &bitmap_size = m_client_state.front_bitmap.last_painted_size.to_type<int>();
+            auto const &bitmap_size =
+                m_client_state.front_bitmap.last_painted_size.to_type<int>();
             std::fprintf(
                 stderr,
                 "[Ladybird][engine] view=%d paint#=%llu source=IOSurface "
-                "surface_size=%dx%d bitmap_size=%dx%d viewport_size=%dx%d m_zoom=%f\n",
+                "surface_size=%dx%d bitmap_size=%dx%d viewport_size=%dx%d "
+                "m_zoom=%f\n",
                 m_view_id,
                 static_cast<unsigned long long>(m_debug_paint_event_count),
-                surface_width, surface_height,
-                bitmap_size.width(), bitmap_size.height(),
-                m_viewport_width, m_viewport_height,
+                surface_width, surface_height, bitmap_size.width(),
+                bitmap_size.height(), m_viewport_width, m_viewport_height,
                 m_zoom);
           }
           return;
@@ -388,6 +388,11 @@ public:
       }
 #endif
 
+      // hmm
+      //
+      if (!shared_image_buffer) {
+        return;
+      }
       auto bitmap =
           AK::RefPtr<Gfx::Bitmap const>(shared_image_buffer->bitmap());
       m_backend->on_bitmap_ready(std::move(bitmap));
@@ -487,30 +492,23 @@ public:
       return handle;
     };
 
-    page_context_menu().on_activation =
-        [this](Gfx::IntPoint position) {
-          dispatch_context_menu_request("page"sv, position,
-                                        page_context_menu());
-        };
-    link_context_menu().on_activation =
-        [this](Gfx::IntPoint position) {
-          dispatch_context_menu_request("link"sv, position,
-                                        link_context_menu());
-        };
-    image_context_menu().on_activation =
-        [this](Gfx::IntPoint position) {
-          dispatch_context_menu_request("image"sv, position,
-                                        image_context_menu());
-        };
-    media_context_menu().on_activation =
-        [this](Gfx::IntPoint position) {
-          dispatch_context_menu_request("media"sv, position,
-                                        media_context_menu());
-        };
+    page_context_menu().on_activation = [this](Gfx::IntPoint position) {
+      dispatch_context_menu_request("page"sv, position, page_context_menu());
+    };
+    link_context_menu().on_activation = [this](Gfx::IntPoint position) {
+      dispatch_context_menu_request("link"sv, position, link_context_menu());
+    };
+    image_context_menu().on_activation = [this](Gfx::IntPoint position) {
+      dispatch_context_menu_request("image"sv, position, image_context_menu());
+    };
+    media_context_menu().on_activation = [this](Gfx::IntPoint position) {
+      dispatch_context_menu_request("media"sv, position, media_context_menu());
+    };
   }
 
   void resize(int width, int height) {
-    std::fprintf(stderr, "[LibBird] resize: incoming %dx%d, m_zoom: %f\n", width, height, m_zoom);
+    std::fprintf(stderr, "[LibBird] resize: incoming %dx%d, m_zoom: %f\n",
+                 width, height, m_zoom);
     m_viewport_width = width;
     m_viewport_height = height;
     auto size = Web::DevicePixelSize{width, height};
@@ -518,7 +516,10 @@ public:
     client().async_set_viewport(m_client_state.page_index, size,
                                 m_device_pixel_ratio, is_fullscreen());
     client().async_set_window_size(m_client_state.page_index, size);
-    WebView::Application::the().update_compositor_viewport(client().compositor_context_id_for_page(m_client_state.page_index), viewport_size().to_type<int>(), Web::Compositor::WindowResizingInProgress::Yes);
+    WebView::Application::the().update_compositor_viewport(
+        client().compositor_context_id_for_page(m_client_state.page_index),
+        viewport_size().to_type<int>(),
+        Web::Compositor::WindowResizingInProgress::Yes);
   }
 
   void update_zoom_scale() {
@@ -551,7 +552,8 @@ public:
     enqueue_input_event(
         Web::KeyEvent{type, static_cast<Web::UIEvents::KeyCode>(keycode),
                       static_cast<Web::UIEvents::KeyModifier>(modifiers),
-                      code_point, repeat, nullptr});
+                      // TODO: implement should_insert_text
+                      code_point, repeat, false});
   }
 
   virtual ~FlutterViewImpl() = default;
@@ -615,7 +617,7 @@ public:
     return false;
   }
 
-  virtual NonnullOwnPtr<Core::EventLoop> create_platform_event_loop() override {
+  virtual Core::EventLoop &create_platform_event_loop() override {
     return WebView::Application::create_platform_event_loop();
   }
 
@@ -948,7 +950,8 @@ void navigate_to(int view_id, const char *url) {
 void set_zoom(int view_id, double zoom) {
   if (zoom <= 0.0)
     return;
-  std::fprintf(stderr, "[LibBird] set_zoom: view_id=%d, zoom=%f\n", view_id, zoom);
+  std::fprintf(stderr, "[LibBird] set_zoom: view_id=%d, zoom=%f\n", view_id,
+               zoom);
   auto it = g_web_views.find(view_id);
   if (it != g_web_views.end()) {
     it->second->m_zoom = zoom;
@@ -968,7 +971,8 @@ void set_display_metadata(int view_id, bool has_display_id, uint64_t display_id,
     optional_display_id = display_id;
 
   std::fprintf(stderr,
-               "[LibBird] set_display_metadata: view_id=%d has_display_id=%d display_id=%llu refresh_rate=%f max_fps=%f\n",
+               "[LibBird] set_display_metadata: view_id=%d has_display_id=%d "
+               "display_id=%llu refresh_rate=%f max_fps=%f\n",
                view_id, has_display_id ? 1 : 0,
                static_cast<unsigned long long>(display_id), refresh_rate,
                maximum_frames_per_second);
@@ -998,7 +1002,7 @@ void set_url_change_callback(int view_id, UrlChangeCallback callback) {
     {
       std::lock_guard lock(it->second->m_info_mutex);
       it->second->m_url_change_callback = callback;
-      auto const& url = it->second->url();
+      auto const &url = it->second->url();
       has_valid_initial_url = !url.scheme().is_empty();
       if (has_valid_initial_url)
         current_url = url.to_string().to_byte_string();

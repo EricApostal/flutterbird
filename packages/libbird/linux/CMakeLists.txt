@@ -30,7 +30,7 @@ file(GLOB LADYBIRD_LIBEXEC "${LADYBIRD_DIR}/Build/release/libexec/*")
 
 list(APPEND LADYBIRD_LIBS ${VCPKG_LIBS})
 
-install(PROGRAMS ${LADYBIRD_LIBEXEC} DESTINATION "lib" COMPONENT Runtime)
+install(PROGRAMS ${LADYBIRD_LIBEXEC} DESTINATION "libexec" COMPONENT Runtime)
 install(DIRECTORY "${LADYBIRD_DIR}/Build/release/share" DESTINATION "." COMPONENT Runtime)
 
 # Define the plugin library target. Its name must not be changed (see comment
@@ -48,7 +48,9 @@ apply_standard_settings(${PLUGIN_NAME})
 # between plugins. This should not be removed; any symbols that should be
 # exported should be explicitly exported with the FLUTTER_PLUGIN_EXPORT macro.
 set_target_properties(${PLUGIN_NAME} PROPERTIES
-  CXX_VISIBILITY_PRESET hidden)
+  CXX_VISIBILITY_PRESET hidden
+  BUILD_WITH_INSTALL_RPATH TRUE
+  INSTALL_RPATH "$ORIGIN")
 target_compile_definitions(${PLUGIN_NAME} PRIVATE FLUTTER_PLUGIN_IMPL)
 
 # Source include directories and library dependencies. Add any plugin-specific
