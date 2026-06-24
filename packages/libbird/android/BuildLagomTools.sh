@@ -28,7 +28,9 @@ CMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE:-RelWithDebInfo}
 # (And this also works on macOS, despite the fact that $XDG_CACHE_HOME is a Linux-ism.)
 export XDG_CACHE_HOME="$CACHE_DIR"
 
-"$LADYBIRD_SOURCE_DIR"/Meta/ladybird.py vcpkg
+if [ ! -x "$LADYBIRD_SOURCE_DIR/Build/vcpkg/vcpkg" ]; then
+    "$LADYBIRD_SOURCE_DIR"/Meta/ladybird.py vcpkg
+fi
 
 cmake -S "${LADYBIRD_SOURCE_DIR}" -B "$BUILD_DIR/lagom-tools" \
     -GNinja -Dpackage=LagomTools \

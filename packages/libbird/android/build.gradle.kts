@@ -1,3 +1,5 @@
+import java.io.ByteArrayOutputStream
+
 group = "dev.flutterbird.ladybird"
 version = "1.0-SNAPSHOT"
 
@@ -25,10 +27,99 @@ plugins {
 val packageBuildDir = layout.buildDirectory.get().asFile
 val cacheDir = System.getenv("LADYBIRD_CACHE_DIR") ?: "$packageBuildDir/caches"
 val sourceDir = layout.projectDirectory.dir("../third_party/ladybird").asFile.absolutePath
+val generatedSdl3JavaDir = layout.buildDirectory.dir("generated/sdl3Java").get().asFile.absolutePath
+val lagomToolsInstallDir = layout.buildDirectory.dir("lagom-tools-install")
+val ladybirdVersionFile = layout.projectDirectory.file("../third_party/ladybird.version").asFile
+val ensureLadybirdSourceStamp = layout.buildDirectory.file("generated/ensureLadybirdSource.stamp")
+val lagomToolsStamp = layout.buildDirectory.file("generated/lagom-tools.stamp")
+
+data class Sdl3JavaInputs(val jar: File?, val sourceDirs: List<File>)
+
+fun Project.resolveSdl3JavaInputs(sourceDir: String): Sdl3JavaInputs {
+    val jar = fileTree("$sourceDir/Build/vcpkg/packages") {
+        include("**/SDL3.jar")
+        include("**/SDL3-*.jar")
+        exclude("**/*-sources.jar")
+    }.files.minByOrNull { it.path }
+
+    val sourceDirs = if (jar == null) {
+        fileTree("$sourceDir/Build/vcpkg/buildtrees/sdl3") {
+            include("**/android-project/app/src/main/java/**/*.java")
+        }.files.mapNotNull { file ->
+            var current: File? = file
+            while (current != null && current.name != "java") {
+                current = current.parentFile
+            }
+            current
+        }.distinct().sortedBy { it.path }
+    } else {
+        emptyList()
+    }
+
+    return Sdl3JavaInputs(jar = jar, sourceDirs = sourceDirs)
+}
+
+fun verifySdl3JavaInputs(inputs: Sdl3JavaInputs) {
+    check(inputs.jar != null || inputs.sourceDirs.isNotEmpty()) {
+        "Unable to locate SDL Android Java sources. Expected either packaged SDL3 Java artifacts or unpacked SDL buildtree sources under Build/vcpkg."
+    }
+}
+
+fun Project.computeLagomToolsFingerprint(
+    sourceDir: String,
+    cacheDir: String,
+    buildScript: File,
+    versionFile: File,
+): String {
+    val ladybirdHead = runCatching {
+        val output = ByteArrayOutputStream()
+        exec {
+            workingDir = file(sourceDir)
+            commandLine("git", "rev-parse", "HEAD")
+            standardOutput = output
+            isIgnoreExitValue = true
+        }
+        output.toString().trim()
+    }.getOrElse { "unknown" }
+
+    val ladybirdDirty = runCatching {
+        val output = ByteArrayOutputStream()
+        exec {
+            workingDir = file(sourceDir)
+            commandLine("git", "status", "--porcelain", "--untracked-files=no")
+            standardOutput = output
+            isIgnoreExitValue = true
+        }
+        output.toString().trim()
+    }.getOrElse { "unknown" }
+
+    return buildString {
+        appendLine("ladybirdVersionFile=${versionFile.readText().trim()}")
+        appendLine("buildScriptMtime=${buildScript.lastModified()}")
+        appendLine("buildScriptSize=${buildScript.length()}")
+        appendLine("cacheDir=$cacheDir")
+        appendLine("ladybirdHead=$ladybirdHead")
+        appendLine("ladybirdDirty=$ladybirdDirty")
+    }
+}
 
 val ensureLadybirdSource = tasks.register<Exec>("ensureLadybirdSource") {
     workingDir = layout.projectDirectory.asFile
     commandLine = listOf("bash", "../tool/ensure_ladybird_source.sh")
+
+    inputs.file(layout.projectDirectory.file("../tool/ensure_ladybird_source.sh"))
+    inputs.file(layout.projectDirectory.file("../third_party/ladybird.version"))
+    outputs.file(ensureLadybirdSourceStamp)
+    outputs.upToDateWhen {
+        ensureLadybirdSourceStamp.get().asFile.exists() &&
+                layout.projectDirectory.file("../third_party/ladybird/Meta/ladybird.py").asFile.exists()
+    }
+
+    doLast {
+        val stampFile = ensureLadybirdSourceStamp.get().asFile
+        stampFile.parentFile.mkdirs()
+        stampFile.writeText(ladybirdVersionFile.readText())
+    }
 }
 
 val buildLagomTools = tasks.register<Exec>("buildLagomTools") {
@@ -40,6 +131,42 @@ val buildLagomTools = tasks.register<Exec>("buildLagomTools") {
         "CACHE_DIR" to cacheDir,
         "PATH" to System.getenv("PATH")!!
     )
+
+    val buildScriptFile = layout.projectDirectory.file("BuildLagomTools.sh").asFile
+
+    inputs.file(layout.projectDirectory.file("BuildLagomTools.sh"))
+    inputs.file(layout.projectDirectory.file("../third_party/ladybird.version"))
+    inputs.property("cacheDir", cacheDir)
+    outputs.file(lagomToolsStamp)
+
+    outputs.upToDateWhen {
+        val installDir = lagomToolsInstallDir.get().asFile
+        val stampFile = lagomToolsStamp.get().asFile
+        if (!stampFile.exists() || !installDir.resolve("bin").exists()) {
+            return@upToDateWhen false
+        }
+
+        val currentFingerprint = computeLagomToolsFingerprint(
+                sourceDir = sourceDir,
+                cacheDir = cacheDir,
+                buildScript = buildScriptFile,
+                versionFile = ladybirdVersionFile,
+        )
+        stampFile.readText() == currentFingerprint
+    }
+
+    doLast {
+        val stampFile = lagomToolsStamp.get().asFile
+        stampFile.parentFile.mkdirs()
+        stampFile.writeText(
+                computeLagomToolsFingerprint(
+                        sourceDir = sourceDir,
+                        cacheDir = cacheDir,
+                        buildScript = buildScriptFile,
+                        versionFile = ladybirdVersionFile,
+                )
+        )
+    }
 }
 
 val packageLadybirdAssets = tasks.register<Zip>("packageLadybirdAssets") {
@@ -49,6 +176,33 @@ val packageLadybirdAssets = tasks.register<Zip>("packageLadybirdAssets") {
     destinationDirectory.set(layout.buildDirectory.dir("generated/ladybirdAssets"))
 }
 
+val prepareSdl3Java = tasks.register("prepareSdl3Java") {
+    // Wait for CMake / vcpkg tasks to run so the source files actually exist
+    dependsOn(tasks.matching { 
+        it.name.startsWith("generateJsonModel") || 
+        it.name.startsWith("externalNativeBuild") ||
+        it.name.startsWith("buildCMake")
+    })
+    
+    doLast {
+        val inputs = resolveSdl3JavaInputs(sourceDir)
+        verifySdl3JavaInputs(inputs)
+        if (inputs.sourceDirs.isNotEmpty()) {
+            copy {
+                from(inputs.sourceDirs)
+                into(generatedSdl3JavaDir)
+            }
+        }
+    }
+}
+
+val verifySdl3JavaInputsTask = tasks.register("verifySdl3JavaInputs") {
+    group = "verification"
+    description = "Verifies SDL Android Java inputs exist after externalNativeBuild."
+
+    doLast { verifySdl3JavaInputs(resolveSdl3JavaInputs(sourceDir)) }
+}
+
 tasks.matching { it.name == "preBuild" }.configureEach {
     dependsOn(buildLagomTools)
     dependsOn(packageLadybirdAssets)
@@ -56,6 +210,14 @@ tasks.matching { it.name == "preBuild" }.configureEach {
 
 tasks.matching { it.name.startsWith("merge") && it.name.endsWith("Assets") }.configureEach {
     dependsOn(packageLadybirdAssets)
+}
+
+tasks.withType<JavaCompile>().configureEach {
+    dependsOn(prepareSdl3Java)
+}
+
+tasks.matching { it.name.startsWith("buildCMake") || it.name.startsWith("externalNativeBuild") }.configureEach {
+    finalizedBy(verifySdl3JavaInputsTask)
 }
 
 
@@ -76,26 +238,10 @@ android {
                                 "-DVCPKG_ROOT=$sourceDir/Build/vcpkg",
                                 "-DVCPKG_TARGET_ANDROID=ON"
                         )
-                /*
-                This is arguably a hack, and is questionable architecture overall. `ladybird` is fine because
-                it's linked, but this is "true", unix-like multiprocess, whereas android wants executables you
-                plan on running to be defined at startup in the manifest. For now I do like this because it means
-                that android processes run the exact same as linux ones, but it exposes us to the possibility
-                of android stepping in and doing whatever it wants, since this is sort of undefined behavior.
-                Maybe we're only allowed on efficency cores? Maybe android just decides to kill the process?
-                Who knows, you aren't really supposed to do this.
-
-                Now, there are advantages, assuming that android doesn't try to kill the processes at will.
-                1. No pooling processes like chromium. We don't need to spawn 12 or so processes on boot
-                2. Better security, because we never have to have tabs share processes
-                3. Implicity aligned with the desktop implementations
-                4. 
-
-                 */
                 targets +=
                         listOf(
-                        "ladybird_plugin",
-                        "engine",
+                                "ladybird_plugin",
+                                "engine",
                                 "ladybird",
                                 "Compositor",
                                 "ImageDecoder",
@@ -124,7 +270,9 @@ android {
 
     sourceSets {
         getByName("main") {
-            assets.srcDir(layout.buildDirectory.dir("generated/ladybirdAssets"))
+            // Compliant with AGP 9.1.0+ directories API
+            assets.directories.add(layout.buildDirectory.dir("generated/ladybirdAssets").get().asFile.absolutePath)
+            java.directories.add(generatedSdl3JavaDir)
         }
     }
 
@@ -134,4 +282,12 @@ android {
             keepDebugSymbols.add("**/libWebContent.so")
         }
     }
+}
+
+dependencies {
+    implementation(fileTree("$sourceDir/Build/vcpkg/packages") {
+        include("**/SDL3.jar")
+        include("**/SDL3-*.jar")
+        exclude("**/*-sources.jar")
+    })
 }

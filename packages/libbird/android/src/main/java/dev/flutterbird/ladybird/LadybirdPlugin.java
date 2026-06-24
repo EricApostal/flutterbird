@@ -25,6 +25,9 @@ public final class LadybirdPlugin implements FlutterPlugin, MethodCallHandler {
     private static final long PUMP_INTERVAL_MS = 16L;
 
     static {
+        // SDL registers JNI methods for org.libsdl.app.* during JNI_OnLoad.
+        // Load engine explicitly from Java so JNI_OnLoad has app classloader context.
+        System.loadLibrary("engine");
         System.loadLibrary("ladybird_plugin");
     }
 

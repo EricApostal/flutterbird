@@ -47,3 +47,5 @@ app.*.map.json
 /macos/Runner/LadybirdArtifacts
 
 /.vscode/
+
+ladybird-assets.zip
