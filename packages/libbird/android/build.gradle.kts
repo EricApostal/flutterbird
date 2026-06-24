@@ -1,3 +1,4 @@
+import com.android.build.api.dsl.LibraryExtension
 import java.io.ByteArrayOutputStream
 
 group = "dev.flutterbird.ladybird"
@@ -64,32 +65,24 @@ fun verifySdl3JavaInputs(inputs: Sdl3JavaInputs) {
     }
 }
 
-fun Project.computeLagomToolsFingerprint(
+fun computeLagomToolsFingerprint(
     sourceDir: String,
     cacheDir: String,
     buildScript: File,
     versionFile: File,
 ): String {
     val ladybirdHead = runCatching {
-        val output = ByteArrayOutputStream()
-        exec {
-            workingDir = file(sourceDir)
-            commandLine("git", "rev-parse", "HEAD")
-            standardOutput = output
-            isIgnoreExitValue = true
-        }
-        output.toString().trim()
+        ProcessBuilder("git", "rev-parse", "HEAD")
+            .directory(File(sourceDir))
+            .start()
+            .inputStream.bufferedReader().readText().trim()
     }.getOrElse { "unknown" }
 
     val ladybirdDirty = runCatching {
-        val output = ByteArrayOutputStream()
-        exec {
-            workingDir = file(sourceDir)
-            commandLine("git", "status", "--porcelain", "--untracked-files=no")
-            standardOutput = output
-            isIgnoreExitValue = true
-        }
-        output.toString().trim()
+        ProcessBuilder("git", "status", "--porcelain", "--untracked-files=no")
+            .directory(File(sourceDir))
+            .start()
+            .inputStream.bufferedReader().readText().trim()
     }.getOrElse { "unknown" }
 
     return buildString {
@@ -197,7 +190,7 @@ tasks.matching { it.name.startsWith("buildCMake") || it.name.startsWith("externa
     finalizedBy(verifySdl3JavaInputsTask)
 }
 
-android {
+configure<LibraryExtension> {
     namespace = "dev.flutterbird.ladybird"
     compileSdk = 35
     ndkVersion = "29.0.13599879"
@@ -213,8 +206,8 @@ android {
                                 "-DLADYBIRD_CACHE_DIR=$cacheDir",
                                 "-DVCPKG_ROOT=$sourceDir/Build/vcpkg",
                                 "-DVCPKG_TARGET_ANDROID=ON",
-                                "-DCMAKE_SHARED_LINKER_FLAGS=-fuse-ld=mold", 
-                                "-DCMAKE_EXE_LINKER_FLAGS=-fuse-ld=mold"
+                                // "-DCMAKE_SHARED_LINKER_FLAGS=-fuse-ld=mold", 
+                                // "-DCMAKE_EXE_LINKER_FLAGS=-fuse-ld=mold"
                         )
                 targets +=
                         listOf(

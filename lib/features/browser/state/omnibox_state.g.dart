@@ -41,13 +41,13 @@ final class BrowserOmniboxProvider
   }
 }
 
-String _$browserOmniboxHash() => r'7b6c66482ab153c4f4033a45c5a38c52d72aaabd';
+String _$browserOmniboxHash() => r'a18425f4ec74bc35b6ae90c4c3e7bc3c5cbcaa5c';
 
 abstract class _$BrowserOmnibox extends $Notifier<BrowserOmniboxState> {
   BrowserOmniboxState build();
   @$mustCallSuper
   @override
-  void runBuild() {
+  WhenComplete runBuild() {
     final ref = this.ref as $Ref<BrowserOmniboxState, BrowserOmniboxState>;
     final element =
         ref.element
@@ -57,6 +57,6 @@ abstract class _$BrowserOmnibox extends $Notifier<BrowserOmniboxState> {
               Object?,
               Object?
             >;
-    element.handleCreate(ref, build);
+    return element.handleCreate(ref, build);
   }
 }
