@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/physics.dart'; // Added for FrictionSimulation
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:ladybird/ladybird.dart';
@@ -32,9 +33,13 @@ class _LadybirdViewState extends State<LadybirdView>
   double _accumulatedWheelY = 0;
 
   Ticker? _momentumTicker;
-  Offset _momentumVelocity = Offset.zero;
   Offset _lastPointerPos = Offset.zero;
-  int _lastPanTime = 0;
+
+  // Platform-native scrolling physics trackers
+  Simulation? _simulationX;
+  Simulation? _simulationY;
+  double _lastSimX = 0;
+  double _lastSimY = 0;
 
   bool get _showFrameDiagnostics =>
       kDebugMode && defaultTargetPlatform == TargetPlatform.macOS;
@@ -130,8 +135,6 @@ class _LadybirdViewState extends State<LadybirdView>
       widget.controller.syncUrlFromEngine();
     }
 
-    // Ensure first navigation happens only after the native viewport has been
-    // sized with the current Flutter constraints and DPR.
     if (!widget.controller.hasNavigatedInitial) {
       widget.controller.hasNavigatedInitial = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -239,22 +242,43 @@ class _LadybirdViewState extends State<LadybirdView>
     );
   }
 
+  Simulation _getPlatformSimulation(double velocity) {
+    switch (defaultTargetPlatform) {
+      case TargetPlatform.iOS:
+      case TargetPlatform.macOS:
+        return FrictionSimulation(0.135, 0, velocity);
+      case TargetPlatform.android:
+      case TargetPlatform.windows:
+      case TargetPlatform.fuchsia:
+      case TargetPlatform.linux:
+      default:
+        return ClampingScrollSimulation(position: 0, velocity: velocity);
+    }
+  }
+
   void _onMomentumTick(Duration elapsed) {
-    // If momentum decays below threshold, stop
-    if (_momentumVelocity.distance < 0.2) {
+    if (_simulationX == null || _simulationY == null) {
       _momentumTicker?.stop();
-      _momentumVelocity = Offset.zero;
       return;
     }
 
-    _dispatchWheelDelta(
-      _lastPointerPos,
-      -_momentumVelocity.dx,
-      -_momentumVelocity.dy,
-    );
+    final timeInSeconds = elapsed.inMicroseconds / 1000000.0;
 
-    // Friction factor - adjust this to change how quickly it glides to a stop
-    _momentumVelocity *= 0.92;
+    final currentX = _simulationX!.x(timeInSeconds);
+    final currentY = _simulationY!.x(timeInSeconds);
+
+    final deltaX = currentX - _lastSimX;
+    final deltaY = currentY - _lastSimY;
+
+    _lastSimX = currentX;
+    _lastSimY = currentY;
+
+    _dispatchWheelDelta(_lastPointerPos, -deltaX, -deltaY);
+
+    if (_simulationX!.isDone(timeInSeconds) &&
+        _simulationY!.isDone(timeInSeconds)) {
+      _momentumTicker?.stop();
+    }
   }
 
   void _onPointerScroll(PointerScrollEvent event) {
@@ -267,24 +291,12 @@ class _LadybirdViewState extends State<LadybirdView>
 
   void _onPointerPanZoomStart(PointerPanZoomStartEvent event) {
     _momentumTicker?.stop();
-    _momentumVelocity = Offset.zero;
     _lastPointerPos = event.localPosition;
-    _lastPanTime = DateTime.now().millisecondsSinceEpoch;
   }
 
   void _onPointerPanZoomUpdate(PointerPanZoomUpdateEvent event) {
     _momentumTicker?.stop();
     _lastPointerPos = event.localPosition;
-
-    final now = DateTime.now().millisecondsSinceEpoch;
-    final dt = now - _lastPanTime;
-
-    if (dt > 0 && dt < 100) {
-      _momentumVelocity = event.panDelta;
-    } else {
-      _momentumVelocity = Offset.zero;
-    }
-    _lastPanTime = now;
 
     _dispatchWheelDelta(
       event.localPosition,
@@ -294,22 +306,18 @@ class _LadybirdViewState extends State<LadybirdView>
   }
 
   void _onPointerPanZoomEnd(PointerPanZoomEndEvent event) {
-    if (_momentumVelocity.distance > 0.5) {
-      _momentumTicker?.start();
-    }
+    // Let native momentum events continue via the OS naturally.
   }
 
   void _onTouchTapDown(TapDownDetails details) {
     _focusNode.requestFocus();
     _momentumTicker?.stop();
-    _momentumVelocity = Offset.zero;
     _lastPointerPos = details.localPosition;
   }
 
   void _onTouchTapUp(TapUpDetails details) {
     _focusNode.requestFocus();
     _momentumTicker?.stop();
-    _momentumVelocity = Offset.zero;
     _lastPointerPos = details.localPosition;
     _dispatchPrimaryTap(details.localPosition);
   }
@@ -317,23 +325,12 @@ class _LadybirdViewState extends State<LadybirdView>
   void _onTouchPanStart(DragStartDetails details) {
     _focusNode.requestFocus();
     _momentumTicker?.stop();
-    _momentumVelocity = Offset.zero;
     _lastPointerPos = details.localPosition;
-    _lastPanTime = DateTime.now().millisecondsSinceEpoch;
   }
 
   void _onTouchPanUpdate(DragUpdateDetails details) {
     _momentumTicker?.stop();
     _lastPointerPos = details.localPosition;
-
-    final now = DateTime.now().millisecondsSinceEpoch;
-    final dt = now - _lastPanTime;
-    if (dt > 0 && dt < 100) {
-      _momentumVelocity = details.delta;
-    } else {
-      _momentumVelocity = Offset.zero;
-    }
-    _lastPanTime = now;
 
     _dispatchWheelDelta(
       details.localPosition,
@@ -343,13 +340,19 @@ class _LadybirdViewState extends State<LadybirdView>
   }
 
   void _onTouchPanEnd(DragEndDetails details) {
-    final velocityPerFrame = details.velocity.pixelsPerSecond / 60.0;
-    if (velocityPerFrame.distance > 0.5) {
-      _momentumVelocity = velocityPerFrame;
-      _momentumTicker?.start();
-    } else {
-      _momentumVelocity = Offset.zero;
+    final velocity = details.velocity.pixelsPerSecond;
+
+    if (velocity.distance < 10.0) {
+      _momentumTicker?.stop();
+      return;
     }
+
+    _simulationX = _getPlatformSimulation(velocity.dx);
+    _simulationY = _getPlatformSimulation(velocity.dy);
+    _lastSimX = 0;
+    _lastSimY = 0;
+
+    _momentumTicker?.start();
   }
 
   bool _isPlatformShortcutPressed() {
