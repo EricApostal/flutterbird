@@ -167,13 +167,19 @@ val packageLadybirdAssets = tasks.register<Zip>("packageLadybirdAssets") {
     destinationDirectory.set(layout.buildDirectory.dir("generated/ladybirdAssets"))
 }
 
+fun javaCompileVariantName(taskName: String): String? {
+    if (!taskName.startsWith("compile") || !taskName.endsWith("JavaWithJavac")) {
+        return null
+    }
+
+    val variantName = taskName
+            .removePrefix("compile")
+            .removeSuffix("JavaWithJavac")
+
+    return variantName.takeIf { it.isNotEmpty() }
+}
+
 val prepareSdl3Java = tasks.register("prepareSdl3Java") {
-    dependsOn(tasks.matching { 
-        it.name.startsWith("generateJsonModel") || 
-        it.name.startsWith("externalNativeBuild") ||
-        it.name.startsWith("buildCMake")
-    })
-    
     doLast {
         val inputs = resolveSdl3JavaInputs(sourceDir)
         verifySdl3JavaInputs(inputs)
@@ -204,6 +210,12 @@ tasks.matching { it.name.startsWith("merge") && it.name.endsWith("Assets") }.con
 
 tasks.withType<JavaCompile>().configureEach {
     dependsOn(prepareSdl3Java)
+
+    val variantName = javaCompileVariantName(name) ?: return@configureEach
+    dependsOn(tasks.matching {
+        it.name == "generateJsonModel$variantName" ||
+                it.name == "externalNativeBuild$variantName"
+    })
 }
 
 tasks.matching { it.name.startsWith("buildCMake") || it.name.startsWith("externalNativeBuild") }.configureEach {
