@@ -72,8 +72,22 @@ Java_dev_flutterbird_ladybird_LadybirdPlugin_nativeCopyLatestPixelBuffer(
   int height = 0;
   auto effective_capacity = static_cast<int>(
       std::min<jlong>(buffer_capacity, static_cast<jlong>(capacity)));
-  return copy_latest_pixel_buffer(view_id, buffer, effective_capacity, &width,
-                                  &height)
-             ? JNI_TRUE
-             : JNI_FALSE;
+  bool copied = copy_latest_pixel_buffer(view_id, buffer, effective_capacity,
+                                         &width, &height);
+  if (!copied)
+    return JNI_FALSE;
+
+  if (width > 0 && height > 0) {
+    auto const pixel_count =
+        static_cast<size_t>(width) * static_cast<size_t>(height);
+    auto const required_bytes = pixel_count * 4;
+    if (required_bytes <= static_cast<size_t>(effective_capacity)) {
+      for (size_t i = 0; i < pixel_count; ++i) {
+        auto offset = i * 4;
+        std::swap(buffer[offset], buffer[offset + 2]);
+      }
+    }
+  }
+
+  return JNI_TRUE;
 }

@@ -177,6 +177,40 @@ class _LadybirdViewState extends State<LadybirdView>
     );
   }
 
+  bool _shouldDispatchAsMousePointer(PointerEvent event) {
+    return event.kind != PointerDeviceKind.touch;
+  }
+
+  void _dispatchPrimaryTap(Offset localPosition) {
+    final density = MediaQuery.devicePixelRatioOf(context);
+    final x = (localPosition.dx * density).toInt();
+    final y = (localPosition.dy * density).toInt();
+    final modifiers = getModifiersForEvent(
+      HardwareKeyboard.instance.logicalKeysPressed,
+    );
+
+    widget.controller.dispatchMouseEvent(
+      type: 0,
+      x: x,
+      y: y,
+      button: 1,
+      buttons: kPrimaryMouseButton,
+      modifiers: modifiers,
+      wheelDeltaX: 0,
+      wheelDeltaY: 0,
+    );
+    widget.controller.dispatchMouseEvent(
+      type: 1,
+      x: x,
+      y: y,
+      button: 1,
+      buttons: 0,
+      modifiers: modifiers,
+      wheelDeltaX: 0,
+      wheelDeltaY: 0,
+    );
+  }
+
   void _dispatchWheelDelta(Offset localPosition, double deltaX, double deltaY) {
     final density = MediaQuery.devicePixelRatioOf(context);
 
@@ -262,6 +296,59 @@ class _LadybirdViewState extends State<LadybirdView>
   void _onPointerPanZoomEnd(PointerPanZoomEndEvent event) {
     if (_momentumVelocity.distance > 0.5) {
       _momentumTicker?.start();
+    }
+  }
+
+  void _onTouchTapDown(TapDownDetails details) {
+    _focusNode.requestFocus();
+    _momentumTicker?.stop();
+    _momentumVelocity = Offset.zero;
+    _lastPointerPos = details.localPosition;
+  }
+
+  void _onTouchTapUp(TapUpDetails details) {
+    _focusNode.requestFocus();
+    _momentumTicker?.stop();
+    _momentumVelocity = Offset.zero;
+    _lastPointerPos = details.localPosition;
+    _dispatchPrimaryTap(details.localPosition);
+  }
+
+  void _onTouchPanStart(DragStartDetails details) {
+    _focusNode.requestFocus();
+    _momentumTicker?.stop();
+    _momentumVelocity = Offset.zero;
+    _lastPointerPos = details.localPosition;
+    _lastPanTime = DateTime.now().millisecondsSinceEpoch;
+  }
+
+  void _onTouchPanUpdate(DragUpdateDetails details) {
+    _momentumTicker?.stop();
+    _lastPointerPos = details.localPosition;
+
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final dt = now - _lastPanTime;
+    if (dt > 0 && dt < 100) {
+      _momentumVelocity = details.delta;
+    } else {
+      _momentumVelocity = Offset.zero;
+    }
+    _lastPanTime = now;
+
+    _dispatchWheelDelta(
+      details.localPosition,
+      -details.delta.dx,
+      -details.delta.dy,
+    );
+  }
+
+  void _onTouchPanEnd(DragEndDetails details) {
+    final velocityPerFrame = details.velocity.pixelsPerSecond / 60.0;
+    if (velocityPerFrame.distance > 0.5) {
+      _momentumVelocity = velocityPerFrame;
+      _momentumTicker?.start();
+    } else {
+      _momentumVelocity = Offset.zero;
     }
   }
 
@@ -421,42 +508,69 @@ class _LadybirdViewState extends State<LadybirdView>
                     focusNode: _focusNode,
                     autofocus: true,
                     onKeyEvent: _onKeyEvent,
-                    child: Listener(
-                      onPointerDown: (e) {
-                        _focusNode.requestFocus();
-                        _onPointerEvent(e, 0);
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      supportedDevices: const <PointerDeviceKind>{
+                        PointerDeviceKind.touch,
                       },
-                      onPointerUp: (e) => _onPointerEvent(e, 1),
-                      onPointerMove: (e) => _onPointerEvent(e, 2),
-                      onPointerHover: (e) => _onPointerEvent(e, 2),
-                      onPointerPanZoomStart: _onPointerPanZoomStart,
-                      onPointerPanZoomUpdate: _onPointerPanZoomUpdate,
-                      onPointerPanZoomEnd: _onPointerPanZoomEnd,
-                      onPointerSignal: (e) {
-                        if (e is PointerScrollEvent) {
-                          _onPointerScroll(e);
-                        }
-                      },
-                      child: Stack(
-                        fit: StackFit.expand,
-                        children: [
-                          Texture(
-                            key: ValueKey(_textureId),
-                            textureId: _textureId!,
-                          ),
-                          if (_showFrameDiagnostics)
-                            ValueListenableBuilder<_FrameDiagnosticsSnapshot?>(
-                              valueListenable: _frameDiagnosticsNotifier,
-                              builder: (context, snapshot, child) {
-                                if (snapshot == null) {
-                                  return const SizedBox.shrink();
-                                }
-                                return _FrameDiagnosticsOverlay(
-                                  snapshot: snapshot,
-                                );
-                              },
+                      onTapDown: _onTouchTapDown,
+                      onTapUp: _onTouchTapUp,
+                      onPanStart: _onTouchPanStart,
+                      onPanUpdate: _onTouchPanUpdate,
+                      onPanEnd: _onTouchPanEnd,
+                      child: Listener(
+                        onPointerDown: (e) {
+                          if (_shouldDispatchAsMousePointer(e)) {
+                            _focusNode.requestFocus();
+                            _onPointerEvent(e, 0);
+                          }
+                        },
+                        onPointerUp: (e) {
+                          if (_shouldDispatchAsMousePointer(e)) {
+                            _onPointerEvent(e, 1);
+                          }
+                        },
+                        onPointerMove: (e) {
+                          if (_shouldDispatchAsMousePointer(e)) {
+                            _onPointerEvent(e, 2);
+                          }
+                        },
+                        onPointerHover: (e) {
+                          if (_shouldDispatchAsMousePointer(e)) {
+                            _onPointerEvent(e, 2);
+                          }
+                        },
+                        onPointerPanZoomStart: _onPointerPanZoomStart,
+                        onPointerPanZoomUpdate: _onPointerPanZoomUpdate,
+                        onPointerPanZoomEnd: _onPointerPanZoomEnd,
+                        onPointerSignal: (e) {
+                          if (e is PointerScrollEvent) {
+                            _onPointerScroll(e);
+                          }
+                        },
+                        child: Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            Texture(
+                              key: ValueKey(_textureId),
+                              textureId: _textureId!,
                             ),
-                        ],
+                            if (_showFrameDiagnostics)
+                              ValueListenableBuilder<
+                                _FrameDiagnosticsSnapshot?
+                              >(
+                                valueListenable: _frameDiagnosticsNotifier,
+                                builder: (context, snapshot, child) {
+                                  if (snapshot == null) {
+                                    return const SizedBox.shrink();
+                                  }
+                                  return _FrameDiagnosticsOverlay(
+                                    snapshot: snapshot,
+                                  );
+                                },
+                              ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
