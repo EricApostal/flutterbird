@@ -30,7 +30,6 @@ val sourceDir = layout.projectDirectory.dir("../third_party/ladybird").asFile.ab
 val generatedSdl3JavaDir = layout.buildDirectory.dir("generated/sdl3Java").get().asFile.absolutePath
 val lagomToolsInstallDir = layout.buildDirectory.dir("lagom-tools-install")
 val ladybirdVersionFile = layout.projectDirectory.file("../third_party/ladybird.version").asFile
-val ensureLadybirdSourceStamp = layout.buildDirectory.file("generated/ensureLadybirdSource.stamp")
 val lagomToolsStamp = layout.buildDirectory.file("generated/lagom-tools.stamp")
 
 data class Sdl3JavaInputs(val jar: File?, val sourceDirs: List<File>)
@@ -103,81 +102,59 @@ fun Project.computeLagomToolsFingerprint(
     }
 }
 
-val ensureLadybirdSource = tasks.register<Exec>("ensureLadybirdSource") {
-    workingDir = layout.projectDirectory.asFile
-    commandLine = listOf("bash", "../tool/ensure_ladybird_source.sh")
+// val buildLagomTools = tasks.register<Exec>("buildLagomTools") {
+//     workingDir = layout.projectDirectory.asFile
+//     commandLine = listOf("bash", "./BuildLagomTools.sh")
+//     environment = mapOf(
+//         "BUILD_DIR" to packageBuildDir.absolutePath,
+//         "CACHE_DIR" to cacheDir,
+//         "PATH" to System.getenv("PATH")!!
+//     )
 
-    inputs.file(layout.projectDirectory.file("../tool/ensure_ladybird_source.sh"))
-    inputs.file(layout.projectDirectory.file("../third_party/ladybird.version"))
-    outputs.file(ensureLadybirdSourceStamp)
-    outputs.upToDateWhen {
-        ensureLadybirdSourceStamp.get().asFile.exists() &&
-                layout.projectDirectory.file("../third_party/ladybird/Meta/ladybird.py").asFile.exists()
-    }
+//     val buildScriptFile = layout.projectDirectory.file("BuildLagomTools.sh").asFile
 
-    doLast {
-        val stampFile = ensureLadybirdSourceStamp.get().asFile
-        stampFile.parentFile.mkdirs()
-        stampFile.writeText(ladybirdVersionFile.readText())
-    }
-}
+//     inputs.file(layout.projectDirectory.file("BuildLagomTools.sh"))
+//     inputs.file(layout.projectDirectory.file("../third_party/ladybird.version"))
+//     inputs.property("cacheDir", cacheDir)
+//     outputs.file(lagomToolsStamp)
 
-val buildLagomTools = tasks.register<Exec>("buildLagomTools") {
-    dependsOn(ensureLadybirdSource)
-    workingDir = layout.projectDirectory.asFile
-    commandLine = listOf("bash", "./BuildLagomTools.sh")
-    environment = mapOf(
-        "BUILD_DIR" to packageBuildDir.absolutePath,
-        "CACHE_DIR" to cacheDir,
-        "PATH" to System.getenv("PATH")!!
-    )
+//     outputs.upToDateWhen {
+//         val installDir = lagomToolsInstallDir.get().asFile
+//         val stampFile = lagomToolsStamp.get().asFile
+//         if (!stampFile.exists() || !installDir.resolve("bin").exists()) {
+//             return@upToDateWhen false
+//         }
 
-    val buildScriptFile = layout.projectDirectory.file("BuildLagomTools.sh").asFile
+//         val currentFingerprint = computeLagomToolsFingerprint(
+//                 sourceDir = sourceDir,
+//                 cacheDir = cacheDir,
+//                 buildScript = buildScriptFile,
+//                 versionFile = ladybirdVersionFile,
+//         )
+//         stampFile.readText() == currentFingerprint
+//     }
 
-    inputs.file(layout.projectDirectory.file("BuildLagomTools.sh"))
-    inputs.file(layout.projectDirectory.file("../third_party/ladybird.version"))
-    inputs.property("cacheDir", cacheDir)
-    outputs.file(lagomToolsStamp)
-
-    outputs.upToDateWhen {
-        val installDir = lagomToolsInstallDir.get().asFile
-        val stampFile = lagomToolsStamp.get().asFile
-        if (!stampFile.exists() || !installDir.resolve("bin").exists()) {
-            return@upToDateWhen false
-        }
-
-        val currentFingerprint = computeLagomToolsFingerprint(
-                sourceDir = sourceDir,
-                cacheDir = cacheDir,
-                buildScript = buildScriptFile,
-                versionFile = ladybirdVersionFile,
-        )
-        stampFile.readText() == currentFingerprint
-    }
-
-    doLast {
-        val stampFile = lagomToolsStamp.get().asFile
-        stampFile.parentFile.mkdirs()
-        stampFile.writeText(
-                computeLagomToolsFingerprint(
-                        sourceDir = sourceDir,
-                        cacheDir = cacheDir,
-                        buildScript = buildScriptFile,
-                        versionFile = ladybirdVersionFile,
-                )
-        )
-    }
-}
+//     doLast {
+//         val stampFile = lagomToolsStamp.get().asFile
+//         stampFile.parentFile.mkdirs()
+//         stampFile.writeText(
+//                 computeLagomToolsFingerprint(
+//                         sourceDir = sourceDir,
+//                         cacheDir = cacheDir,
+//                         buildScript = buildScriptFile,
+//                         versionFile = ladybirdVersionFile,
+//                 )
+//         )
+//     }
+// }
 
 val packageLadybirdAssets = tasks.register<Zip>("packageLadybirdAssets") {
-    dependsOn(ensureLadybirdSource)
     from("$sourceDir/Base/res")
     archiveFileName.set("ladybird-assets.zip")
     destinationDirectory.set(layout.buildDirectory.dir("generated/ladybirdAssets"))
 }
 
 val prepareSdl3Java = tasks.register("prepareSdl3Java") {
-    // Wait for CMake / vcpkg tasks to run so the source files actually exist
     dependsOn(tasks.matching { 
         it.name.startsWith("generateJsonModel") || 
         it.name.startsWith("externalNativeBuild") ||
@@ -204,7 +181,7 @@ val verifySdl3JavaInputsTask = tasks.register("verifySdl3JavaInputs") {
 }
 
 tasks.matching { it.name == "preBuild" }.configureEach {
-    dependsOn(buildLagomTools)
+    // dependsOn(buildLagomTools)
     dependsOn(packageLadybirdAssets)
 }
 
@@ -219,7 +196,6 @@ tasks.withType<JavaCompile>().configureEach {
 tasks.matching { it.name.startsWith("buildCMake") || it.name.startsWith("externalNativeBuild") }.configureEach {
     finalizedBy(verifySdl3JavaInputsTask)
 }
-
 
 android {
     namespace = "dev.flutterbird.ladybird"
@@ -236,7 +212,9 @@ android {
                                 "-DANDROID_STL=c++_shared",
                                 "-DLADYBIRD_CACHE_DIR=$cacheDir",
                                 "-DVCPKG_ROOT=$sourceDir/Build/vcpkg",
-                                "-DVCPKG_TARGET_ANDROID=ON"
+                                "-DVCPKG_TARGET_ANDROID=ON",
+                                "-DCMAKE_SHARED_LINKER_FLAGS=-fuse-ld=mold", 
+                                "-DCMAKE_EXE_LINKER_FLAGS=-fuse-ld=mold"
                         )
                 targets +=
                         listOf(
@@ -270,7 +248,6 @@ android {
 
     sourceSets {
         getByName("main") {
-            // Compliant with AGP 9.1.0+ directories API
             assets.directories.add(layout.buildDirectory.dir("generated/ladybirdAssets").get().asFile.absolutePath)
             java.directories.add(generatedSdl3JavaDir)
         }
@@ -290,4 +267,23 @@ dependencies {
         include("**/SDL3-*.jar")
         exclude("**/*-sources.jar")
     })
+}
+
+// --- NUCLEAR CACHE BYPASS ---
+val ladybirdVersionFileForCache = layout.projectDirectory.file("../third_party/ladybird.version").asFile
+
+tasks.matching { 
+    (it.name.contains("CMake") || it.name.contains("externalNativeBuild") || it.name.contains("generateJsonModel")) &&
+    !it.name.contains("Clean")
+}.configureEach {
+    val stampFile = file("${layout.buildDirectory.get().asFile}/nuclear_cache_${name}.stamp")
+    
+    onlyIf {
+        !stampFile.exists() || stampFile.readText() != ladybirdVersionFileForCache.readText()
+    }
+    
+    doLast {
+        stampFile.parentFile.mkdirs()
+        stampFile.writeText(ladybirdVersionFileForCache.readText())
+    }
 }
