@@ -103,6 +103,8 @@ class _BrowserWindowScreenState extends ConsumerState<BrowserWindowScreen> {
       return const SizedBox.shrink();
     }
 
+    final padding = MediaQuery.paddingOf(context);
+
     return FrontendScaffold(
       body: Row(
         children: [
@@ -159,6 +161,7 @@ class _BrowserWindowScreenState extends ConsumerState<BrowserWindowScreen> {
                   : Column(
                       key: const ValueKey('horizontal-layout'),
                       children: [
+                        SizedBox(height: padding.top),
                         BrowserTabBar(currentViewId: viewId),
                         Expanded(child: BrowserWindow(viewId: viewId)),
                       ],

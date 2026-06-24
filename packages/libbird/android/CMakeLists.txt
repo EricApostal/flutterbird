@@ -78,6 +78,11 @@ set(ICU_ROOT "/usr/local")
 
 project(ladybird_plugin LANGUAGES CXX)
 
+# AGP injects output directories for JNI packaging. Preserve these before
+# including Ladybird because upstream CMake can override global output dirs.
+set(AGP_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_LIBRARY_OUTPUT_DIRECTORY}")
+set(AGP_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}")
+
 set(PLUGIN_NAME "ladybird_plugin")
 
 add_library(${PLUGIN_NAME} SHARED
@@ -189,6 +194,24 @@ endif()
 
 
 target_link_libraries(${PLUGIN_NAME} PRIVATE engine log android)
+
+if (AGP_LIBRARY_OUTPUT_DIRECTORY)
+    set_target_properties(${PLUGIN_NAME} PROPERTIES
+        LIBRARY_OUTPUT_DIRECTORY "${AGP_LIBRARY_OUTPUT_DIRECTORY}"
+    )
+    set_target_properties(engine PROPERTIES
+        LIBRARY_OUTPUT_DIRECTORY "${AGP_LIBRARY_OUTPUT_DIRECTORY}"
+    )
+endif()
+
+if (AGP_RUNTIME_OUTPUT_DIRECTORY)
+    set_target_properties(${PLUGIN_NAME} PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY "${AGP_RUNTIME_OUTPUT_DIRECTORY}"
+    )
+    set_target_properties(engine PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY "${AGP_RUNTIME_OUTPUT_DIRECTORY}"
+    )
+endif()
 
 # Standard C++2b is required by Ladybird
 set_target_properties(${PLUGIN_NAME} PROPERTIES

@@ -62,6 +62,7 @@ class _BrowserVerticalTabSidebarState
   Widget build(BuildContext context) {
     final tabs = ref.watch(browserTabControllerProvider);
     final theme = Theme.of(context);
+    final padding = MediaQuery.paddingOf(context);
 
     return Container(
       width: _kSidebarWidth,
@@ -73,6 +74,7 @@ class _BrowserVerticalTabSidebarState
       ),
       child: Column(
         children: [
+          SizedBox(height: padding.top),
           SizedBox(
             height: 44,
             child: Row(
@@ -105,7 +107,7 @@ class _BrowserVerticalTabSidebarState
           Expanded(
             child: ReorderableListView.builder(
               buildDefaultDragHandles: false,
-              padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+              padding: EdgeInsets.fromLTRB(8, 0, 8, 8),
               itemCount: tabs.length,
               proxyDecorator:
                   (Widget child, int index, Animation<double> animation) {

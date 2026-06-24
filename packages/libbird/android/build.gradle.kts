@@ -217,6 +217,7 @@ configure<LibraryExtension> {
 
     defaultConfig {
         minSdk = 30
+        consumerProguardFiles("consumer-rules.pro")
         externalNativeBuild {
             cmake {
                 cppFlags += "-std=c++23"
@@ -280,23 +281,4 @@ dependencies {
         include("**/SDL3-*.jar")
         exclude("**/*-sources.jar")
     })
-}
-
-// --- NUCLEAR CACHE BYPASS ---
-val ladybirdVersionFileForCache = layout.projectDirectory.file("../third_party/ladybird.version").asFile
-
-tasks.matching { 
-    (it.name.contains("CMake") || it.name.contains("externalNativeBuild") || it.name.contains("generateJsonModel")) &&
-    !it.name.contains("Clean")
-}.configureEach {
-    val stampFile = file("${layout.buildDirectory.get().asFile}/nuclear_cache_${name}.stamp")
-    
-    onlyIf {
-        !stampFile.exists() || stampFile.readText() != ladybirdVersionFileForCache.readText()
-    }
-    
-    doLast {
-        stampFile.parentFile.mkdirs()
-        stampFile.writeText(ladybirdVersionFileForCache.readText())
-    }
 }
