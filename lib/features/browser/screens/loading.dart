@@ -1,7 +1,7 @@
 import 'package:bird_core/bird_core.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutterbird/features/frontend/components/adaptive_widgets.dart';
 import 'package:go_router/go_router.dart';
 
 class BrowserLoadingScreen extends ConsumerStatefulWidget {
@@ -24,8 +24,8 @@ class _BrowserLoadingScreenState extends ConsumerState<BrowserLoadingScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return const FrontendScaffold(
-      body: Center(child: FrontendProgressIndicator()),
+    return const Scaffold(
+      body: Center(child: CircularProgressIndicator.adaptive()),
     );
   }
 }

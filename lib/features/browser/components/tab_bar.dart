@@ -7,8 +7,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutterbird/features/browser/components/omnibox_bar.dart';
 import 'package:flutterbird/features/browser/components/tab.dart';
-import 'package:flutterbird/features/frontend/abstraction/frontend_layer.dart';
-import 'package:flutterbird/features/frontend/components/adaptive_widgets.dart';
 import 'package:flutterbird/features/browser/state/tab_actions.dart';
 import 'package:flutterbird/features/browser/state/tab_layout_mode.dart';
 import 'package:window_manager/window_manager.dart';
@@ -90,12 +88,8 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar>
 
   @override
   Widget build(BuildContext context) {
-    final frontend = FrontendScope.of(context);
-    final isFluent = frontend.flavor == FrontendFlavor.fluent;
-    final tabStripHeight = isFluent ? 40.0 : 45.0;
-    final tabListPadding = isFluent
-        ? const EdgeInsets.only(top: 2)
-        : const EdgeInsets.only(top: 4, bottom: 4);
+    final tabStripHeight = 45.0;
+    final tabListPadding = const EdgeInsets.only(top: 4, bottom: 4);
 
     final tabs = ref.watch(browserTabControllerProvider);
     final currentTabController = ref.watch(
@@ -125,7 +119,7 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar>
               ),
               SizedBox(
                 width: _kLayoutToggleButtonWidth,
-                child: FrontendIconButton(
+                child: IconButton(
                   icon: const Icon(Icons.dashboard),
                   tooltip: 'Switch to vertical tabs',
                   onPressed: () {
@@ -185,7 +179,7 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar>
                               key: const ValueKey('add'),
                               index: index,
                               enabled: false,
-                              child: FrontendIconButton(
+                              child: IconButton(
                                 icon: const Icon(Icons.add, size: 20),
                                 onPressed: () =>
                                     BrowserTabActions.openNewTab(ref, context),
@@ -257,7 +251,7 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar>
                         if (pinAddButton)
                           SizedBox(
                             // width: _kAddButtonWidth,
-                            child: FrontendIconButton(
+                            child: IconButton(
                               icon: const Icon(Icons.add, size: 20),
                               onPressed: () =>
                                   BrowserTabActions.openNewTab(ref, context),
@@ -351,9 +345,6 @@ class _AnimatedBrowserTabItemState extends State<_AnimatedBrowserTabItem> {
 
   @override
   Widget build(BuildContext context) {
-    final frontend = FrontendScope.of(context);
-    final useDelayedDragStart = frontend.flavor == FrontendFlavor.fluent;
-
     final tabChild = ClipRect(
       child: AnimatedContainer(
         duration: widget.animationConfig.sizeDuration,
@@ -377,14 +368,6 @@ class _AnimatedBrowserTabItemState extends State<_AnimatedBrowserTabItem> {
         ),
       ),
     );
-
-    if (useDelayedDragStart) {
-      return ReorderableDelayedDragStartListener(
-        index: widget.index,
-        enabled: _isExpanded && !_isClosing,
-        child: tabChild,
-      );
-    }
 
     return ReorderableDragStartListener(
       index: widget.index,

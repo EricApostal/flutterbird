@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutterbird/features/browser/components/tab.dart';
-import 'package:flutterbird/features/frontend/components/adaptive_widgets.dart';
 import 'package:flutterbird/features/browser/state/tab_actions.dart';
 import 'package:flutterbird/features/browser/state/tab_layout_mode.dart';
 import 'package:window_manager/window_manager.dart';
@@ -92,7 +91,7 @@ class _BrowserVerticalTabSidebarState
                     // ),
                   ),
                 ),
-                FrontendIconButton(
+                IconButton(
                   icon: const Icon(Icons.splitscreen_outlined, size: 18),
                   tooltip: 'Switch to horizontal tabs',
                   onPressed: () {
@@ -161,8 +160,8 @@ class _BrowserVerticalTabSidebarState
             padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
             child: SizedBox(
               width: double.infinity,
-              child: FrontendFilledButton(
-                backgroundColor: theme.colorScheme.surfaceContainerHigh,
+              child: FilledButton(
+                // backgroundColor: theme.colorScheme.surfaceContainerHigh,
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   mainAxisSize: MainAxisSize.min,

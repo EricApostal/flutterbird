@@ -1,10 +1,7 @@
 import 'package:bird_core/bird_core.dart';
-import 'package:fluent_ui/fluent_ui.dart' as f;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutterbird/features/frontend/abstraction/frontend_layer.dart';
-import 'package:flutterbird/features/frontend/components/adaptive_widgets.dart';
 import 'package:go_router/go_router.dart';
 
 enum BrowserTabVariant { horizontal, arcSidebar }
@@ -41,7 +38,7 @@ class _BrowserTabState extends ConsumerState<BrowserTab> {
       valueListenable: browserTab.isLoadingNotifier,
       builder: (context, isLoading, child) {
         if (isLoading) {
-          return const FrontendTabLoadingIndicator();
+          return const CircularProgressIndicator.adaptive();
         }
 
         return ValueListenableBuilder<dynamic>(
@@ -80,62 +77,14 @@ class _BrowserTabState extends ConsumerState<BrowserTab> {
     );
   }
 
-  Widget _buildFluentHorizontalTab(
-    BuildContext context,
-    dynamic browserTab,
-    ThemeData theme,
-    TextStyle? titleStyle,
-    FrontendTabVisuals tabVisuals,
-  ) {
-    return SizedBox(
-      width: widget.width,
-      child: ConstrainedBox(
-        constraints: BoxConstraints(
-          minWidth: widget.minWidth,
-          minHeight: widget.minHeight ?? 36,
-        ),
-        child: f.TabData(
-          selected: widget.selected,
-          onPressed: () {
-            HapticFeedback.lightImpact();
-            context.go('/browser/tab/${widget.viewId}');
-          },
-          onClose: widget.onTabClosed,
-          reorderIndex: null,
-          animationDuration: const Duration(milliseconds: 120),
-          animationCurve: Curves.easeOut,
-          visibilityMode: f.CloseButtonVisibilityMode.always,
-          tabWidthBehavior: f.TabWidthBehavior.equal,
-          child: f.Tab(
-            text: _buildTabTitle(browserTab, titleStyle, tabVisuals.titleColor),
-            body: const SizedBox.shrink(),
-            icon: _buildTabLeadingIcon(browserTab, theme),
-            backgroundColor: WidgetStateColor.resolveWith(
-              (states) => Colors.transparent,
-            ),
-            selectedBackgroundColor: WidgetStateColor.resolveWith(
-              (states) => tabVisuals.backgroundColor,
-            ),
-            onClosed: widget.onTabClosed,
-          ),
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final browserTab = ref.watch(browserTabProvider(widget.viewId))!;
-    final frontend = FrontendScope.of(context);
 
     final theme = Theme.of(context);
     final isSidebarVariant = widget.variant == BrowserTabVariant.arcSidebar;
     final showCloseButton = !isSidebarVariant || widget.selected || _isHovering;
-    final tabVisuals = frontend.resolveTabVisuals(
-      context: context,
-      selected: widget.selected,
-      sidebarVariant: isSidebarVariant,
-    );
+
     final borderRadius = isSidebarVariant
         ? BorderRadius.circular(10)
         : const BorderRadius.vertical(
@@ -145,16 +94,6 @@ class _BrowserTabState extends ConsumerState<BrowserTab> {
     final titleStyle = isSidebarVariant
         ? theme.textTheme.bodyMedium
         : theme.textTheme.bodySmall;
-
-    if (frontend.flavor == FrontendFlavor.fluent && !isSidebarVariant) {
-      return _buildFluentHorizontalTab(
-        context,
-        browserTab,
-        theme,
-        titleStyle,
-        tabVisuals,
-      );
-    }
 
     return MouseRegion(
       onEnter: (_) {
@@ -169,9 +108,9 @@ class _BrowserTabState extends ConsumerState<BrowserTab> {
           _isHovering = false;
         });
       },
-      child: FrontendTabSurface(
+      child: InkWell(
         borderRadius: borderRadius,
-        onPressed: () {
+        onTap: () {
           HapticFeedback.lightImpact();
           context.go('/browser/tab/${widget.viewId}');
         },
@@ -182,7 +121,7 @@ class _BrowserTabState extends ConsumerState<BrowserTab> {
             minHeight: widget.minHeight ?? 36,
           ),
           decoration: BoxDecoration(
-            color: tabVisuals.backgroundColor,
+            color: theme.colorScheme.surface,
             borderRadius: borderRadius,
           ),
           child: Row(
@@ -205,7 +144,7 @@ class _BrowserTabState extends ConsumerState<BrowserTab> {
                           child: _buildTabTitle(
                             browserTab,
                             titleStyle,
-                            tabVisuals.titleColor,
+                            theme.colorScheme.onSurface,
                           ),
                         ),
                       ],
@@ -219,7 +158,7 @@ class _BrowserTabState extends ConsumerState<BrowserTab> {
                   duration: const Duration(milliseconds: 120),
                   curve: Curves.easeOut,
                   opacity: showCloseButton ? 1 : 0,
-                  child: FrontendIconButton(
+                  child: IconButton(
                     icon: Icon(Icons.close, size: isSidebarVariant ? 15 : 16),
                     onPressed: widget.onTabClosed,
                     padding: EdgeInsets.zero,

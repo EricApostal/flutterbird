@@ -6,8 +6,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutterbird/features/browser/components/browser_context_menu.dart';
 import 'package:flutterbird/features/browser/state/tab_actions.dart';
 import 'package:flutterbird/features/browser/state/tab_layout_mode.dart';
-import 'package:flutterbird/features/frontend/abstraction/frontend_layer.dart';
-import 'package:flutterbird/features/frontend/components/adaptive_widgets.dart';
 import 'package:flutterbird/features/browser/state/omnibox_state.dart';
 import 'package:go_router/go_router.dart';
 import 'package:ladybird/ladybird.dart';
@@ -500,7 +498,7 @@ class _BrowserOmniboxBarState extends ConsumerState<BrowserOmniboxBar> {
           for (final bookmark in bookmarks)
             Padding(
               padding: const EdgeInsets.only(right: 2),
-              child: FrontendTooltip(
+              child: Tooltip(
                 message: bookmark.url,
                 child: OutlinedButton(
                   onPressed: () {
@@ -705,13 +703,14 @@ class _BrowserOmniboxBarState extends ConsumerState<BrowserOmniboxBar> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final frontend = FrontendScope.of(context);
-    final isFluent = frontend.flavor == FrontendFlavor.fluent;
+
     final omniboxController = ref.read(browserOmniboxProvider.notifier);
     final bookmarks = ref.watch(
       browserOmniboxProvider.select((value) => value.bookmarks),
     );
     final currentTabController = widget.currentTabController;
+
+    final radius = 8.0;
 
     return Container(
       color: theme.colorScheme.surfaceContainerHigh,
@@ -724,7 +723,7 @@ class _BrowserOmniboxBarState extends ConsumerState<BrowserOmniboxBar> {
                 ValueListenableBuilder<bool>(
                   valueListenable: currentTabController.canGoBackNotifier,
                   builder: (context, canGoBack, child) {
-                    return FrontendIconButton(
+                    return IconButton(
                       icon: const Icon(Icons.arrow_back, size: 20),
                       onPressed: canGoBack
                           ? () {
@@ -734,11 +733,11 @@ class _BrowserOmniboxBarState extends ConsumerState<BrowserOmniboxBar> {
                     );
                   },
                 ),
-                if (isFluent) const SizedBox(width: 2),
+
                 ValueListenableBuilder<bool>(
                   valueListenable: currentTabController.canGoForwardNotifier,
                   builder: (context, canGoForward, child) {
-                    return FrontendIconButton(
+                    return IconButton(
                       icon: const Icon(Icons.arrow_forward, size: 20),
                       onPressed: canGoForward
                           ? () {
@@ -748,7 +747,7 @@ class _BrowserOmniboxBarState extends ConsumerState<BrowserOmniboxBar> {
                     );
                   },
                 ),
-                FrontendIconButton(
+                IconButton(
                   icon: const Icon(Icons.refresh, size: 20),
                   onPressed: () {
                     currentTabController.reload();
@@ -760,7 +759,7 @@ class _BrowserOmniboxBarState extends ConsumerState<BrowserOmniboxBar> {
                     final normalized = omniboxController.normalizeUrl(url);
                     final isBookmarked = currentTabController
                         .isCurrentViewBookmarked();
-                    return FrontendIconButton(
+                    return IconButton(
                       icon: Icon(
                         isBookmarked ? Icons.bookmark : Icons.bookmark_border,
                         size: 20,
@@ -812,7 +811,7 @@ class _BrowserOmniboxBarState extends ConsumerState<BrowserOmniboxBar> {
                                   final isFocused = focusNode.hasFocus;
                                   return Stack(
                                     children: [
-                                      FrontendOmniboxTextField(
+                                      TextField(
                                         onSubmitted: (value) {
                                           _submitOmniboxInput(
                                             omniboxController,
@@ -823,13 +822,69 @@ class _BrowserOmniboxBarState extends ConsumerState<BrowserOmniboxBar> {
                                         },
                                         controller: textEditingController,
                                         focusNode: focusNode,
-                                        textStyle: theme.textTheme.bodyMedium!
+                                        style: theme.textTheme.bodyMedium!
                                             .copyWith(
                                               fontSize: 13,
                                               color: isFocused
                                                   ? theme.colorScheme.onSurface
                                                   : Colors.transparent,
                                             ),
+                                        decoration: InputDecoration(
+                                          filled: true,
+                                          fillColor: theme.colorScheme.surface,
+                                          isDense: true,
+                                          contentPadding:
+                                              const EdgeInsets.symmetric(
+                                                horizontal: 10,
+                                                vertical: 12,
+                                              ),
+                                          hintStyle: theme.textTheme.bodyMedium
+                                              ?.copyWith(
+                                                color: theme
+                                                    .colorScheme
+                                                    .onSurface
+                                                    .withAlpha(150),
+                                              ),
+                                          enabledBorder: OutlineInputBorder(
+                                            borderRadius: BorderRadius.circular(
+                                              radius,
+                                            ),
+                                            borderSide: BorderSide(
+                                              color: theme.colorScheme.surface,
+                                              width: 1,
+                                            ),
+                                          ),
+                                          focusedBorder: OutlineInputBorder(
+                                            borderRadius: BorderRadius.circular(
+                                              radius,
+                                            ),
+                                            borderSide: BorderSide(
+                                              color: theme.colorScheme.primary,
+                                              width: 1,
+                                            ),
+                                          ),
+                                          errorBorder: OutlineInputBorder(
+                                            borderRadius: BorderRadius.circular(
+                                              radius,
+                                            ),
+                                            borderSide: BorderSide(
+                                              color: theme.colorScheme.error,
+                                              width: 1,
+                                            ),
+                                          ),
+                                          focusedErrorBorder:
+                                              OutlineInputBorder(
+                                                borderRadius:
+                                                    BorderRadius.circular(
+                                                      radius,
+                                                    ),
+                                                borderSide: BorderSide(
+                                                  color:
+                                                      theme.colorScheme.error,
+                                                  width: 1,
+                                                ),
+                                              ),
+                                        ),
                                       ),
                                       if (!isFocused)
                                         _buildStyledOmniboxOverlay(
@@ -849,7 +904,10 @@ class _BrowserOmniboxBarState extends ConsumerState<BrowserOmniboxBar> {
 
                           return Align(
                             alignment: Alignment.topLeft,
-                            child: FrontendOmniboxSuggestionsSurface(
+                            child: Material(
+                              elevation: 6,
+                              color: theme.colorScheme.surface,
+                              borderRadius: BorderRadius.circular(10),
                               child: ConstrainedBox(
                                 constraints: const BoxConstraints(
                                   maxWidth: 760,
@@ -883,8 +941,8 @@ class _BrowserOmniboxBarState extends ConsumerState<BrowserOmniboxBar> {
                                         title.isNotEmpty &&
                                         (!hasUrlText || title != urlText);
 
-                                    return FrontendOmniboxSuggestionTile(
-                                      onPressed: () => onSelected(option),
+                                    return InkWell(
+                                      onTap: () => onSelected(option),
                                       child: Padding(
                                         padding: const EdgeInsets.symmetric(
                                           horizontal: 12,
@@ -961,7 +1019,7 @@ class _BrowserOmniboxBarState extends ConsumerState<BrowserOmniboxBar> {
                   ),
                 ),
                 const SizedBox(width: 6),
-                FrontendIconButton(
+                IconButton(
                   key: _toolbarMenuButtonKey,
                   tooltip: 'Open menu',
                   icon: const Icon(Icons.menu, size: 20),

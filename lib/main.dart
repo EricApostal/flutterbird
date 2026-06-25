@@ -1,9 +1,10 @@
 import 'dart:io';
 
-import 'package:flutter/widgets.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutterbird/features/frontend/abstraction/frontend_layer.dart';
 import 'package:flutterbird/features/router/controller.dart';
+import 'package:flutterbird/features/theme/base.dart';
+import 'package:go_transitions/go_transitions.dart';
 import 'package:window_manager/window_manager.dart';
 
 void main() async {
@@ -42,18 +43,38 @@ class MainApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final frontend = resolveFrontendLayer();
+    final pageTransition = const PageTransitionsTheme(
+      builders: {
+        TargetPlatform.fuchsia: GoTransitions.none,
+        TargetPlatform.iOS: GoTransitions.none,
+        TargetPlatform.linux: GoTransitions.none,
+        TargetPlatform.macOS: GoTransitions.none,
+        TargetPlatform.windows: GoTransitions.none,
+      },
+    );
 
-    return frontend.buildApp(
+    return MaterialApp.router(
       routerConfig: routerController,
-      appBuilder: (context, child) {
-        return FrontendScope(
-          layer: frontend,
-          child: PopScope(
-            canPop: false,
-            child: child ?? const SizedBox.shrink(),
-          ),
-        );
+      themeMode: ThemeMode.dark,
+      darkTheme: ThemeData(
+        pageTransitionsTheme: pageTransition,
+        colorScheme: ColorScheme.fromSeed(
+          brightness: Brightness.dark,
+          seedColor: const Color.fromARGB(255, 35, 174, 255),
+        ),
+        textTheme: getBaseTextTheme(ThemeData.dark().textTheme),
+        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      ),
+      theme: ThemeData(
+        pageTransitionsTheme: pageTransition,
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color.fromARGB(255, 35, 141, 255),
+        ),
+        textTheme: getBaseTextTheme(ThemeData.light().textTheme),
+        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      ),
+      builder: (context, child) {
+        return PopScope(canPop: false, child: child ?? const SizedBox.shrink());
       },
     );
   }

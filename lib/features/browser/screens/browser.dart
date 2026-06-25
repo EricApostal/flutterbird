@@ -1,12 +1,11 @@
 import 'package:bird_core/bird_core.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutterbird/features/browser/components/browser_window.dart';
 import 'package:flutterbird/features/browser/components/omnibox_bar.dart';
 import 'package:flutterbird/features/browser/components/tab_bar.dart';
 import 'package:flutterbird/features/browser/components/vertical_tab_sidebar.dart';
-import 'package:flutterbird/features/frontend/components/adaptive_widgets.dart';
 import 'package:flutterbird/features/browser/state/tab_actions.dart';
 import 'package:flutterbird/features/browser/state/tab_layout_mode.dart';
 
@@ -105,7 +104,7 @@ class _BrowserWindowScreenState extends ConsumerState<BrowserWindowScreen> {
 
     final padding = MediaQuery.paddingOf(context);
 
-    return FrontendScaffold(
+    return Scaffold(
       body: Row(
         children: [
           AnimatedContainer(
