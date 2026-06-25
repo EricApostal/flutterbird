@@ -38,7 +38,13 @@ class _BrowserTabState extends ConsumerState<BrowserTab> {
       valueListenable: browserTab.isLoadingNotifier,
       builder: (context, isLoading, child) {
         if (isLoading) {
-          return const CircularProgressIndicator.adaptive();
+          return Center(
+            child: SizedBox(
+              width: 18,
+              height: 18,
+              child: const CircularProgressIndicator.adaptive(),
+            ),
+          );
         }
 
         return ValueListenableBuilder<dynamic>(
@@ -121,7 +127,9 @@ class _BrowserTabState extends ConsumerState<BrowserTab> {
             minHeight: widget.minHeight ?? 36,
           ),
           decoration: BoxDecoration(
-            color: theme.colorScheme.surfaceContainerHigh,
+            color: widget.selected
+                ? theme.colorScheme.surfaceContainerHigh
+                : theme.colorScheme.surface,
             borderRadius: borderRadius,
           ),
           child: Row(

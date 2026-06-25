@@ -217,8 +217,8 @@ class _LadybirdViewState extends State<LadybirdView>
   void _dispatchWheelDelta(Offset localPosition, double deltaX, double deltaY) {
     final density = MediaQuery.devicePixelRatioOf(context);
 
-    _accumulatedWheelX += deltaX * density;
-    _accumulatedWheelY += deltaY * density;
+    _accumulatedWheelX += deltaX;
+    _accumulatedWheelY += deltaY;
 
     double wheelX = _accumulatedWheelX;
     double wheelY = _accumulatedWheelY;
@@ -242,30 +242,37 @@ class _LadybirdViewState extends State<LadybirdView>
     );
   }
 
-  Simulation _getPlatformSimulation(double velocity) {
-    switch (defaultTargetPlatform) {
-      case TargetPlatform.iOS:
-      case TargetPlatform.macOS:
-        return FrictionSimulation(0.135, 0, velocity);
-      case TargetPlatform.android:
-      case TargetPlatform.windows:
-      case TargetPlatform.fuchsia:
-      case TargetPlatform.linux:
-      default:
-        return ClampingScrollSimulation(position: 0, velocity: velocity);
-    }
+  Simulation? _getPlatformSimulation(double velocity, Axis axis) {
+    final ScrollPhysics physics = ScrollConfiguration.of(
+      context,
+    ).getScrollPhysics(context);
+
+    final ScrollMetrics metrics = FixedScrollMetrics(
+      minScrollExtent: double.negativeInfinity,
+      maxScrollExtent: double.infinity,
+      pixels: 0.0,
+      viewportDimension: axis == Axis.vertical
+          ? MediaQuery.sizeOf(context).height
+          : MediaQuery.sizeOf(context).width,
+      axisDirection: axis == Axis.vertical
+          ? AxisDirection.down
+          : AxisDirection.right,
+      devicePixelRatio: MediaQuery.devicePixelRatioOf(context),
+    );
+
+    return physics.createBallisticSimulation(metrics, velocity);
   }
 
   void _onMomentumTick(Duration elapsed) {
-    if (_simulationX == null || _simulationY == null) {
+    if (_simulationX == null && _simulationY == null) {
       _momentumTicker?.stop();
       return;
     }
 
     final timeInSeconds = elapsed.inMicroseconds / 1000000.0;
 
-    final currentX = _simulationX!.x(timeInSeconds);
-    final currentY = _simulationY!.x(timeInSeconds);
+    final currentX = _simulationX?.x(timeInSeconds) ?? _lastSimX;
+    final currentY = _simulationY?.x(timeInSeconds) ?? _lastSimY;
 
     final deltaX = currentX - _lastSimX;
     final deltaY = currentY - _lastSimY;
@@ -275,8 +282,10 @@ class _LadybirdViewState extends State<LadybirdView>
 
     _dispatchWheelDelta(_lastPointerPos, -deltaX, -deltaY);
 
-    if (_simulationX!.isDone(timeInSeconds) &&
-        _simulationY!.isDone(timeInSeconds)) {
+    final doneX = _simulationX?.isDone(timeInSeconds) ?? true;
+    final doneY = _simulationY?.isDone(timeInSeconds) ?? true;
+
+    if (doneX && doneY) {
       _momentumTicker?.stop();
     }
   }
@@ -342,17 +351,16 @@ class _LadybirdViewState extends State<LadybirdView>
   void _onTouchPanEnd(DragEndDetails details) {
     final velocity = details.velocity.pixelsPerSecond;
 
-    if (velocity.distance < 10.0) {
-      _momentumTicker?.stop();
-      return;
-    }
-
-    _simulationX = _getPlatformSimulation(velocity.dx);
-    _simulationY = _getPlatformSimulation(velocity.dy);
+    _simulationX = _getPlatformSimulation(velocity.dx, Axis.horizontal);
+    _simulationY = _getPlatformSimulation(velocity.dy, Axis.vertical);
     _lastSimX = 0;
     _lastSimY = 0;
 
-    _momentumTicker?.start();
+    if (_simulationX != null || _simulationY != null) {
+      _momentumTicker?.start();
+    } else {
+      _momentumTicker?.stop();
+    }
   }
 
   bool _isPlatformShortcutPressed() {
