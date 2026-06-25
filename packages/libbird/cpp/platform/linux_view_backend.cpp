@@ -29,6 +29,16 @@ void LinuxViewBackend::on_bitmap_ready(AK::RefPtr<Gfx::Bitmap const> bitmap) {
   fire_frame_ready(size_changed);
 }
 
+void LinuxViewBackend::on_hardware_frame_ready() {
+  {
+    std::lock_guard lock(m_bitmap_mutex);
+    // Don't clear m_bitmap if we want to keep the old frame just in case,
+    // or we can clear it. For now, just increment generation.
+    ++m_frame_generation;
+  }
+  fire_frame_ready(false);
+}
+
 void *LinuxViewBackend::pixel_data() {
   std::lock_guard lock(m_bitmap_mutex);
   if (!m_bitmap)

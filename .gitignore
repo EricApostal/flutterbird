@@ -49,3 +49,4 @@ app.*.map.json
 /.vscode/
 
 ladybird-assets.zip
+android/.kotlin

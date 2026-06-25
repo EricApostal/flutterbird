@@ -234,6 +234,30 @@ public:
     return token;
   }
 
+  void* front_ahb() const {
+#ifdef USE_VULKAN_AHB_IMAGES
+    if (!m_client_state.has_usable_bitmap) {
+      dbgln("flutterbird front_ahb: returning nullptr because has_usable_bitmap is false");
+      return nullptr;
+    }
+    if (!m_client_state.front_bitmap.shared_image_buffer) {
+      dbgln("flutterbird front_ahb: returning nullptr because shared_image_buffer is null");
+      return nullptr;
+    }
+    auto* ahb = m_client_state.front_bitmap.shared_image_buffer->native_buffer();
+    if (!ahb) {
+      dbgln("flutterbird front_ahb: returning nullptr because native_buffer() returned null");
+    } else {
+      dbgln("flutterbird front_ahb: returning valid ahb");
+    }
+    return ahb;
+#else
+    dbgln("flutterbird front_ahb: returning nullptr because USE_VULKAN_AHB_IMAGES is not defined");
+    return nullptr;
+#endif
+  }
+
+
   JsonArray serialize_context_menu_items(WebView::Menu const &menu) {
     JsonArray items;
 
@@ -473,6 +497,13 @@ public:
       }
 #endif
 
+#ifdef USE_VULKAN_AHB_IMAGES
+      if (front_ahb()) {
+        m_backend->on_hardware_frame_ready();
+        return;
+      }
+#endif
+
       // hmm
       //
       if (!shared_image_buffer) {
@@ -705,8 +736,10 @@ public:
     auto const config = snapshot_android_runtime_config();
     if (!config.certificates_path.is_empty())
       request_server_options.certificates.append(config.certificates_path);
-#endif
+    web_content_options.force_cpu_painting = WebView::ForceCPUPainting::No;
+#else
     web_content_options.force_cpu_painting = WebView::ForceCPUPainting::Yes;
+#endif
   }
 
   virtual bool should_capture_web_content_output() const override {
@@ -983,6 +1016,15 @@ bool acquire_latest_frame(int view_id, const uint8_t **out_pixels,
   *out_generation = frame->generation;
   *out_frame_handle = frame;
   return true;
+}
+
+void *get_android_hardware_buffer(int view_id) {
+  auto it = g_web_views.find(view_id);
+  if (it == g_web_views.end())
+    return nullptr;
+  auto &view = *it->second;
+
+  return view.front_ahb();
 }
 
 void release_latest_frame(void *frame_handle) {

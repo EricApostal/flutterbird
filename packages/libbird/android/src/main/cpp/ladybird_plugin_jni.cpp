@@ -1,5 +1,6 @@
 #include "../../../../cpp/engine.h"
 
+#include <android/hardware_buffer_jni.h>
 #include <jni.h>
 
 #include <algorithm>
@@ -56,38 +57,17 @@ Java_dev_flutterbird_ladybird_LadybirdPlugin_nativeGetSurfaceHeight(
   return get_iosurface_height(view_id);
 }
 
-extern "C" JNIEXPORT jboolean JNICALL
-Java_dev_flutterbird_ladybird_LadybirdPlugin_nativeCopyLatestPixelBuffer(
-    JNIEnv *env, jclass, jint view_id, jobject pixel_buffer, jint capacity) {
-  if (!pixel_buffer || capacity <= 0)
-    return JNI_FALSE;
+extern "C" JNIEXPORT jobject JNICALL
+Java_dev_flutterbird_ladybird_LadybirdPlugin_nativeGetHardwareBuffer(
+    JNIEnv *env, jclass, jint view_id) {
+  void *ahb = get_android_hardware_buffer(view_id);
+  if (!ahb)
+    return nullptr;
 
-  auto *buffer =
-      static_cast<uint8_t *>(env->GetDirectBufferAddress(pixel_buffer));
-  auto buffer_capacity = env->GetDirectBufferCapacity(pixel_buffer);
-  if (!buffer || buffer_capacity <= 0)
-    return JNI_FALSE;
-
-  int width = 0;
-  int height = 0;
-  auto effective_capacity = static_cast<int>(
-      std::min<jlong>(buffer_capacity, static_cast<jlong>(capacity)));
-  bool copied = copy_latest_pixel_buffer(view_id, buffer, effective_capacity,
-                                         &width, &height);
-  if (!copied)
-    return JNI_FALSE;
-
-  if (width > 0 && height > 0) {
-    auto const pixel_count =
-        static_cast<size_t>(width) * static_cast<size_t>(height);
-    auto const required_bytes = pixel_count * 4;
-    if (required_bytes <= static_cast<size_t>(effective_capacity)) {
-      for (size_t i = 0; i < pixel_count; ++i) {
-        auto offset = i * 4;
-        std::swap(buffer[offset], buffer[offset + 2]);
-      }
-    }
-  }
-
-  return JNI_TRUE;
+#if __ANDROID_API__ >= 26
+  return AHardwareBuffer_toHardwareBuffer(
+      env, static_cast<AHardwareBuffer *>(ahb));
+#else
+  return nullptr;
+#endif
 }

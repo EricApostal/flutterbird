@@ -31,6 +31,7 @@ public:
 
   // ViewBackend overrides
   void on_bitmap_ready(AK::RefPtr<Gfx::Bitmap const> bitmap) override;
+  void on_hardware_frame_ready() override;
   void *pixel_data() override;
   bool copy_pixels_into(uint8_t *out_buffer, size_t out_capacity,
                         int &out_width, int &out_height) const override;

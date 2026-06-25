@@ -8,8 +8,8 @@ import android.os.Handler;
 import android.os.Looper;
 import android.view.Surface;
 
-import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
+import android.hardware.HardwareBuffer;
+import android.graphics.ColorSpace;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
@@ -202,39 +202,44 @@ public final class LadybirdPlugin implements FlutterPlugin, MethodCallHandler {
         }
 
         textureContext.ensureFrameStorage(width, height);
-        textureContext.pixelBuffer.rewind();
-        if (!nativeCopyLatestPixelBuffer(
-                textureContext.viewId,
-                textureContext.pixelBuffer,
-                textureContext.pixelBuffer.capacity())) {
+
+        HardwareBuffer buffer = nativeGetHardwareBuffer(textureContext.viewId);
+        if (buffer == null) {
+            android.util.Log.e("LadybirdPlugin", "nativeGetHardwareBuffer returned null!");
             textureContext.queuedDrops += 1;
             return;
         }
 
-        textureContext.pixelBuffer.rewind();
-        textureContext.bitmap.copyPixelsFromBuffer(textureContext.pixelBuffer);
-        textureContext.pixelBuffer.rewind();
-        textureContext.lastFrameGeneration = generation;
-
         Surface surface = textureContext.producer.getSurface();
         if (surface == null || !surface.isValid()) {
+            android.util.Log.e("LadybirdPlugin", "Surface is null or invalid!");
+            buffer.close();
             textureContext.queuedDrops += 1;
             return;
         }
 
         Canvas canvas = null;
         try {
-            canvas = surface.lockCanvas(null);
+            canvas = surface.lockHardwareCanvas();
             canvas.drawColor(Color.TRANSPARENT, PorterDuff.Mode.CLEAR);
-            canvas.drawBitmap(textureContext.bitmap, 0f, 0f, null);
+            Bitmap bitmap = Bitmap.wrapHardwareBuffer(buffer, ColorSpace.get(ColorSpace.Named.SRGB));
+            if (bitmap != null) {
+                android.util.Log.i("LadybirdPlugin", "Drawing hardware buffer bitmap! size=" + bitmap.getWidth() + "x" + bitmap.getHeight());
+                canvas.drawBitmap(bitmap, 0f, 0f, null);
+            } else {
+                android.util.Log.e("LadybirdPlugin", "Bitmap.wrapHardwareBuffer returned null!");
+            }
             textureContext.deliveredFrames += 1;
         } catch (RuntimeException exception) {
+            android.util.Log.e("LadybirdPlugin", "Exception drawing hardware buffer", exception);
             textureContext.queuedDrops += 1;
         } finally {
             if (canvas != null) {
                 surface.unlockCanvasAndPost(canvas);
             }
+            buffer.close();
         }
+        textureContext.lastFrameGeneration = generation;
     }
 
     private void updatePumpDriver() {
@@ -269,8 +274,6 @@ public final class LadybirdPlugin implements FlutterPlugin, MethodCallHandler {
         boolean active = true;
         int width = 0;
         int height = 0;
-        Bitmap bitmap;
-        ByteBuffer pixelBuffer;
         long lastFrameGeneration = 0;
         long nativeFrameCallbacks = 0;
         long queuedDrops = 0;
@@ -283,22 +286,18 @@ public final class LadybirdPlugin implements FlutterPlugin, MethodCallHandler {
         }
 
         void ensureFrameStorage(int nextWidth, int nextHeight) {
-            if (nextWidth == width && nextHeight == height && bitmap != null && pixelBuffer != null) {
+            if (nextWidth == width && nextHeight == height) {
                 return;
             }
 
             width = nextWidth;
             height = nextHeight;
             producer.setSize(width, height);
-            bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
-            pixelBuffer = ByteBuffer.allocateDirect(width * height * 4).order(ByteOrder.nativeOrder());
         }
 
         void release() {
             active = false;
             producer.release();
-            bitmap = null;
-            pixelBuffer = null;
         }
     }
 
@@ -317,9 +316,5 @@ public final class LadybirdPlugin implements FlutterPlugin, MethodCallHandler {
 
     private static native int nativeGetSurfaceHeight(int viewId);
 
-    private static native boolean nativeCopyLatestPixelBuffer(
-            int viewId,
-            ByteBuffer pixelBuffer,
-            int capacity
-    );
+    private static native HardwareBuffer nativeGetHardwareBuffer(int viewId);
 }

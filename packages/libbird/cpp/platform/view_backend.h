@@ -68,6 +68,10 @@ public:
     (void)bitmap;
   }
 
+  // Called when a hardware buffer is ready (e.g. AHardwareBuffer).
+  // This bypasses CPU pixel data but still increments frame generation.
+  virtual void on_hardware_frame_ready() {}
+
   // ── Output ───────────────────────────────────────────────────────────
   //
   // Returns a pointer to the current frame's pixel data, or nullptr
