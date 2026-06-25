@@ -121,7 +121,7 @@ class _BrowserTabState extends ConsumerState<BrowserTab> {
             minHeight: widget.minHeight ?? 36,
           ),
           decoration: BoxDecoration(
-            color: theme.colorScheme.surface,
+            color: theme.colorScheme.surfaceContainerHigh,
             borderRadius: borderRadius,
           ),
           child: Row(

@@ -111,12 +111,13 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar>
           height: tabStripHeight,
           child: Row(
             children: [
-              DragToMoveArea(
-                child: SizedBox(
-                  height: double.infinity,
-                  width: leadingControlsPadding,
+              if (!Platform.isAndroid)
+                DragToMoveArea(
+                  child: SizedBox(
+                    height: double.infinity,
+                    width: leadingControlsPadding,
+                  ),
                 ),
-              ),
               SizedBox(
                 width: _kLayoutToggleButtonWidth,
                 child: IconButton(
@@ -155,10 +156,11 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar>
                     final tabContentWidth =
                         (adaptiveTabWidth * tabs.length) +
                         (pinAddButton ? 0 : _kAddButtonWidth);
-                    final tabViewportWidth = math.min(
+                    double tabViewportWidth = math.min(
                       availableForTabViewport,
                       tabContentWidth,
                     );
+
                     final dragAreaWidth = math.max(
                       trailingControlsPadding,
                       constraints.maxWidth -

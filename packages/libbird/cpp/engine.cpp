@@ -234,29 +234,33 @@ public:
     return token;
   }
 
-  void* front_ahb() const {
+  void *front_ahb() const {
 #ifdef USE_VULKAN_AHB_IMAGES
     if (!m_client_state.has_usable_bitmap) {
-      dbgln("flutterbird front_ahb: returning nullptr because has_usable_bitmap is false");
+      dbgln("flutterbird front_ahb: returning nullptr because "
+            "has_usable_bitmap is false");
       return nullptr;
     }
     if (!m_client_state.front_bitmap.shared_image_buffer) {
-      dbgln("flutterbird front_ahb: returning nullptr because shared_image_buffer is null");
+      dbgln("flutterbird front_ahb: returning nullptr because "
+            "shared_image_buffer is null");
       return nullptr;
     }
-    auto* ahb = m_client_state.front_bitmap.shared_image_buffer->native_buffer();
+    auto *ahb =
+        m_client_state.front_bitmap.shared_image_buffer->native_buffer();
     if (!ahb) {
-      dbgln("flutterbird front_ahb: returning nullptr because native_buffer() returned null");
+      dbgln("flutterbird front_ahb: returning nullptr because native_buffer() "
+            "returned null");
     } else {
-      dbgln("flutterbird front_ahb: returning valid ahb");
+      // dbgln("flutterbird front_ahb: returning valid ahb");
     }
     return ahb;
 #else
-    dbgln("flutterbird front_ahb: returning nullptr because USE_VULKAN_AHB_IMAGES is not defined");
+    dbgln("flutterbird front_ahb: returning nullptr because "
+          "USE_VULKAN_AHB_IMAGES is not defined");
     return nullptr;
 #endif
   }
-
 
   JsonArray serialize_context_menu_items(WebView::Menu const &menu) {
     JsonArray items;
@@ -501,7 +505,8 @@ public:
       if (front_ahb()) {
         auto bitmap_size =
             m_client_state.front_bitmap.last_painted_size.to_type<int>();
-        m_backend->on_hardware_frame_ready(bitmap_size.width(), bitmap_size.height());
+        m_backend->on_hardware_frame_ready(bitmap_size.width(),
+                                           bitmap_size.height());
         return;
       }
 #endif
