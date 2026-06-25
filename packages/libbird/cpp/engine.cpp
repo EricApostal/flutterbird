@@ -499,7 +499,9 @@ public:
 
 #ifdef USE_VULKAN_AHB_IMAGES
       if (front_ahb()) {
-        m_backend->on_hardware_frame_ready();
+        auto bitmap_size =
+            m_client_state.front_bitmap.last_painted_size.to_type<int>();
+        m_backend->on_hardware_frame_ready(bitmap_size.width(), bitmap_size.height());
         return;
       }
 #endif

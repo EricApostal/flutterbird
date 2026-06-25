@@ -195,20 +195,21 @@ public final class LadybirdPlugin implements FlutterPlugin, MethodCallHandler {
             return;
         }
 
-        int width = nativeGetSurfaceWidth(textureContext.viewId);
-        int height = nativeGetSurfaceHeight(textureContext.viewId);
-        if (width <= 0 || height <= 0) {
-            return;
-        }
-
-        textureContext.ensureFrameStorage(width, height);
-
         HardwareBuffer buffer = nativeGetHardwareBuffer(textureContext.viewId);
         if (buffer == null) {
             android.util.Log.e("LadybirdPlugin", "nativeGetHardwareBuffer returned null!");
             textureContext.queuedDrops += 1;
             return;
         }
+
+        int width = buffer.getWidth();
+        int height = buffer.getHeight();
+        if (width <= 0 || height <= 0) {
+            buffer.close();
+            return;
+        }
+
+        textureContext.ensureFrameStorage(width, height);
 
         Surface surface = textureContext.producer.getSurface();
         if (surface == null || !surface.isValid()) {

@@ -70,7 +70,10 @@ public:
 
   // Called when a hardware buffer is ready (e.g. AHardwareBuffer).
   // This bypasses CPU pixel data but still increments frame generation.
-  virtual void on_hardware_frame_ready() {}
+  virtual void on_hardware_frame_ready(int width, int height) {
+    (void)width;
+    (void)height;
+  }
 
   // ── Output ───────────────────────────────────────────────────────────
   //
