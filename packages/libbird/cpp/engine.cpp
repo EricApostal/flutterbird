@@ -1142,14 +1142,14 @@ int get_iosurface_width(int view_id) {
   auto it = g_web_views.find(view_id);
   if (it == g_web_views.end())
     return 0;
-  return it->second->m_backend->width();
+  return it->second->m_viewport_width;
 }
 
 int get_iosurface_height(int view_id) {
   auto it = g_web_views.find(view_id);
   if (it == g_web_views.end())
     return 0;
-  return it->second->m_backend->height();
+  return it->second->m_viewport_height;
 }
 
 void set_url_change_callback(int view_id, UrlChangeCallback callback) {

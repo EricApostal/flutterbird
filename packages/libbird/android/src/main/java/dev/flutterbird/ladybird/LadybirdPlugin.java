@@ -7,6 +7,7 @@ import android.graphics.PorterDuff;
 import android.os.Handler;
 import android.os.Looper;
 import android.view.Surface;
+import android.graphics.Rect;
 
 import android.hardware.HardwareBuffer;
 import android.graphics.ColorSpace;
@@ -195,21 +196,20 @@ public final class LadybirdPlugin implements FlutterPlugin, MethodCallHandler {
             return;
         }
 
+        int width = nativeGetSurfaceWidth(textureContext.viewId);
+        int height = nativeGetSurfaceHeight(textureContext.viewId);
+        if (width <= 0 || height <= 0) {
+            return;
+        }
+
+        textureContext.ensureFrameStorage(width, height);
+
         HardwareBuffer buffer = nativeGetHardwareBuffer(textureContext.viewId);
         if (buffer == null) {
             android.util.Log.e("LadybirdPlugin", "nativeGetHardwareBuffer returned null!");
             textureContext.queuedDrops += 1;
             return;
         }
-
-        int width = buffer.getWidth();
-        int height = buffer.getHeight();
-        if (width <= 0 || height <= 0) {
-            buffer.close();
-            return;
-        }
-
-        textureContext.ensureFrameStorage(width, height);
 
         Surface surface = textureContext.producer.getSurface();
         if (surface == null || !surface.isValid()) {
@@ -225,8 +225,9 @@ public final class LadybirdPlugin implements FlutterPlugin, MethodCallHandler {
             canvas.drawColor(Color.TRANSPARENT, PorterDuff.Mode.CLEAR);
             Bitmap bitmap = Bitmap.wrapHardwareBuffer(buffer, ColorSpace.get(ColorSpace.Named.SRGB));
             if (bitmap != null) {
-                android.util.Log.i("LadybirdPlugin", "Drawing hardware buffer bitmap! size=" + bitmap.getWidth() + "x" + bitmap.getHeight());
-                canvas.drawBitmap(bitmap, 0f, 0f, null);
+                Rect src = new Rect(0, 0, width, height);
+                Rect dst = new Rect(0, 0, width, height);
+                canvas.drawBitmap(bitmap, src, dst, null);
             } else {
                 android.util.Log.e("LadybirdPlugin", "Bitmap.wrapHardwareBuffer returned null!");
             }
