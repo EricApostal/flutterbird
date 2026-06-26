@@ -47,7 +47,7 @@ abstract class _$BrowserOmnibox extends $Notifier<BrowserOmniboxState> {
   BrowserOmniboxState build();
   @$mustCallSuper
   @override
-  WhenComplete runBuild() {
+  void runBuild() {
     final ref = this.ref as $Ref<BrowserOmniboxState, BrowserOmniboxState>;
     final element =
         ref.element
@@ -57,6 +57,6 @@ abstract class _$BrowserOmnibox extends $Notifier<BrowserOmniboxState> {
               Object?,
               Object?
             >;
-    return element.handleCreate(ref, build);
+    element.handleCreate(ref, build);
   }
 }

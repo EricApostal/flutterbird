@@ -247,6 +247,13 @@ class _LadybirdViewState extends State<LadybirdView>
       context,
     ).getScrollPhysics(context);
 
+    /*
+    This is where flutter sort of clutches out. Scrolling is one of those things that doesn't
+    seem major, but when the scrolling in an app is wrong, you definitely notice. It's not 
+    "real" native scroll physics as implemented by the native platform, but the flutter team
+    has put a lot of work into making it closer
+    */
+
     final ScrollMetrics metrics = FixedScrollMetrics(
       minScrollExtent: double.negativeInfinity,
       maxScrollExtent: double.infinity,

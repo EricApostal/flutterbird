@@ -4,6 +4,7 @@ import 'package:collection/collection.dart';
 
 part 'browser.g.dart';
 
+//
 @Riverpod(keepAlive: true)
 class BrowserTabController extends _$BrowserTabController {
   @override

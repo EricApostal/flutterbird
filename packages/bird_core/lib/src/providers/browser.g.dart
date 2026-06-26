@@ -49,7 +49,7 @@ abstract class _$BrowserTabController
   List<LadybirdController> build();
   @$mustCallSuper
   @override
-  WhenComplete runBuild() {
+  void runBuild() {
     final ref =
         this.ref as $Ref<List<LadybirdController>, List<LadybirdController>>;
     final element =
@@ -60,7 +60,7 @@ abstract class _$BrowserTabController
               Object?,
               Object?
             >;
-    return element.handleCreate(ref, build);
+    element.handleCreate(ref, build);
   }
 }
 

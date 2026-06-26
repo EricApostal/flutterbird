@@ -20,6 +20,7 @@ dependencies:
   go_router: ^17.1.0
   google_fonts: ^8.1.0
   go_transitions: ^0.8.3
+  reorderable_grid_view: ^2.2.8
 dev_dependencies:
   flutter_test:
     sdk: flutter

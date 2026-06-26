@@ -1,8 +1,10 @@
+import 'dart:io';
 import 'package:bird_core/bird_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutterbird/features/browser/components/browser_window.dart';
+import 'package:flutterbird/features/browser/components/mobile_browser_layout.dart';
 import 'package:flutterbird/features/browser/components/omnibox_bar.dart';
 import 'package:flutterbird/features/browser/components/tab_bar.dart';
 import 'package:flutterbird/features/browser/components/vertical_tab_sidebar.dart';
@@ -100,6 +102,10 @@ class _BrowserWindowScreenState extends ConsumerState<BrowserWindowScreen> {
 
     if (currentTabController == null) {
       return const SizedBox.shrink();
+    }
+
+    if (Platform.isAndroid || Platform.isIOS) {
+      return MobileBrowserLayout(viewId: viewId);
     }
 
     final padding = MediaQuery.paddingOf(context);
