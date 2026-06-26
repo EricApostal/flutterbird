@@ -4,6 +4,12 @@
 #include <jni.h>
 
 #include <algorithm>
+#include <map>
+#include <mutex>
+#include "egl_blitter.h"
+
+static std::map<int, EglBlitter*> g_blitters;
+static std::mutex g_blitters_mutex;
 
 static const char *get_utf_chars(JNIEnv *env, jstring value) {
   if (!value)
@@ -70,4 +76,50 @@ Java_dev_flutterbird_ladybird_LadybirdPlugin_nativeGetHardwareBuffer(
 #else
   return nullptr;
 #endif
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_dev_flutterbird_ladybird_LadybirdPlugin_nativeSetSurface(
+    JNIEnv *env, jclass, jint view_id, jobject surface) {
+  if (!surface) return;
+  ANativeWindow *window = ANativeWindow_fromSurface(env, surface);
+  if (!window) return;
+
+  std::lock_guard<std::mutex> lock(g_blitters_mutex);
+  auto it = g_blitters.find(view_id);
+  if (it == g_blitters.end()) {
+      EglBlitter* blitter = new EglBlitter();
+      if (blitter->init(window)) {
+          g_blitters[view_id] = blitter;
+      } else {
+          delete blitter;
+      }
+  } else {
+      it->second->init(window);
+  }
+  ANativeWindow_release(window); // EglBlitter acquires its own ref
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_dev_flutterbird_ladybird_LadybirdPlugin_nativeDestroySurface(
+    JNIEnv *env, jclass, jint view_id) {
+  std::lock_guard<std::mutex> lock(g_blitters_mutex);
+  auto it = g_blitters.find(view_id);
+  if (it != g_blitters.end()) {
+      delete it->second;
+      g_blitters.erase(it);
+  }
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_dev_flutterbird_ladybird_LadybirdPlugin_nativeDrawFrame(
+    JNIEnv *env, jclass, jint view_id, jint width, jint height) {
+  void *ahb = get_android_hardware_buffer(view_id);
+  if (!ahb) return;
+
+  std::lock_guard<std::mutex> lock(g_blitters_mutex);
+  auto it = g_blitters.find(view_id);
+  if (it != g_blitters.end()) {
+      it->second->draw(static_cast<AHardwareBuffer*>(ahb), width, height);
+  }
 }

@@ -33,6 +33,8 @@ public final class LadybirdPlugin implements FlutterPlugin, MethodCallHandler {
     }
 
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
+    private android.os.HandlerThread renderThread;
+    private Handler renderHandler;
     private final Map<Long, TextureContext> activeTextures = new HashMap<>();
     private final Runnable pumpRunnable = new Runnable() {
         @Override
@@ -80,6 +82,10 @@ public final class LadybirdPlugin implements FlutterPlugin, MethodCallHandler {
         } catch (Exception exception) {
             throw new RuntimeException("Failed to prepare Ladybird Android runtime", exception);
         }
+
+        renderThread = new android.os.HandlerThread("LadybirdRenderThread");
+        renderThread.start();
+        renderHandler = new Handler(renderThread.getLooper());
     }
 
     @Override
@@ -111,6 +117,12 @@ public final class LadybirdPlugin implements FlutterPlugin, MethodCallHandler {
 
         channel.setMethodCallHandler(null);
         textureRegistry = null;
+
+        if (renderThread != null) {
+            renderThread.quitSafely();
+            renderThread = null;
+            renderHandler = null;
+        }
     }
 
     private void createTexture(MethodCall call, Result result) {
@@ -204,14 +216,14 @@ public final class LadybirdPlugin implements FlutterPlugin, MethodCallHandler {
 
         textureContext.ensureFrameStorage(width, height);
 
-        HardwareBuffer buffer = nativeGetHardwareBuffer(textureContext.viewId);
+        final HardwareBuffer buffer = nativeGetHardwareBuffer(textureContext.viewId);
         if (buffer == null) {
             android.util.Log.e("LadybirdPlugin", "nativeGetHardwareBuffer returned null!");
             textureContext.queuedDrops += 1;
             return;
         }
 
-        Surface surface = textureContext.producer.getSurface();
+        final Surface surface = textureContext.producer.getSurface();
         if (surface == null || !surface.isValid()) {
             android.util.Log.e("LadybirdPlugin", "Surface is null or invalid!");
             buffer.close();
@@ -219,29 +231,39 @@ public final class LadybirdPlugin implements FlutterPlugin, MethodCallHandler {
             return;
         }
 
-        Canvas canvas = null;
-        try {
-            canvas = surface.lockHardwareCanvas();
-            canvas.drawColor(Color.TRANSPARENT, PorterDuff.Mode.CLEAR);
-            Bitmap bitmap = Bitmap.wrapHardwareBuffer(buffer, ColorSpace.get(ColorSpace.Named.SRGB));
-            if (bitmap != null) {
-                Rect src = new Rect(0, 0, width, height);
-                Rect dst = new Rect(0, 0, width, height);
-                canvas.drawBitmap(bitmap, src, dst, null);
-            } else {
-                android.util.Log.e("LadybirdPlugin", "Bitmap.wrapHardwareBuffer returned null!");
-            }
-            textureContext.deliveredFrames += 1;
-        } catch (RuntimeException exception) {
-            android.util.Log.e("LadybirdPlugin", "Exception drawing hardware buffer", exception);
-            textureContext.queuedDrops += 1;
-        } finally {
-            if (canvas != null) {
-                surface.unlockCanvasAndPost(canvas);
-            }
+        textureContext.lastFrameGeneration = generation;
+
+        if (renderHandler != null) {
+            renderHandler.post(new Runnable() {
+                @Override
+                public void run() {
+                    Canvas canvas = null;
+                    try {
+                        canvas = surface.lockHardwareCanvas();
+                        canvas.drawColor(Color.TRANSPARENT, PorterDuff.Mode.CLEAR);
+                        Bitmap bitmap = Bitmap.wrapHardwareBuffer(buffer, ColorSpace.get(ColorSpace.Named.SRGB));
+                        if (bitmap != null) {
+                            Rect src = new Rect(0, 0, width, height);
+                            Rect dst = new Rect(0, 0, width, height);
+                            canvas.drawBitmap(bitmap, src, dst, null);
+                        } else {
+                            android.util.Log.e("LadybirdPlugin", "Bitmap.wrapHardwareBuffer returned null!");
+                        }
+                        textureContext.deliveredFrames += 1;
+                    } catch (RuntimeException exception) {
+                        android.util.Log.e("LadybirdPlugin", "Exception drawing hardware buffer", exception);
+                        textureContext.queuedDrops += 1;
+                    } finally {
+                        if (canvas != null) {
+                            surface.unlockCanvasAndPost(canvas);
+                        }
+                        buffer.close();
+                    }
+                }
+            });
+        } else {
             buffer.close();
         }
-        textureContext.lastFrameGeneration = generation;
     }
 
     private void updatePumpDriver() {

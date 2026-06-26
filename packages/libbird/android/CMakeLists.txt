@@ -87,6 +87,7 @@ set(PLUGIN_NAME "ladybird_plugin")
 
 add_library(${PLUGIN_NAME} SHARED
     src/main/cpp/ladybird_plugin_jni.cpp
+    src/main/cpp/egl_blitter.cpp
 )
 
 file(MAKE_DIRECTORY "${LADYBIRD_ANDROID_ASSETS_DIR}")
@@ -194,7 +195,7 @@ if (ANDROID AND NOT BUILD_SHARED_LIBS)
 endif()
 
 
-target_link_libraries(${PLUGIN_NAME} PRIVATE engine log android)
+target_link_libraries(${PLUGIN_NAME} PRIVATE engine log android EGL GLESv3)
 
 if (AGP_LIBRARY_OUTPUT_DIRECTORY)
     set_target_properties(${PLUGIN_NAME} PROPERTIES
