@@ -9,7 +9,7 @@ import 'package:flutterbird/features/browser/state/tab_layout_mode.dart';
 import 'package:flutterbird/features/browser/state/omnibox_state.dart';
 import 'package:go_router/go_router.dart';
 import 'package:ladybird/ladybird.dart';
-import 'package:flutterbird/features/browser/components/mobile_browser_layout.dart';
+import 'package:flutter/services.dart';
 
 enum _ToolbarMenuAction {
   newTab,
@@ -703,21 +703,29 @@ class _MobileOmniboxBarState extends ConsumerState<MobileOmniboxBar> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    return Theme(
+      data: ThemeData.dark(),
+      child: Builder(
+        builder: (context) {
+          final theme = Theme.of(context);
 
-    final omniboxController = ref.read(browserOmniboxProvider.notifier);
-    final bookmarks = ref.watch(
-      browserOmniboxProvider.select((value) => value.bookmarks),
-    );
-    final currentTabController = widget.currentTabController;
+          final omniboxController = ref.read(browserOmniboxProvider.notifier);
+          final bookmarks = ref.watch(
+            browserOmniboxProvider.select((value) => value.bookmarks),
+          );
+          final currentTabController = widget.currentTabController;
 
-    final radius = 8.0;
+          final radius = 8.0;
 
-    return Container(
-      color: theme.colorScheme.surfaceContainerHigh,
-      child: Padding(
-        padding: const EdgeInsets.only(left: 4, right: 4, bottom: 4, top: 4),
-        child: Column(
+          return AnnotatedRegion<SystemUiOverlayStyle>(
+            value: SystemUiOverlayStyle.light,
+            child: Container(
+              color: theme.colorScheme.surfaceContainerHigh,
+              child: SafeArea(
+                bottom: false,
+                child: Padding(
+                  padding: const EdgeInsets.only(left: 4, right: 4, bottom: 4, top: 4),
+                  child: Column(
           children: [
             Row(
               children: [
@@ -975,7 +983,7 @@ class _MobileOmniboxBarState extends ConsumerState<MobileOmniboxBar> {
                     return InkWell(
                       borderRadius: BorderRadius.circular(6),
                       onTap: () {
-                        ref.read(mobileTabSwitcherStateProvider.notifier).state = true;
+                        context.push('/browser/mobile_tabs');
                       },
                       child: Container(
                         width: 24,
@@ -1025,6 +1033,11 @@ class _MobileOmniboxBarState extends ConsumerState<MobileOmniboxBar> {
             ],
           ],
         ),
+       ),
+      ),
+     ),
+    );
+        },
       ),
     );
   }

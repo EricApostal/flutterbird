@@ -6,7 +6,9 @@ import 'package:flutterbird/features/browser/state/tab_actions.dart';
 
 class MobileTabCard extends ConsumerWidget {
   final int viewId;
-  const MobileTabCard({super.key, required this.viewId});
+  final VoidCallback? onClose;
+
+  const MobileTabCard({super.key, required this.viewId, this.onClose});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -58,11 +60,13 @@ class MobileTabCard extends ConsumerWidget {
                   ),
                 ),
                 IconButton(
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
-                  icon: const Icon(Icons.close, size: 18),
+                  icon: const Icon(Icons.close, size: 20),
                   onPressed: () {
-                    BrowserTabActions.commitCloseTab(ref, viewId);
+                    if (onClose != null) {
+                      onClose!();
+                    } else {
+                      BrowserTabActions.commitCloseTab(ref, viewId);
+                    }
                   },
                 ),
               ],
@@ -78,10 +82,23 @@ class MobileTabCard extends ConsumerWidget {
                     child: FittedBox(
                       fit: BoxFit.cover,
                       alignment: Alignment.topCenter,
-                      child: SizedBox(
-                        width: screenSize.width,
-                        height: screenSize.height,
-                        child: LadybirdView(controller: controller),
+                      child: Builder(
+                        builder: (context) {
+                          final density = MediaQuery.devicePixelRatioOf(context);
+                          final surfaceW = controller.getSurfaceWidth() / density;
+                          final surfaceH = controller.getSurfaceHeight() / density;
+
+                          final w = surfaceW > 0 ? surfaceW : screenSize.width;
+                          final h = surfaceH > 0 ? surfaceH : screenSize.height;
+
+                          return SizedBox(
+                            width: w,
+                            height: h,
+                            child: AbsorbPointer(
+                              child: LadybirdView(controller: controller),
+                            ),
+                          );
+                        },
                       ),
                     ),
                   ),

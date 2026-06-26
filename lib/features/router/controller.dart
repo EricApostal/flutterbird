@@ -1,3 +1,4 @@
+import 'package:flutterbird/features/browser/components/mobile_tab_switcher.dart';
 import 'package:flutterbird/features/browser/screens/browser.dart';
 import 'package:flutterbird/features/browser/screens/loading.dart';
 import 'package:go_router/go_router.dart';
@@ -11,6 +12,12 @@ final routerController = GoRouter(
         return BrowserLoadingScreen();
       },
       routes: [
+        GoRoute(
+          path: "mobile_tabs",
+          builder: (context, state) {
+            return const MobileTabSwitcher();
+          },
+        ),
         GoRoute(
           // TODO: Some tabs will probably be flutter based to some extent,
           // so at some point I should provide some sort of uuid abstraction
