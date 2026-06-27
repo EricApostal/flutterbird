@@ -17,7 +17,7 @@ ffi.DynamicLibrary _openLadybirdLibrary() {
 }
 
 class LadybirdController {
-  static const double assumedRefreshRate = 144.0;
+  static const double assumedRefreshRate = 512.0;
 
   final MethodChannel _channel = MethodChannel('ladybird');
   late final LadybirdBindings _bindings;
