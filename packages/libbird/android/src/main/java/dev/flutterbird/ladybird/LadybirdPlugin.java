@@ -23,7 +23,6 @@ import io.flutter.plugin.common.MethodChannel.Result;
 import io.flutter.view.TextureRegistry;
 
 public final class LadybirdPlugin implements FlutterPlugin, MethodCallHandler {
-    private static final long PUMP_INTERVAL_MS = 16L;
 
     static {
         // SDL registers JNI methods for org.libsdl.app.* during JNI_OnLoad.
@@ -36,9 +35,10 @@ public final class LadybirdPlugin implements FlutterPlugin, MethodCallHandler {
     private android.os.HandlerThread renderThread;
     private Handler renderHandler;
     private final Map<Long, TextureContext> activeTextures = new HashMap<>();
-    private final Runnable pumpRunnable = new Runnable() {
+
+    private final android.view.Choreographer.FrameCallback frameCallback = new android.view.Choreographer.FrameCallback() {
         @Override
-        public void run() {
+        public void doFrame(long frameTimeNanos) {
             pumpScheduled = false;
             if (activeTextures.isEmpty()) {
                 return;
@@ -53,7 +53,7 @@ public final class LadybirdPlugin implements FlutterPlugin, MethodCallHandler {
             }
 
             if (!activeTextures.isEmpty()) {
-                schedulePump(PUMP_INTERVAL_MS);
+                schedulePump();
             }
         }
     };
@@ -72,8 +72,8 @@ public final class LadybirdPlugin implements FlutterPlugin, MethodCallHandler {
         channel.setMethodCallHandler(this);
 
         try {
-            LadybirdRuntimeFiles.RuntimeConfiguration runtimeConfiguration =
-                    LadybirdRuntimeFiles.prepare(flutterPluginBinding.getApplicationContext());
+            LadybirdRuntimeFiles.RuntimeConfiguration runtimeConfiguration = LadybirdRuntimeFiles
+                    .prepare(flutterPluginBinding.getApplicationContext());
             nativeConfigureAndroid(
                     runtimeConfiguration.resourceRoot,
                     runtimeConfiguration.userDir,
@@ -107,7 +107,7 @@ public final class LadybirdPlugin implements FlutterPlugin, MethodCallHandler {
 
     @Override
     public void onDetachedFromEngine(FlutterPlugin.FlutterPluginBinding binding) {
-        mainHandler.removeCallbacks(pumpRunnable);
+        android.view.Choreographer.getInstance().removeFrameCallback(frameCallback);
         pumpScheduled = false;
 
         for (TextureContext textureContext : activeTextures.values()) {
@@ -141,7 +141,7 @@ public final class LadybirdPlugin implements FlutterPlugin, MethodCallHandler {
 
             @Override
             public void onSurfaceAvailable() {
-                schedulePump(0L);
+                schedulePump();
             }
         });
 
@@ -184,7 +184,7 @@ public final class LadybirdPlugin implements FlutterPlugin, MethodCallHandler {
         diagnostics.put("textureId", textureContext.textureId);
         diagnostics.put("viewId", textureContext.viewId);
         diagnostics.put("isActive", textureContext.active);
-        diagnostics.put("frameNotifyQueued", false);
+        diagnostics.put("frameNotifyQueued", textureContext.frameNotifyQueued);
         diagnostics.put("queuedGeneration", textureContext.lastFrameGeneration);
         diagnostics.put("lastFrameGeneration", textureContext.lastFrameGeneration);
         diagnostics.put("nativeFrameCallbacks", textureContext.nativeFrameCallbacks);
@@ -193,7 +193,7 @@ public final class LadybirdPlugin implements FlutterPlugin, MethodCallHandler {
         diagnostics.put("displayLinkTicks", pumpTicks);
         diagnostics.put("pumpRequests", pumpRequests);
         diagnostics.put("pumpExecutions", pumpExecutions);
-        diagnostics.put("hasDisplayLink", false);
+        diagnostics.put("hasDisplayLink", true);
         result.success(diagnostics);
     }
 
@@ -206,6 +206,14 @@ public final class LadybirdPlugin implements FlutterPlugin, MethodCallHandler {
         textureContext.nativeFrameCallbacks += 1;
         if (generation == 0 || generation == textureContext.lastFrameGeneration) {
             return;
+        }
+
+        if (textureContext.frameNotifyQueued) {
+            return;
+        }
+
+        if (textureContext.lastFrameGeneration > 0 && generation > textureContext.lastFrameGeneration + 1) {
+            textureContext.queuedDrops += (generation - textureContext.lastFrameGeneration - 1);
         }
 
         int width = nativeGetSurfaceWidth(textureContext.viewId);
@@ -232,6 +240,7 @@ public final class LadybirdPlugin implements FlutterPlugin, MethodCallHandler {
         }
 
         textureContext.lastFrameGeneration = generation;
+        textureContext.frameNotifyQueued = true;
 
         if (renderHandler != null) {
             renderHandler.post(new Runnable() {
@@ -258,36 +267,34 @@ public final class LadybirdPlugin implements FlutterPlugin, MethodCallHandler {
                             surface.unlockCanvasAndPost(canvas);
                         }
                         buffer.close();
+                        textureContext.frameNotifyQueued = false;
                     }
                 }
             });
         } else {
             buffer.close();
+            textureContext.frameNotifyQueued = false;
         }
     }
 
     private void updatePumpDriver() {
         if (activeTextures.isEmpty()) {
-            mainHandler.removeCallbacks(pumpRunnable);
+            android.view.Choreographer.getInstance().removeFrameCallback(frameCallback);
             pumpScheduled = false;
             return;
         }
 
-        schedulePump(0L);
+        schedulePump();
     }
 
-    private void schedulePump(long delayMillis) {
+    private void schedulePump() {
         if (pumpScheduled) {
             return;
         }
 
         pumpScheduled = true;
         pumpRequests += 1;
-        if (delayMillis <= 0L) {
-            mainHandler.post(pumpRunnable);
-        } else {
-            mainHandler.postDelayed(pumpRunnable, delayMillis);
-        }
+        android.view.Choreographer.getInstance().postFrameCallback(frameCallback);
     }
 
     private static final class TextureContext {
@@ -296,6 +303,7 @@ public final class LadybirdPlugin implements FlutterPlugin, MethodCallHandler {
         final long textureId;
 
         boolean active = true;
+        volatile boolean frameNotifyQueued = false;
         int width = 0;
         int height = 0;
         long lastFrameGeneration = 0;
@@ -329,8 +337,7 @@ public final class LadybirdPlugin implements FlutterPlugin, MethodCallHandler {
             String resourceRoot,
             String userDir,
             String nativeLibraryDir,
-            String certificatesPath
-    );
+            String certificatesPath);
 
     private static native void nativeTickLadybird();
 

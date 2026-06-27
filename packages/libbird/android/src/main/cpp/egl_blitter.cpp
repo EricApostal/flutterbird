@@ -135,6 +135,7 @@ bool EglBlitter::init(ANativeWindow* window) {
 
     // Release context from current thread so the render thread can acquire it
     eglMakeCurrent(display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+    eglSwapInterval(display, 0);
 
     return true;
 }

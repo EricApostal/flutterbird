@@ -42,7 +42,7 @@ class _LadybirdViewState extends State<LadybirdView>
   double _lastSimY = 0;
 
   bool get _showFrameDiagnostics =>
-      kDebugMode && defaultTargetPlatform == TargetPlatform.macOS;
+      kDebugMode && defaultTargetPlatform == TargetPlatform.android;
 
   void _onNativeResize() {
     if (!mounted) return;
