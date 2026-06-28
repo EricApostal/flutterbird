@@ -30,6 +30,8 @@ endif()
 
 if (ANDROID)
     message(FATAL_ERROR "Android builds moved to packages/libbird/android/CMakeLists.txt")
+elseif (IOS)
+    message(FATAL_ERROR "iOS builds moved to packages/libbird/ios/CMakeLists.txt")
 else()
     set(LADYBIRD_OUT_DIR "${LADYBIRD_DIR}/Build/release")
     set(_ladybird_build_env
@@ -67,7 +69,7 @@ endif()
 
 if (APPLE)
     set(VCPKG_TRIPLET "arm64-osx-dynamic")
-elseif(ANDROID)
+elseif (ANDROID)
     set(VCPKG_TRIPLET "arm64-android")
 else()
     set(VCPKG_TRIPLET "x64-linux-dynamic")

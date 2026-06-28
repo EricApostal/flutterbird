@@ -1,0 +1,22 @@
+PODS:
+  - Flutter (1.0.0)
+  - ladybird (0.0.1):
+    - Flutter
+
+DEPENDENCIES:
+  - Flutter (from `Flutter`)
+  - ladybird (from `.symlinks/plugins/ladybird/ios`)
+
+EXTERNAL SOURCES:
+  Flutter:
+    :path: Flutter
+  ladybird:
+    :path: ".symlinks/plugins/ladybird/ios"
+
+SPEC CHECKSUMS:
+  Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
+  ladybird: cc0eb88cf615516abbbe5ed8d11856fe77e354b8
+
+PODFILE CHECKSUM: 903cc3d035feda8c667fdf9a3b3c1de43292c218
+
+COCOAPODS: 1.16.2

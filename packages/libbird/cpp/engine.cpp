@@ -12,7 +12,12 @@
 // in the on_ready_to_paint lambda — nowhere else in this file.
 #ifdef __APPLE__
 #include "platform/macos_view_backend.h"
+#include <TargetConditionals.h>
+#if TARGET_OS_IPHONE
+#include <IOSurface/IOSurfaceRef.h>
+#else
 #include <IOSurface/IOSurface.h>
+#endif
 #else
 #include "platform/linux_view_backend.h"
 #endif
@@ -47,17 +52,7 @@
 #include <unistd.h>
 #endif
 
-namespace IPC {
-
-template <> ErrorOr<void> encode(Encoder &encoder, float const &value) {
-  return encoder.encode(AK::bit_cast<u32>(value));
-}
-
-template <> ErrorOr<void> encode(Encoder &encoder, double const &value) {
-  return encoder.encode(AK::bit_cast<u64>(value));
-}
-
-} // namespace IPC
+// IPC::encode for float and double are now provided by LibIPC/Encoder.cpp
 
 int g_next_view_id = 1;
 int g_active_view_id = -1;
