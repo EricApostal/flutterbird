@@ -868,15 +868,13 @@ void init_ladybird() {
   }
 #endif
 
-  static char const *argv[] = {"Ladybird", nullptr};
-
-  // TODO: I don't really know what this means?
-  static AK::StringView string_views[] = {AK::StringView("Ladybird", 8)};
-  Main::Arguments arguments = {1, (char **)argv, {string_views, 1}};
+  static char const *argv[] = {"ladybird", "--disable-sql-database", nullptr};
+  static AK::StringView string_views[] = {AK::StringView("ladybird", 8), AK::StringView("--disable-sql-database", 22)};
+  Main::Arguments arguments = {2, (char **)argv, {string_views, 2}};
 
   auto app = FlutterApplication::create(arguments, lib_path);
   if (app.is_error()) {
-    std::fprintf(stderr, "Failed to construct Ladybird Engine Application\n");
+    std::fprintf(stderr, "Failed to construct Ladybird Engine Application: %d\n", app.error().code());
     return;
   }
   s_app = app.release_value();
