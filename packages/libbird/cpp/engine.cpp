@@ -3,7 +3,6 @@
 #include <AK/ByteString.h>
 #include <cstdio>
 #include <memory>
-#include <mutex>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -50,6 +49,28 @@
 #include <LibWebView/ViewImplementation.h>
 #ifndef __APPLE__
 #include <unistd.h>
+#endif
+#include <LibWebView/Process.h>
+
+#if defined(AK_OS_IOS)
+ErrorOr<int> webcontent_service_main(Main::Arguments);
+ErrorOr<int> request_server_service_main(Main::Arguments);
+ErrorOr<int> image_decoder_service_main(Main::Arguments);
+ErrorOr<int> compositor_service_main(Main::Arguments);
+ErrorOr<int> webworker_service_main(Main::Arguments);
+
+struct RegisterMains {
+    RegisterMains() {
+        WebView::IOSServiceMains mains = {
+            webcontent_service_main,
+            request_server_service_main,
+            image_decoder_service_main,
+            compositor_service_main,
+            webworker_service_main
+        };
+        WebView::register_ios_service_mains(mains);
+    }
+} s_register_mains;
 #endif
 
 // IPC::encode for float and double are now provided by LibIPC/Encoder.cpp
@@ -421,6 +442,10 @@ public:
   virtual void initialize_client(
       CreateNewClient create_new_client = CreateNewClient::Yes) override {
 
+    // Single-process iOS transparently reuses the one WebContent connection that can ever exist
+    // for the app's lifetime (see Web::Bindings::initialize_main_thread_vm()'s
+    // VERIFY(!main_thread_vm_ptr())) — handled centrally inside
+    // WebView::Application::launch_web_content_process(), so no special-casing is needed here.
     ViewImplementation::initialize_client(create_new_client);
     configure_client_process();
     set_system_visibility_state(Web::HTML::VisibilityState::Visible);
@@ -698,6 +723,12 @@ private:
 // View registry — owns all FlutterViewImpl instances.
 static std::map<int, AK::OwnPtr<FlutterViewImpl>> g_web_views;
 
+#if defined(AK_OS_IOS)
+// Defined in liblagom-ipc.dylib (TransportMachPort.cpp). Returns true while
+// the main thread is inside a synchronous IPC wait with CFRunLoop pumping.
+extern "C" bool ladybird_is_ipc_wait_in_progress();
+#endif
+
 String FlutterViewImpl::create_child_web_view_handle(Optional<u64> page_index,
                                                      int &new_view_id) {
   new_view_id = -1;
@@ -738,6 +769,11 @@ public:
     auto const config = snapshot_android_runtime_config();
     if (!config.certificates_path.is_empty())
       request_server_options.certificates.append(config.certificates_path);
+    web_content_options.force_cpu_painting = WebView::ForceCPUPainting::No;
+#elif defined(AK_OS_IOS)
+    // iOS (including the single-process Compositor thread) uses the GPU/Metal IOSurface
+    // painting path; forcing CPU painting routes Compositor through an untested CPU raster
+    // fallback that crashes (see BackingStoreManager.cpp's create_shareable_bitmap_backing_stores).
     web_content_options.force_cpu_painting = WebView::ForceCPUPainting::No;
 #else
     web_content_options.force_cpu_painting = WebView::ForceCPUPainting::Yes;
@@ -913,6 +949,14 @@ void init_ladybird() {
 // anything that was enqueued during that poll.
 // ---------------------------------------------------------------------------
 extern "C" void tick_ladybird() {
+  // While the main thread is inside a synchronous IPC wait we must not pump
+  // Ladybird's event loop — doing so can cause re-entrant IPC calls that
+  // corrupt connection state in the Compositor service.
+#if defined(AK_OS_IOS)
+  if (ladybird_is_ipc_wait_in_progress())
+    return;
+#endif
+
   // Pre-drain: flush events queued since last tick.
   Core::ThreadEventQueue::current().process();
 
@@ -927,10 +971,12 @@ extern "C" void tick_ladybird() {
 int create_web_view() {
   int id = g_next_view_id++;
   auto view = FlutterViewImpl::create(id).release_value();
-  view->initialize_client();
   g_web_views[id] = std::move(view);
   if (g_active_view_id == -1)
     g_active_view_id = id;
+
+  g_web_views[id]->initialize_client();
+
   return id;
 }
 
@@ -1091,11 +1137,12 @@ void navigate_to(int view_id, const char *url) {
   if (!url)
     return;
   auto it = g_web_views.find(view_id);
-  if (it != g_web_views.end()) {
-    auto parsed = URL::Parser::basic_parse(AK::StringView(url, strlen(url)));
-    if (parsed.has_value())
-      it->second->load(parsed.value());
-  }
+  if (it == g_web_views.end())
+    return;
+
+  auto parsed = URL::Parser::basic_parse(AK::StringView(url, strlen(url)));
+  if (parsed.has_value())
+    it->second->load(parsed.value());
 }
 
 void set_zoom(int view_id, double zoom) {

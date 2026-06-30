@@ -25,7 +25,7 @@ Pod::Spec.new do |s|
   s.dependency 'Flutter'
 
   s.frameworks = 'CoreFoundation', 'CoreVideo', 'Foundation',
-                 'IOSurface', 'Metal', 'QuartzCore', 'UniformTypeIdentifiers', 'BrowserEngineKit'
+                 'IOSurface', 'Metal', 'QuartzCore', 'UniformTypeIdentifiers'
 
   s.pod_target_xcconfig = {
     'DEFINES_MODULE'           => 'YES',
@@ -33,12 +33,12 @@ Pod::Spec.new do |s|
     'CLANG_CXX_LIBRARY'        => 'libc++',
     'OTHER_CPLUSPLUSFLAGS'     => '-fobjc-arc -Wno-deprecated-anon-enum-enum-conversion',
 
-    'VALID_ARCHS'                    => 'arm64',
+    'EXCLUDED_ARCHS[sdk=iphonesimulator*]' => 'i386 x86_64',
 
     # libengine.dylib lives in LadybirdBundle/ after the cmake build.
     'LIBRARY_SEARCH_PATHS' => [
       '$(inherited)',
-      '"${PODS_TARGET_SRCROOT}/../cpp/build_ios/LadybirdBundle"'
+      '"${PODS_TARGET_SRCROOT}/../cpp/build_$(PLATFORM_NAME)/LadybirdBundle"'
     ].join(' '),
 
     # At runtime the engine is deployed to Frameworks/; helpers
@@ -52,7 +52,7 @@ Pod::Spec.new do |s|
     # Only link to -lengine; it already pulls in all lagom + skia deps.
     'OTHER_LDFLAGS' => [
       '$(inherited)',
-      '-framework Metal -framework QuartzCore -framework UniformTypeIdentifiers -framework BrowserEngineKit',
+      '-framework Metal -framework QuartzCore -framework UniformTypeIdentifiers',
       '-lengine'
     ].join(' '),
 
@@ -78,21 +78,47 @@ Pod::Spec.new do |s|
       :script             => <<~SCRIPT
         set -e
         CPP_DIR="${PODS_TARGET_SRCROOT}/../cpp"
-        mkdir -p "${CPP_DIR}/build_ios"
-        cd "${CPP_DIR}/build_ios"
+        PLATFORM=${PLATFORM_NAME:-iphoneos}
+        BUILD_DIR_NAME="build_${PLATFORM}"
+        mkdir -p "${CPP_DIR}/${BUILD_DIR_NAME}"
+        cd "${CPP_DIR}/${BUILD_DIR_NAME}"
         
-        unset CFLAGS CXXFLAGS LDFLAGS CC CXX CPP
+        # Xcode sets SDKROOT to the iOS simulator SDK, which leaks into
+        # vcpkg's cmake-get-vars for host-native tools (arm64-osx) and causes
+        # them to be compiled against the simulator SDK instead of macOS.
+        unset CFLAGS CXXFLAGS LDFLAGS CC CXX CPP SDKROOT IPHONEOS_DEPLOYMENT_TARGET
         
+        if [ "$PLATFORM" = "iphonesimulator" ]; then
+            TRIPLET="arm64-ios-simulator"
+        else
+            TRIPLET="arm64-ios"
+        fi
+
+        # Wipe the arm64-osx cmake-get-vars cache so vcpkg recomputes compiler
+        # flags against the macOS SDK (not the iOS simulator SDK that Xcode has
+        # in SDKROOT when building for iphonesimulator).
+        VCPKG_BUILDTREES="${PODS_TARGET_SRCROOT}/../third_party/ladybird/Build/vcpkg/buildtrees"
+        if [ -d "${VCPKG_BUILDTREES}" ]; then
+          find "${VCPKG_BUILDTREES}" -name "cmake-get-vars_C_CXX-arm64-osx*.cmake.log" -delete
+        fi
+
         # Cross compile for iOS
         cmake -G Ninja -DCMAKE_BUILD_TYPE=Release \\
               -DCMAKE_SYSTEM_NAME=iOS \\
-              -DCMAKE_OSX_ARCHITECTURES=arm64 \\
-              -DCMAKE_OSX_SYSROOT=iphoneos \\
+              -DCMAKE_OSX_ARCHITECTURES="arm64" \\
+              -DCMAKE_OSX_SYSROOT=${PLATFORM} \\
               -DCMAKE_OSX_DEPLOYMENT_TARGET=17.4 \\
               -DVCPKG_MANIFEST_INSTALL=OFF \\
+              -DVCPKG_INSTALLED_DIR="${PODS_TARGET_SRCROOT}/../third_party/ladybird/vcpkg_installed" \\
+              -DVCPKG_TARGET_TRIPLET="${TRIPLET}" \\
+              -DVCPKG_OVERLAY_TRIPLETS="${PODS_TARGET_SRCROOT}/vcpkg-overlay-triplets" \\
               "${PODS_TARGET_SRCROOT}"
               
-        ninja engine WebContent RequestServer Compositor ImageDecoder WebWorker -j$(sysctl -n hw.ncpu)
+        # Single-process iOS: WebContent/RequestServer/Compositor/ImageDecoder/WebWorker are
+        # compiled directly into libengine.dylib (see packages/libbird/ios/CMakeLists.txt) and
+        # run as threads inside the host app instead of as separate processes/extensions, so we
+        # no longer need to build their standalone executables here.
+        ninja engine -j$(sysctl -n hw.ncpu)
       SCRIPT
     },
 
@@ -101,8 +127,8 @@ Pod::Spec.new do |s|
       :name               => 'Deploy Ladybird Bundle into iOS App',
       :execution_position => :after_compile,
       :script             => <<~SCRIPT
-        set -e
-        BUNDLE_DIR="${PODS_TARGET_SRCROOT}/../cpp/build_ios/LadybirdBundle"
+        PLATFORM=${PLATFORM_NAME:-iphoneos}
+        BUNDLE_DIR="${PODS_TARGET_SRCROOT}/../cpp/build_${PLATFORM}/LadybirdBundle"
 
         APP_BUILD_DIR=$(dirname "${BUILT_PRODUCTS_DIR}")
         APP_NAME_FILE="${PODS_ROOT}/../Flutter/ephemeral/.app_filename"
@@ -128,14 +154,44 @@ Pod::Spec.new do |s|
         cp -af "${BUNDLE_DIR}/libengine.dylib" "${DEST_FWK_DIR}/" || true
         cp -af "${BUNDLE_DIR}/libraries/." "${DEST_FWK_DIR}/ladybird_libs/" || true
 
-        # Ladybird data resources (Base/res)
-        if [ -d "${BUNDLE_DIR}/res" ]; then
-          cp -af "${BUNDLE_DIR}/res" "${DEST_RES_DIR}/"
+        TRIPLET="arm64-ios"
+        if [ "${PLATFORM}" = "iphonesimulator" ]; then
+            TRIPLET="arm64-ios-simulator"
+        fi
+        VCPKG_LIB_DIR="${PODS_TARGET_SRCROOT}/../third_party/ladybird/vcpkg_installed/${TRIPLET}/lib"
+        if [ -d "$VCPKG_LIB_DIR" ]; then
+            cp -af "$VCPKG_LIB_DIR/"*.dylib "${DEST_FWK_DIR}/ladybird_libs/" || true
         fi
         
-        # NOTE: App Extension binaries (WebContent, RequestServer, etc.) 
-        # MUST be compiled as Xcode App Extension targets and bundled inside PlugIns/.
-        # We do not copy them manually here since Xcode must sign them with correct entitlements.
+        for dylib in "${DEST_FWK_DIR}/ladybird_libs/"*.dylib; do
+            if [ -f "$dylib" ]; then
+                base=$(basename "$dylib")
+                install_name_tool -id "@rpath/$base" "$dylib" || true
+                
+                OLD_PATH=$(otool -L "${DEST_FWK_DIR}/libengine.dylib" | grep "$base" | awk '{print $1}' || true)
+                for path in $OLD_PATH; do
+                    install_name_tool -change "$path" "@loader_path/ladybird_libs/$base" "${DEST_FWK_DIR}/libengine.dylib" || true
+                done
+                
+                for other_dylib in "${DEST_FWK_DIR}/ladybird_libs/"*.dylib; do
+                    if [ -f "$other_dylib" ] && [ "$other_dylib" != "$dylib" ]; then
+                        OLD_DEP_PATH=$(otool -L "$other_dylib" | grep "$base" | awk '{print $1}' || true)
+                        for path in $OLD_DEP_PATH; do
+                            install_name_tool -change "$path" "@loader_path/$base" "$other_dylib" || true
+                        done
+                    fi
+                done
+            fi
+        done
+
+        # Ladybird data resources (Base/res)
+        if [ -d "${BUNDLE_DIR}/res" ]; then
+            cp -af "${BUNDLE_DIR}/res" "${DEST_RES_DIR}/"
+        fi
+
+        # Single-process iOS: WebContent/RequestServer/Compositor/ImageDecoder/WebWorker run as
+        # threads inside libengine.dylib (see LibWebView/ProcessIOS.mm). There are no separate
+        # App Extension binaries to sign or embed in PlugIns/ anymore.
       SCRIPT
     }
   ]

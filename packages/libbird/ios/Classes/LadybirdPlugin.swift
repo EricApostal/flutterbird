@@ -28,11 +28,24 @@ class LadybirdTexture: NSObject, FlutterTexture {
     self.viewId = viewId
   }
 
+  static var debugCopyCount = 0
+
   func copyPixelBuffer() -> Unmanaged<CVPixelBuffer>? {
     guard let ptr = get_latest_pixel_buffer(viewId) else {
+      if LadybirdTexture.debugCopyCount < 5 {
+        LadybirdTexture.debugCopyCount += 1
+        print("[Ladybird][iOS] copyPixelBuffer view=\(viewId) -> nil (no buffer)")
+      }
       return nil
     }
     let buffer = Unmanaged<CVPixelBuffer>.fromOpaque(ptr).takeRetainedValue()
+    if LadybirdTexture.debugCopyCount < 5 {
+      LadybirdTexture.debugCopyCount += 1
+      let w = CVPixelBufferGetWidth(buffer)
+      let h = CVPixelBufferGetHeight(buffer)
+      let fmt = CVPixelBufferGetPixelFormatType(buffer)
+      print("[Ladybird][iOS] copyPixelBuffer view=\(viewId) -> \(w)x\(h) fmt=\(fmt)")
+    }
     return Unmanaged.passRetained(buffer)
   }
 }

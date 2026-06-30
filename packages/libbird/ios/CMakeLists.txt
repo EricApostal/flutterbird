@@ -1,12 +1,16 @@
 cmake_minimum_required(VERSION 3.25)
 
+set(VCPKG_INSTALLED_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../third_party/ladybird/vcpkg_installed" CACHE PATH "" FORCE)
 set(CMAKE_TOOLCHAIN_FILE "${CMAKE_CURRENT_SOURCE_DIR}/../third_party/ladybird/Build/vcpkg/scripts/buildsystems/vcpkg.cmake" CACHE PATH "")
-set(VCPKG_TARGET_TRIPLET "arm64-ios" CACHE STRING "")
-set(VCPKG_MANIFEST_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../third_party/ladybird" CACHE PATH "" FORCE)
-if (NOT DEFINED VCPKG_MANIFEST_INSTALL)
-    set(VCPKG_MANIFEST_INSTALL ON CACHE BOOL "" FORCE)
+if (CMAKE_OSX_SYSROOT MATCHES "[iI][pP]hone[sS]imulator")
+    set(VCPKG_TARGET_TRIPLET "arm64-ios-simulator" CACHE STRING "" FORCE)
+else()
+    set(VCPKG_TARGET_TRIPLET "arm64-ios" CACHE STRING "" FORCE)
 endif()
+set(VCPKG_MANIFEST_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../third_party/ladybird" CACHE PATH "" FORCE)
+set(VCPKG_MANIFEST_INSTALL ON CACHE BOOL "" FORCE)
 set(VCPKG_OVERLAY_PORTS "${CMAKE_CURRENT_SOURCE_DIR}/../third_party/ladybird/Meta/CMake/vcpkg/overlay-ports" CACHE STRING "")
+set(VCPKG_OVERLAY_TRIPLETS "${CMAKE_CURRENT_SOURCE_DIR}/vcpkg-overlay-triplets" CACHE STRING "")
 
 project(ladybird_ios LANGUAGES CXX)
 
@@ -32,6 +36,11 @@ set(LADYBIRD_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../third_party/ladybird")
 set(LADYBIRD_BINARY_DIR "${CMAKE_CURRENT_BINARY_DIR}/ladybird_build")
 
 set(CMAKE_SYSTEM_PROCESSOR "arm64")
+
+set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE BOTH)
+set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY BOTH)
+set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE BOTH)
+
 add_subdirectory("${LADYBIRD_DIR}" "${LADYBIRD_BINARY_DIR}")
 
 set(LADYBIRD_MIRRORED_GENERATED_FILES "")
@@ -130,10 +139,53 @@ target_link_libraries(engine PRIVATE
     "-framework IOSurface"
     "-framework Metal"
     "-framework Foundation"
-    "-framework BrowserEngineKit"
     "-framework CoreText"
     "-framework CoreGraphics"
 )
+
+# --- Single-process iOS ------------------------------------------------------------------
+# There is no BrowserEngineKit entitlement available to us, so WebContent/RequestServer/
+# ImageDecoder/Compositor/WebWorker no longer run as separate processes on iOS. Instead each
+# one runs on its own thread inside this same engine dylib (see
+# WebView::spawn_browser_engine_process in LibWebView/ProcessIOS.mm).
+#
+# Each service already builds a static library containing everything except its main.cpp
+# (webcontentservice, requestserverservice, ...), produced by the existing, untouched
+# Services/*/CMakeLists.txt. We link engine against those directly, and additionally compile
+# each service's main.cpp straight into engine, renaming its `ladybird_main` entry point per
+# service (via a per-source COMPILE_DEFINITIONS) so the five compiled-in mains don't collide.
+# LibWebView/ProcessIOS.mm declares and calls these renamed entry points by name.
+set(IOS_SINGLE_PROCESS_SERVICE_MAINS
+    "${LADYBIRD_DIR}/Services/WebContent/main.cpp"
+    "${LADYBIRD_DIR}/Services/RequestServer/main.cpp"
+    "${LADYBIRD_DIR}/Services/ImageDecoder/main.cpp"
+    "${LADYBIRD_DIR}/Services/Compositor/main.cpp"
+    "${LADYBIRD_DIR}/Services/WebWorker/main.cpp"
+)
+set_source_files_properties("${LADYBIRD_DIR}/Services/WebContent/main.cpp" PROPERTIES COMPILE_DEFINITIONS "ladybird_main=webcontent_service_main")
+set_source_files_properties("${LADYBIRD_DIR}/Services/RequestServer/main.cpp" PROPERTIES COMPILE_DEFINITIONS "ladybird_main=request_server_service_main")
+set_source_files_properties("${LADYBIRD_DIR}/Services/ImageDecoder/main.cpp" PROPERTIES COMPILE_DEFINITIONS "ladybird_main=image_decoder_service_main")
+set_source_files_properties("${LADYBIRD_DIR}/Services/Compositor/main.cpp" PROPERTIES COMPILE_DEFINITIONS "ladybird_main=compositor_service_main")
+set_source_files_properties("${LADYBIRD_DIR}/Services/WebWorker/main.cpp" PROPERTIES COMPILE_DEFINITIONS "ladybird_main=webworker_service_main")
+
+target_sources(engine PRIVATE
+    ${IOS_SINGLE_PROCESS_SERVICE_MAINS}
+    # apply_sandbox() definitions referenced by the mains above (all no-ops on iOS already).
+    # RequestServer's sandbox shim is already compiled into requestserverservice.
+    "${LADYBIRD_DIR}/Services/RendererSandboxMacOS.cpp"
+    "${LADYBIRD_DIR}/Services/ImageDecoder/SandboxMacOS.cpp"
+    "${LADYBIRD_DIR}/Services/Compositor/SandboxMacOS.cpp"
+)
+
+target_link_libraries(engine PRIVATE
+    webcontentservice
+    requestserverservice
+    imagedecoderservice
+    compositorservice
+    webworkerservice
+    LibSandbox
+)
+# -----------------------------------------------------------------------------------------
 
 set_target_properties(engine PROPERTIES
     CXX_STANDARD 23
