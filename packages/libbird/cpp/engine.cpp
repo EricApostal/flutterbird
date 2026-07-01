@@ -484,13 +484,18 @@ public:
       auto *surface = static_cast<IOSurfaceRef>(
           shared_image_buffer->iosurface_handle().core_foundation_pointer());
       if (surface) {
-        auto surface_width = static_cast<int>(IOSurfaceGetWidth(surface));
-        auto surface_height = static_cast<int>(IOSurfaceGetHeight(surface));
+        // Use the size Ladybird was actually asked to paint at (like the
+        // Android AHardwareBuffer path below), not the IOSurface's literal
+        // backing dimensions -- IOSurface allocations can be rounded up to
+        // padding/alignment boundaries, so its reported size doesn't always
+        // match the requested viewport.
+        auto bitmap_size =
+            m_client_state.front_bitmap.last_painted_size.to_type<int>();
+        auto surface_width = bitmap_size.width();
+        auto surface_height = bitmap_size.height();
         if (surface_width <= 0 || surface_height <= 0) {
-          auto bitmap_size =
-              m_client_state.front_bitmap.last_painted_size.to_type<int>();
-          surface_width = bitmap_size.width();
-          surface_height = bitmap_size.height();
+          surface_width = static_cast<int>(IOSurfaceGetWidth(surface));
+          surface_height = static_cast<int>(IOSurfaceGetHeight(surface));
         }
 
         if (mac_backend->on_iosurface_ready(surface, surface_width,
@@ -503,8 +508,6 @@ public:
             m_last_mac_frame_source = MacFrameSource::IOSurface;
           }
           if ((m_debug_paint_event_count % 30) == 1) {
-            auto const &bitmap_size =
-                m_client_state.front_bitmap.last_painted_size.to_type<int>();
             std::fprintf(
                 stderr,
                 "[Ladybird][engine] view=%d paint#=%llu source=IOSurface "
