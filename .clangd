@@ -7,9 +7,23 @@ CompileFlags:
 
 ---
 
-# Route 2: Your Flutter Plugin Files (engine.cpp, etc.)
-# Tells clangd to use Flutter's generated compile commands for your integration code
+# Route 2: Linux Flutter Plugin Glue (packages/libbird/linux/*)
+# Tells clangd to use Flutter's generated compile commands for the Linux
+# plugin glue (GTK-specific flags only available in the Flutter build tree).
 If:
-  PathMatch: .*/(linux|cpp|packages/libbird/linux)/.*
+  PathMatch: .*/packages/libbird/linux/.*
 CompileFlags:
   CompilationDatabase: build/linux/x64/debug
+
+---
+
+# Route 3: Shared Engine Source (packages/libbird/cpp/*, engine.cpp, platform/*)
+# This code is compiled the same way on every platform via the standalone
+# cmake configure in packages/libbird/cpp/build (see cpp/CMakeLists.txt,
+# which turns CMAKE_EXPORT_COMPILE_COMMANDS on itself). macOS gets this for
+# free from the podspec's before_compile script phase; on Linux you can
+# populate it once with `cmake -S packages/libbird/cpp -B packages/libbird/cpp/build`.
+If:
+  PathMatch: .*/packages/libbird/cpp/.*
+CompileFlags:
+  CompilationDatabase: packages/libbird/cpp/build

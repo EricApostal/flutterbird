@@ -68,7 +68,20 @@ current_revision="$(git -C "${LADYBIRD_DIR}" rev-parse HEAD)"
 needs_checkout=0
 
 if [[ "${current_revision}" != "${LADYBIRD_REVISION}" ]]; then
-  needs_checkout=1
+  # Treat the pin as a minimum baseline, not something to force-lock to
+  # exactly. If the checkout is clean and already at or ahead of the pinned
+  # revision on its current branch (i.e. the pin is an ancestor of HEAD),
+  # leave it alone -- this is what happens every time local development
+  # commits onto the tracked branch without also bumping LADYBIRD_REVISION,
+  # and forcibly detaching HEAD back to the stale pin on every subsequent
+  # build silently discarded that forward progress (nothing was ever lost --
+  # `git log --all`/reflog still had it -- but it looked and felt like local
+  # work kept getting reverted).
+  if [[ -z "${current_status}" ]] && git -C "${LADYBIRD_DIR}" merge-base --is-ancestor "${LADYBIRD_REVISION}" "${current_revision}" 2>/dev/null; then
+    needs_checkout=0
+  else
+    needs_checkout=1
+  fi
 fi
 
 # Some interrupted/partial checkouts can leave only .git metadata present.

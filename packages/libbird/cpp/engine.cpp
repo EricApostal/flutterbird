@@ -834,11 +834,10 @@ public:
     return {};
   }
   virtual Optional<ByteString>
-  ask_user_for_download_path(StringView suggestion) const override {
+  ask_user_for_download_path(ByteString const& file) const override {
     if (g_ask_user_for_download_path_callback) {
-      auto suggestion_string = suggestion.to_byte_string();
       char *result =
-          g_ask_user_for_download_path_callback(suggestion_string.characters());
+          g_ask_user_for_download_path_callback(file.characters());
       if (result) {
         ByteString path(result);
         free(result);

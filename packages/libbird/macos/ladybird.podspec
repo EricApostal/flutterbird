@@ -131,10 +131,31 @@ Pod::Spec.new do |s|
         # Helper processes (WebContent, RequestServer, ImageDecoder, etc.)
         for helper in "${BUNDLE_DIR}/binaries/"*; do
           [ -f "$helper" ] || continue
+          DEST_HELPER="${DEST_BIN_DIR}/$(basename "$helper")"
           cp -af "$helper" "${DEST_BIN_DIR}/"
-          chmod +w "${DEST_BIN_DIR}/$(basename "$helper")"
+          chmod +w "${DEST_HELPER}"
+          
+          # The following was added by claude. I am pretty sure it's not useful, and
+          # was a different bug with ladybird itself. However, this does work, so idk
+          # Ladybird's own build (Meta/CMake/lagom_install_options.cmake) bakes in
+          # a raw absolute rpath pointing at its vcpkg build-tree lib dir, so that
+          # running its binaries directly from the build tree works out of the
+          # box for upstream dev workflows. Once we copy these binaries into our
+          # own sandboxed app bundle, dyld still tries that raw dev-tree path
+          # first (it's listed before the rpath we add below), and the sandbox
+          # correctly denies reading outside the bundle -- killing the process
+          # before it ever falls through to the working, bundled copy. Strip any
+          # rpath pointing into the local checkout before adding the real one.
+          otool -l "${DEST_HELPER}" | awk '/cmd LC_RPATH/{getline; getline; print $2}' | while read -r existing_rpath; do
+            case "$existing_rpath" in
+              */third_party/ladybird/Build/*)
+                install_name_tool -delete_rpath "$existing_rpath" "${DEST_HELPER}" 2>/dev/null || true
+                ;;
+            esac
+          done
+
           install_name_tool -add_rpath "@executable_path/../Resources/ladybird_libs" \
-            "${DEST_BIN_DIR}/$(basename "$helper")" 2>/dev/null || true
+            "${DEST_HELPER}" 2>/dev/null || true
         done
 
         # Ladybird data resources (Base/res)
