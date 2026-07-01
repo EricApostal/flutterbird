@@ -1,6 +1,8 @@
 import Cocoa
 import CoreVideo
 import FlutterMacOS
+import IOSurface
+import Metal
 
 private let assumedPumpInterval = 1.0 / 144.0
 private let generationResetThreshold: UInt64 = 256
@@ -8,6 +10,15 @@ private let queueStallGenerationThreshold: UInt64 = 120
 
 @_silgen_name("get_latest_pixel_buffer")
 func get_latest_pixel_buffer(_ view_id: Int32) -> UnsafeMutableRawPointer?
+
+@_silgen_name("get_latest_iosurface")
+func get_latest_iosurface(_ view_id: Int32) -> UnsafeMutableRawPointer?
+
+@_silgen_name("get_last_painted_width")
+func get_last_painted_width(_ view_id: Int32) -> Int32
+
+@_silgen_name("get_last_painted_height")
+func get_last_painted_height(_ view_id: Int32) -> Int32
 
 @_silgen_name("tick_ladybird")
 func tick_ladybird()
@@ -21,6 +32,80 @@ func set_frame_callback(
   _ context: UnsafeMutableRawPointer?
 )
 
+private final class MetalIOSurfaceCropper {
+  static let shared = MetalIOSurfaceCropper()
+
+  private let device: MTLDevice?
+  private let queue: MTLCommandQueue?
+
+  private init() {
+    device = MTLCreateSystemDefaultDevice()
+    queue = device?.makeCommandQueue()
+  }
+
+  func crop(surface: IOSurface, width: Int, height: Int) -> CVPixelBuffer? {
+    guard let device = device, let queue = queue, width > 0, height > 0 else {
+      return nil
+    }
+
+    let surfaceWidth = IOSurfaceGetWidth(surface)
+    let surfaceHeight = IOSurfaceGetHeight(surface)
+    guard surfaceWidth > 0, surfaceHeight > 0 else {
+      return nil
+    }
+    let cropWidth = min(width, surfaceWidth)
+    let cropHeight = min(height, surfaceHeight)
+
+    let srcDescriptor = MTLTextureDescriptor.texture2DDescriptor(
+      pixelFormat: .bgra8Unorm, width: cropWidth, height: cropHeight, mipmapped: false)
+    srcDescriptor.usage = [.shaderRead]
+    guard
+      let srcTexture = device.makeTexture(
+        descriptor: srcDescriptor, iosurface: surface, plane: 0)
+    else {
+      return nil
+    }
+
+    var pixelBuffer: CVPixelBuffer?
+    let attributes: [String: Any] = [
+      kCVPixelBufferIOSurfacePropertiesKey as String: [:] as [String: Any],
+      kCVPixelBufferMetalCompatibilityKey as String: true,
+    ]
+    let createResult = CVPixelBufferCreate(
+      kCFAllocatorDefault, cropWidth, cropHeight, kCVPixelFormatType_32BGRA,
+      attributes as CFDictionary, &pixelBuffer)
+    guard createResult == kCVReturnSuccess, let pixelBuffer = pixelBuffer,
+      let dstSurface = CVPixelBufferGetIOSurface(pixelBuffer)?.takeUnretainedValue()
+    else {
+      return nil
+    }
+
+    let dstDescriptor = MTLTextureDescriptor.texture2DDescriptor(
+      pixelFormat: .bgra8Unorm, width: cropWidth, height: cropHeight, mipmapped: false)
+    dstDescriptor.usage = [.shaderWrite]
+    guard
+      let dstTexture = device.makeTexture(
+        descriptor: dstDescriptor, iosurface: dstSurface, plane: 0),
+      let commandBuffer = queue.makeCommandBuffer(),
+      let blit = commandBuffer.makeBlitCommandEncoder()
+    else {
+      return nil
+    }
+
+    blit.copy(
+      from: srcTexture, sourceSlice: 0, sourceLevel: 0,
+      sourceOrigin: MTLOrigin(x: 0, y: 0, z: 0),
+      sourceSize: MTLSize(width: cropWidth, height: cropHeight, depth: 1),
+      to: dstTexture, destinationSlice: 0, destinationLevel: 0,
+      destinationOrigin: MTLOrigin(x: 0, y: 0, z: 0))
+    blit.endEncoding()
+    commandBuffer.commit()
+    commandBuffer.waitUntilCompleted()
+
+    return pixelBuffer
+  }
+}
+
 class LadybirdTexture: NSObject, FlutterTexture {
   let viewId: Int32
 
@@ -29,6 +114,20 @@ class LadybirdTexture: NSObject, FlutterTexture {
   }
 
   func copyPixelBuffer() -> Unmanaged<CVPixelBuffer>? {
+    // Primary path: crop the IOSurface to last_painted_size via a GPU blit.
+    if let surfacePtr = get_latest_iosurface(viewId) {
+      let surface = Unmanaged<IOSurface>.fromOpaque(surfacePtr).takeRetainedValue()
+      let paintedWidth = Int(get_last_painted_width(viewId))
+      let paintedHeight = Int(get_last_painted_height(viewId))
+      if let cropped = MetalIOSurfaceCropper.shared.crop(
+        surface: surface, width: paintedWidth, height: paintedHeight)
+      {
+        return Unmanaged.passRetained(cropped)
+      }
+    }
+
+    // CPU bitmap fallback (used before the IOSurface path has a frame yet,
+    // or on the non-IOSurface rendering path).
     guard let ptr = get_latest_pixel_buffer(viewId) else {
       return nil
     }

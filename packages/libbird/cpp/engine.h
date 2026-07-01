@@ -81,6 +81,22 @@ LADYBIRD_API int get_iosurface_width(int view_id);
 
 LADYBIRD_API int get_iosurface_height(int view_id);
 
+// The size WebContent/Compositor actually last painted at, which can
+// briefly lag m_viewport_width/height (get_iosurface_width/height above)
+// while the backing store is padded mid-resize. On macOS/iOS the Flutter
+// plugin uses this to crop the (possibly padded) IOSurface down to the
+// real content size via a GPU texture-view + blit, the same way
+// UI/Gtk/WebContentView.cpp and UI/AppKit/Interface/LadybirdWebView.mm
+// both crop to this exact field.
+LADYBIRD_API int get_last_painted_width(int view_id);
+
+LADYBIRD_API int get_last_painted_height(int view_id);
+
+// Returns a retained IOSurfaceRef (as an opaque pointer -- caller must
+// CFRelease) of the latest frame on macOS/iOS, or null elsewhere / if none
+// is available yet.
+LADYBIRD_API void *get_latest_iosurface(int view_id);
+
 typedef void (*UrlChangeCallback)(const char *);
 typedef void (*TitleChangeCallback)(const char *);
 typedef void (*FaviconChangeCallback)(const uint8_t *, int, int);

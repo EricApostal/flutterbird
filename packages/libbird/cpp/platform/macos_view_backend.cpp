@@ -243,4 +243,12 @@ int MacOSViewBackend::height() const {
   return m_height;
 }
 
+IOSurfaceRef MacOSViewBackend::latest_surface() const {
+  std::lock_guard lock(m_mutex);
+  if (!m_surface)
+    return nullptr;
+  CFRetain(m_surface);
+  return m_surface;
+}
+
 #endif // __APPLE__
