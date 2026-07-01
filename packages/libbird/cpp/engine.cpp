@@ -72,8 +72,16 @@ struct RegisterMains {
     }
 } s_register_mains;
 #endif
-
-// IPC::encode for float and double are now provided by LibIPC/Encoder.cpp
+#ifndef __APPLE__
+namespace IPC {
+template <> ErrorOr<void> encode(Encoder &encoder, float const &value) {
+  return encoder.encode(AK::bit_cast<u32>(value));
+}
+template <> ErrorOr<void> encode(Encoder &encoder, double const &value) {
+  return encoder.encode(AK::bit_cast<u64>(value));
+}
+} // namespace IPC
+#endif
 
 int g_next_view_id = 1;
 int g_active_view_id = -1;
