@@ -41,6 +41,55 @@ set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE BOTH)
 set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY BOTH)
 set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE BOTH)
 
+# We never run `cmake --install` for the iOS build (artifacts are copied into the bundle via the
+# POST_BUILD custom command below instead), and on a real-device build Ladybird's own
+# UI/cmake/InstallRules.cmake fails configure because its install(TARGETS ${ladybird_helper_processes})
+# call has no BUNDLE DESTINATION, which Xcode's device toolchain requires for MACOSX_BUNDLE
+# executable targets (the simulator toolchain doesn't enforce this, which is why this only broke
+# device builds). Skip install-rule processing entirely so neither platform hits it.
+set(CMAKE_SKIP_INSTALL_RULES ON)
+
+# Apple prohibits runtime code generation/JIT on iOS for third-party apps (no dynamic codesigning
+# entitlement), so LibWasm's Cranelift-based WebAssembly JIT can never run there; its fault-recovery
+# signal handler also assumes Linux's mcontext layout in its non-macOS branch, which doesn't match
+# iOS's (identical to macOS's, since both are Darwin). Fall back to the interpreter-only stub path.
+set(ENABLE_CRANELIFT_JIT OFF CACHE BOOL "" FORCE)
+
+# LibJS's AsmInterpreter generates aarch64 assembly (asmint_aarch64.S) that uses the FJCVTZS
+# instruction (ARMv8.3-A's "jsconv" extension), which the default arm64-apple-ios target CPU
+# baseline doesn't enable (unlike macOS, where every Apple Silicon Mac supports it). Our
+# iphoneos-version-min is 17.4, whose minimum-supported hardware (A12+) all supports ARMv8.3-A,
+# so it's safe to just raise the assembler's target ISA to match.
+set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} -march=armv8.3-a" CACHE STRING "" FORCE)
+
+# __IOS__ is not a standard Apple SDK macro (unlike __APPLE__/__MACH__); AK/Platform.h uses it
+# to define AK_OS_IOS, which most of Ladybird's platform-conditional code (#if defined(AK_OS_IOS))
+# depends on to pick iOS-appropriate APIs over macOS-only ones (bootstrap.h, sys/disk.h,
+# mach_vm.h, IOSurface/IOSurface.h vs IOSurfaceRef.h, ...). Must be defined globally, before
+# add_subdirectory(LADYBIRD_DIR), so Ladybird's own libraries see it too -- not just our "engine"
+# target.
+add_compile_definitions(__IOS__=1)
+
+# Must run before add_subdirectory(LADYBIRD_DIR): CMake's find_package()-created IMPORTED
+# targets (OpenSSL::Crypto, OpenSSL::SSL) are only visible in the calling scope and in
+# subdirectories added afterward. Ladybird's own subdirectories (LibCrypto, LibTLS,
+# RequestServer, ...) link against these targets directly without calling find_package
+# themselves, so if this runs after add_subdirectory those targets are undefined for them.
+find_package(OpenSSL REQUIRED)
+
+# Also must run before add_subdirectory(LADYBIRD_DIR): the old-style include_directories()
+# command has the same scope-visibility rule as target_include_directories(), so Ladybird's own
+# libraries (e.g. AK, which #includes its own CMake-generated AK/Debug.h and AK/Backtrace.h out
+# of LADYBIRD_BINARY_DIR) need this in scope before their subdirectories are processed.
+include_directories(
+    "${CMAKE_CURRENT_BINARY_DIR}"
+    "${CMAKE_CURRENT_BINARY_DIR}/Libraries"
+    "${CMAKE_CURRENT_BINARY_DIR}/Services"
+    "${LADYBIRD_BINARY_DIR}"
+    "${LADYBIRD_BINARY_DIR}/Libraries"
+    "${LADYBIRD_BINARY_DIR}/Services"
+)
+
 add_subdirectory("${LADYBIRD_DIR}" "${LADYBIRD_BINARY_DIR}")
 
 set(LADYBIRD_MIRRORED_GENERATED_FILES "")
@@ -62,15 +111,6 @@ function(link_ladybird_generated_file relative_path)
     list(APPEND LADYBIRD_MIRRORED_GENERATED_FILES "${destination_path}")
     set(LADYBIRD_MIRRORED_GENERATED_FILES "${LADYBIRD_MIRRORED_GENERATED_FILES}" PARENT_SCOPE)
 endfunction()
-
-include_directories(
-    "${CMAKE_CURRENT_BINARY_DIR}"
-    "${CMAKE_CURRENT_BINARY_DIR}/Libraries"
-    "${CMAKE_CURRENT_BINARY_DIR}/Services"
-    "${LADYBIRD_BINARY_DIR}"
-    "${LADYBIRD_BINARY_DIR}/Libraries"
-    "${LADYBIRD_BINARY_DIR}/Services"
-)
 
 foreach(generated_file IN ITEMS
     "Libraries/LibWeb/WebGL/GLFunctions.h"
@@ -100,8 +140,6 @@ if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     target_compile_options(engine PRIVATE -Wno-unqualified-std-cast-call -Wno-user-defined-literals)
 endif()
 
-target_compile_definitions(engine PRIVATE __IOS__=1)
-
 target_include_directories(engine PRIVATE
     "${LADYBIRD_DIR}"
     "${LADYBIRD_DIR}/Libraries"
@@ -118,7 +156,6 @@ target_include_directories(engine PRIVATE
     "${LADYBIRD_BINARY_DIR}/Lagom/Services"
 )
 
-find_package(OpenSSL REQUIRED)
 target_link_libraries(engine PRIVATE
     AK
     LibCore

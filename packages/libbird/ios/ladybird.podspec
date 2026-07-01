@@ -87,7 +87,17 @@ Pod::Spec.new do |s|
         # vcpkg's cmake-get-vars for host-native tools (arm64-osx) and causes
         # them to be compiled against the simulator SDK instead of macOS.
         unset CFLAGS CXXFLAGS LDFLAGS CC CXX CPP SDKROOT IPHONEOS_DEPLOYMENT_TARGET
-        
+
+        # libvpx's Makefile recurses via `for t in libs; do make target=$t FILE.c.o; done`, which
+        # isn't integrated with GNU make's job server, so any meaningful `make -j<N>` (vcpkg passes
+        # VCPKG_MAX_CONCURRENCY straight through as the -j value) races those recursive sub-makes
+        # against each other and can fail to find vpx_config.h (reproduced at -j4; not fully
+        # reliable even at -j1, but far less likely to hit). This is triggered by any triplet that
+        # still builds libvpx (e.g. the arm64-osx-dynamic host-tool build during cross-compilation;
+        # arm64-ios itself no longer needs it, see vcpkg.json's ffmpeg "vpx" feature gate). This
+        # only slows the one-time vcpkg package builds, not the engine build itself.
+        export VCPKG_MAX_CONCURRENCY=1
+
         if [ "$PLATFORM" = "iphonesimulator" ]; then
             TRIPLET="arm64-ios-simulator"
         else
