@@ -20,3 +20,13 @@ void ViewBackend::fire_frame_ready(bool size_changed) {
   if (cb)
     cb(ctx);
 }
+
+void ViewBackend::fire_resize_callback() {
+  ResizeCallback resize = nullptr;
+  {
+    std::lock_guard lock(callback_mutex);
+    resize = resize_callback;
+  }
+  if (resize)
+    resize();
+}

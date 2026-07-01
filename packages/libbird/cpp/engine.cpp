@@ -34,6 +34,7 @@
 #include <LibCore/ResourceImplementationFile.h>
 #include <LibCore/System.h>
 #include <LibCore/ThreadEventQueue.h>
+#include <LibCore/Timer.h>
 #include <LibGfx/Bitmap.h>
 #include <LibGfx/SharedImageBuffer.h>
 #include <LibGfx/SystemTheme.h>
@@ -209,6 +210,10 @@ public:
   // Platform rendering backend (LinuxViewBackend / MacOSViewBackend).
   std::unique_ptr<ViewBackend> m_backend;
   uint64_t m_debug_paint_event_count{0};
+
+  // Debounce for finalizing a resize (see resize()): restarted on every
+  // resize() call, fires once resizing has actually settled.
+  RefPtr<Core::Timer> m_resize_finalize_timer;
   Optional<u64> m_display_id;
   double m_display_refresh_rate{kDefaultRefreshRate};
 
@@ -655,17 +660,50 @@ public:
   void resize(int width, int height) {
     std::fprintf(stderr, "[LibBird] resize: incoming %dx%d, m_zoom: %f\n",
                  width, height, m_zoom);
+    bool size_changed =
+        (width != m_viewport_width || height != m_viewport_height);
     m_viewport_width = width;
     m_viewport_height = height;
+    // Notify the host immediately, rather than waiting for a subsequent
+    // compositor frame to arrive and the backend's own frame-size
+    // bookkeeping to notice a difference (which can lag or be masked by
+    // surface padding). This guarantees the Dart side re-reads the new
+    // viewport size on every actual change.
+    if (size_changed)
+      m_backend->fire_resize_callback();
     auto size = Web::DevicePixelSize{width, height};
     sync_device_pixel_ratio();
     client().async_set_viewport(m_client_state.page_index, size,
                                 m_device_pixel_ratio, is_fullscreen());
     client().async_set_window_size(m_client_state.page_index, size);
+    // Pass Yes here (matching upstream's own ViewImplementation::handle_resize())
+    // so BackingStoreManager pads the backing store by +256px instead of
+    // reallocating on every single resize() call -- Flutter can call this
+    // several times in quick succession during e.g. a keyboard show/hide
+    // animation, and reallocating on every intermediate frame causes visible
+    // real-time shrinking/jitter as each transient size gets painted.
+    //
+    // Ladybird's own follow-up mechanism for shrinking the backing store back
+    // down (ContextState::schedule_backing_store_shrink) only fires 3 seconds
+    // after the last resize, which is far too slow to feel correct here. So
+    // we run our own much shorter debounce below and explicitly finalize
+    // (WindowResizingInProgress::No) once resizing has actually settled,
+    // instead of leaving the backing store padded (and therefore exposing
+    // stray/uninitialized content past the true viewport) for 3 full seconds.
+    auto context_id =
+        client().compositor_context_id_for_page(m_client_state.page_index);
     WebView::Application::the().update_compositor_viewport(
-        client().compositor_context_id_for_page(m_client_state.page_index),
-        viewport_size().to_type<int>(),
+        context_id, viewport_size().to_type<int>(),
         Web::Compositor::WindowResizingInProgress::Yes);
+
+    if (!m_resize_finalize_timer) {
+      m_resize_finalize_timer = Core::Timer::create_single_shot(150, [this] {
+        WebView::Application::the().update_compositor_viewport(
+            client().compositor_context_id_for_page(m_client_state.page_index),
+            viewport_size().to_type<int>());
+      });
+    }
+    m_resize_finalize_timer->restart(150);
   }
 
   void update_zoom_scale() {

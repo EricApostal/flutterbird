@@ -128,6 +128,14 @@ public:
   void *frame_callback_context{nullptr};
   ResizeCallback resize_callback{nullptr};
 
+  // Fires resize_callback immediately, independent of any compositor frame.
+  // FlutterViewImpl::resize() calls this synchronously whenever the
+  // requested viewport size actually changes, so the Dart side is notified
+  // to re-read the new size on every change -- not only when a subsequent
+  // frame happens to arrive and the backend's own frame-size bookkeeping
+  // (which can lag or be masked by surface padding) detects a difference.
+  void fire_resize_callback();
+
 protected:
   ViewBackend() = default;
 

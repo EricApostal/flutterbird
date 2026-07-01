@@ -5,17 +5,47 @@
 #include <algorithm>
 #include <cstring>
 
-static CVPixelBufferRef create_pixel_buffer_from_iosurface(IOSurfaceRef surface) {
+// CVPixelBufferCreateWithIOSurface() otherwise reports the IOSurface's literal
+// backing dimensions (which can be padded/aligned larger than what was actually
+// requested/painted) via CVPixelBufferGetWidth/Height -- and that's what Flutter's
+// external texture path reads to size what it renders, regardless of any size
+// bookkeeping done elsewhere. Passing kCVPixelBufferWidthKey/HeightKey explicitly
+// makes Core Video report (and crop to) the size Ladybird was actually asked to
+// paint at, instead of the surface's true/padded allocation size.
+static CVPixelBufferRef create_pixel_buffer_from_iosurface(IOSurfaceRef surface,
+                                                           int width,
+                                                           int height) {
   if (!surface)
     return nullptr;
 
-  const void *keys[] = {kCVPixelBufferMetalCompatibilityKey};
-  const void *values[] = {kCFBooleanTrue};
-  auto *attributes = CFDictionaryCreate(
-      kCFAllocatorDefault, keys, values, 1, &kCFTypeDictionaryKeyCallBacks,
+  auto surface_width = static_cast<int>(IOSurfaceGetWidth(surface));
+  auto surface_height = static_cast<int>(IOSurfaceGetHeight(surface));
+  bool use_explicit_size = width > 0 && height > 0 && width <= surface_width &&
+                           height <= surface_height;
+
+  CFMutableDictionaryRef attributes = CFDictionaryCreateMutable(
+      kCFAllocatorDefault, 0, &kCFTypeDictionaryKeyCallBacks,
       &kCFTypeDictionaryValueCallBacks);
   if (!attributes)
     return nullptr;
+
+  CFDictionarySetValue(attributes, kCVPixelBufferMetalCompatibilityKey,
+                       kCFBooleanTrue);
+
+  if (use_explicit_size) {
+    auto *width_number =
+        CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &width);
+    auto *height_number =
+        CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &height);
+    if (width_number)
+      CFDictionarySetValue(attributes, kCVPixelBufferWidthKey, width_number);
+    if (height_number)
+      CFDictionarySetValue(attributes, kCVPixelBufferHeightKey, height_number);
+    if (width_number)
+      CFRelease(width_number);
+    if (height_number)
+      CFRelease(height_number);
+  }
 
   CVPixelBufferRef pixel_buffer = nullptr;
   auto cv_result = CVPixelBufferCreateWithIOSurface(
@@ -94,8 +124,9 @@ bool MacOSViewBackend::on_iosurface_ready(IOSurfaceRef surface, int width,
     m_width = width;
     m_height = height;
 
-    if (surface != m_surface || !m_pixel_buffer) {
-      auto *new_pixel_buffer = create_pixel_buffer_from_iosurface(surface);
+    if (surface != m_surface || !m_pixel_buffer || size_changed) {
+      auto *new_pixel_buffer =
+          create_pixel_buffer_from_iosurface(surface, width, height);
       if (!new_pixel_buffer)
         return false;
 
