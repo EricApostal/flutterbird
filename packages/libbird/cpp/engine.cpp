@@ -206,6 +206,10 @@ public:
   int m_viewport_width{800};
   int m_viewport_height{600};
 
+  Gfx::IntSize last_painted_size() const {
+    return m_client_state.front_bitmap.last_painted_size.to_type<int>();
+  }
+
   // Platform rendering backend (LinuxViewBackend / MacOSViewBackend).
   std::unique_ptr<ViewBackend> m_backend;
   uint64_t m_debug_paint_event_count{0};
@@ -1217,6 +1221,32 @@ int get_iosurface_height(int view_id) {
   if (it == g_web_views.end())
     return 0;
   return it->second->m_viewport_height;
+}
+
+int get_last_painted_width(int view_id) {
+  auto it = g_web_views.find(view_id);
+  if (it == g_web_views.end())
+    return 0;
+  return it->second->last_painted_size().width();
+}
+
+int get_last_painted_height(int view_id) {
+  auto it = g_web_views.find(view_id);
+  if (it == g_web_views.end())
+    return 0;
+  return it->second->last_painted_size().height();
+}
+
+void *get_latest_iosurface(int view_id) {
+  auto it = g_web_views.find(view_id);
+  if (it == g_web_views.end())
+    return nullptr;
+#ifdef __APPLE__
+  auto *mac_backend = static_cast<MacOSViewBackend *>(it->second->m_backend.get());
+  return mac_backend->latest_surface();
+#else
+  return nullptr;
+#endif
 }
 
 void set_url_change_callback(int view_id, UrlChangeCallback callback) {
