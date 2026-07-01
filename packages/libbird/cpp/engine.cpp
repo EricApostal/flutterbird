@@ -488,16 +488,21 @@ public:
       auto *surface = static_cast<IOSurfaceRef>(
           shared_image_buffer->iosurface_handle().core_foundation_pointer());
       if (surface) {
-        // Match the Android AHardwareBuffer path (LadybirdPlugin.java's
-        // renderLatestFrame(), which crops to nativeGetSurfaceWidth/Height
-        // every frame regardless of the buffer's own dimensions): use the
-        // size Ladybird was actually *asked* to render at (the broadcast
-        // viewport, m_viewport_width/height), not last_painted_size or the
-        // IOSurface's own literal backing dimensions. This decouples what we
-        // report to Flutter entirely from the compositor's internal backing
-        // store / resize-padding timing -- there's nothing to race.
-        auto surface_width = m_viewport_width;
-        auto surface_height = m_viewport_height;
+        // Use last_painted_size -- the same value Dart sizes its box with
+        // (get_iosurface_width/height) and the same value the Swift plugin
+        // crops the IOSurface to (get_last_painted_width/height) -- not
+        // m_viewport_width/height. on_iosurface_ready() below uses this
+        // width/height to decide whether the surface has grown enough to
+        // accept as the new latest frame; m_viewport_width races ahead of
+        // what's actually been painted during a resize, so that check would
+        // keep rejecting newer surfaces in favor of a stale one whenever the
+        // target outpaces the real paint -- reporting last_painted_size
+        // keeps the accept-check in sync with what Swift will actually crop
+        // to, instead of one frame behind it.
+        auto const &painted_size =
+            m_client_state.front_bitmap.last_painted_size.to_type<int>();
+        auto surface_width = painted_size.width();
+        auto surface_height = painted_size.height();
         if (surface_width <= 0 || surface_height <= 0) {
           surface_width = static_cast<int>(IOSurfaceGetWidth(surface));
           surface_height = static_cast<int>(IOSurfaceGetHeight(surface));
@@ -513,8 +518,6 @@ public:
             m_last_mac_frame_source = MacFrameSource::IOSurface;
           }
           if ((m_debug_paint_event_count % 30) == 1) {
-            auto const &bitmap_size =
-                m_client_state.front_bitmap.last_painted_size.to_type<int>();
             std::fprintf(
                 stderr,
                 "[Ladybird][engine] view=%d paint#=%llu source=IOSurface "
@@ -522,8 +525,8 @@ public:
                 "m_zoom=%f\n",
                 m_view_id,
                 static_cast<unsigned long long>(m_debug_paint_event_count),
-                surface_width, surface_height, bitmap_size.width(),
-                bitmap_size.height(), m_viewport_width, m_viewport_height,
+                surface_width, surface_height, painted_size.width(),
+                painted_size.height(), m_viewport_width, m_viewport_height,
                 m_zoom);
           }
           return;
@@ -1213,14 +1216,21 @@ int get_iosurface_width(int view_id) {
   auto it = g_web_views.find(view_id);
   if (it == g_web_views.end())
     return 0;
-  return it->second->m_viewport_width;
+  // last_painted_size, not m_viewport_width -- Dart sizes its SizedBox to
+  // this value specifically so Flutter's Texture widget never has to
+  // stretch (see LadybirdView.build()). The Metal-cropped CVPixelBuffer
+  // handed to Flutter is sized to last_painted_size, which can briefly lag
+  // m_viewport_width during a resize; reporting the target here instead
+  // would size the box larger than the real texture content and Flutter
+  // would stretch it to fill the gap.
+  return it->second->last_painted_size().width();
 }
 
 int get_iosurface_height(int view_id) {
   auto it = g_web_views.find(view_id);
   if (it == g_web_views.end())
     return 0;
-  return it->second->m_viewport_height;
+  return it->second->last_painted_size().height();
 }
 
 int get_last_painted_width(int view_id) {
