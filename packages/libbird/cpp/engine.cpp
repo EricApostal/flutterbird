@@ -34,7 +34,6 @@
 #include <LibCore/ResourceImplementationFile.h>
 #include <LibCore/System.h>
 #include <LibCore/ThreadEventQueue.h>
-#include <LibCore/Timer.h>
 #include <LibGfx/Bitmap.h>
 #include <LibGfx/SharedImageBuffer.h>
 #include <LibGfx/SystemTheme.h>
@@ -210,10 +209,6 @@ public:
   // Platform rendering backend (LinuxViewBackend / MacOSViewBackend).
   std::unique_ptr<ViewBackend> m_backend;
   uint64_t m_debug_paint_event_count{0};
-
-  // Debounce for finalizing a resize (see resize()): restarted on every
-  // resize() call, fires once resizing has actually settled.
-  RefPtr<Core::Timer> m_resize_finalize_timer;
   Optional<u64> m_display_id;
   double m_display_refresh_rate{kDefaultRefreshRate};
 
@@ -489,15 +484,16 @@ public:
       auto *surface = static_cast<IOSurfaceRef>(
           shared_image_buffer->iosurface_handle().core_foundation_pointer());
       if (surface) {
-        // Use the size Ladybird was actually asked to paint at (like the
-        // Android AHardwareBuffer path below), not the IOSurface's literal
-        // backing dimensions -- IOSurface allocations can be rounded up to
-        // padding/alignment boundaries, so its reported size doesn't always
-        // match the requested viewport.
-        auto bitmap_size =
-            m_client_state.front_bitmap.last_painted_size.to_type<int>();
-        auto surface_width = bitmap_size.width();
-        auto surface_height = bitmap_size.height();
+        // Match the Android AHardwareBuffer path (LadybirdPlugin.java's
+        // renderLatestFrame(), which crops to nativeGetSurfaceWidth/Height
+        // every frame regardless of the buffer's own dimensions): use the
+        // size Ladybird was actually *asked* to render at (the broadcast
+        // viewport, m_viewport_width/height), not last_painted_size or the
+        // IOSurface's own literal backing dimensions. This decouples what we
+        // report to Flutter entirely from the compositor's internal backing
+        // store / resize-padding timing -- there's nothing to race.
+        auto surface_width = m_viewport_width;
+        auto surface_height = m_viewport_height;
         if (surface_width <= 0 || surface_height <= 0) {
           surface_width = static_cast<int>(IOSurfaceGetWidth(surface));
           surface_height = static_cast<int>(IOSurfaceGetHeight(surface));
@@ -513,6 +509,8 @@ public:
             m_last_mac_frame_source = MacFrameSource::IOSurface;
           }
           if ((m_debug_paint_event_count % 30) == 1) {
+            auto const &bitmap_size =
+                m_client_state.front_bitmap.last_painted_size.to_type<int>();
             std::fprintf(
                 stderr,
                 "[Ladybird][engine] view=%d paint#=%llu source=IOSurface "
@@ -683,27 +681,16 @@ public:
     // animation, and reallocating on every intermediate frame causes visible
     // real-time shrinking/jitter as each transient size gets painted.
     //
-    // Ladybird's own follow-up mechanism for shrinking the backing store back
-    // down (ContextState::schedule_backing_store_shrink) only fires 3 seconds
-    // after the last resize, which is far too slow to feel correct here. So
-    // we run our own much shorter debounce below and explicitly finalize
-    // (WindowResizingInProgress::No) once resizing has actually settled,
-    // instead of leaving the backing store padded (and therefore exposing
-    // stray/uninitialized content past the true viewport) for 3 full seconds.
-    auto context_id =
-        client().compositor_context_id_for_page(m_client_state.page_index);
+    // ContextState::schedule_backing_store_shrink (Services/Compositor) is
+    // the shared mechanism that shrinks it back down once resizing settles --
+    // shortened there from Ladybird's stock 3s to 150ms, since that one choke
+    // point also covers non-Flutter-driven resizes (e.g. handle_resize()
+    // called internally during a cross-site navigation process swap), which
+    // our own call here never sees.
     WebView::Application::the().update_compositor_viewport(
-        context_id, viewport_size().to_type<int>(),
+        client().compositor_context_id_for_page(m_client_state.page_index),
+        viewport_size().to_type<int>(),
         Web::Compositor::WindowResizingInProgress::Yes);
-
-    if (!m_resize_finalize_timer) {
-      m_resize_finalize_timer = Core::Timer::create_single_shot(150, [this] {
-        WebView::Application::the().update_compositor_viewport(
-            client().compositor_context_id_for_page(m_client_state.page_index),
-            viewport_size().to_type<int>());
-      });
-    }
-    m_resize_finalize_timer->restart(150);
   }
 
   void update_zoom_scale() {

@@ -24,6 +24,15 @@ class _LadybirdViewState extends State<LadybirdView>
   int? _textureId;
   final FocusNode _focusNode = FocusNode();
   Timer? _frameDiagnosticsTimer;
+  Timer? _resizeDebounceTimer;
+  // Browser reflow/repaint isn't cheap enough to track a live layout
+  // animation (e.g. the keyboard show/hide transition), which calls
+  // _onSizeChanged on every frame. Sending every intermediate size to
+  // native means the composited content always lags behind whatever the
+  // "current" requested size is, so it visibly looks wrong until the
+  // animation stops and the engine finally catches up. Debounce so native
+  // only sees the size once it has actually settled.
+  static const _resizeDebounceDuration = Duration(milliseconds: 120);
   bool _frameDiagnosticsPollInFlight = false;
   final ValueNotifier<_FrameDiagnosticsSnapshot?> _frameDiagnosticsNotifier =
       ValueNotifier(null);
@@ -127,13 +136,16 @@ class _LadybirdViewState extends State<LadybirdView>
       "[LibBird] _onSizeChanged: flutterSize: $size, density: $density, physicalSize: $physicalSize",
     );
 
-    widget.controller.updateDevicePixelRatio(density);
-    widget.controller.resizeWindow(physicalSize);
+    _resizeDebounceTimer?.cancel();
+    _resizeDebounceTimer = Timer(_resizeDebounceDuration, () {
+      widget.controller.updateDevicePixelRatio(density);
+      widget.controller.resizeWindow(physicalSize);
 
-    if (widget.controller.hasStartedNavigation &&
-        widget.controller.urlNotifier.value.trim().isEmpty) {
-      widget.controller.syncUrlFromEngine();
-    }
+      if (widget.controller.hasStartedNavigation &&
+          widget.controller.urlNotifier.value.trim().isEmpty) {
+        widget.controller.syncUrlFromEngine();
+      }
+    });
 
     if (!widget.controller.hasNavigatedInitial) {
       widget.controller.hasNavigatedInitial = true;
@@ -430,6 +442,8 @@ class _LadybirdViewState extends State<LadybirdView>
     _focusNode.dispose();
     _stopFrameDiagnostics();
     _frameDiagnosticsNotifier.dispose();
+    _resizeDebounceTimer?.cancel();
+    _resizeDebounceTimer = null;
 
     if (_textureId != null) {
       widget.controller.unregisterTexture(_textureId!);
