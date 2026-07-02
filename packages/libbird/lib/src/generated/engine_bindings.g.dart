@@ -19,6 +19,41 @@ class LadybirdBindings {
     ffi.Pointer<T> Function<T extends ffi.NativeType>(String symbolName) lookup,
   ) : _lookup = lookup;
 
+  void configure_android_runtime(
+    ffi.Pointer<ffi.Char> resource_root,
+    ffi.Pointer<ffi.Char> user_dir,
+    ffi.Pointer<ffi.Char> native_library_dir,
+    ffi.Pointer<ffi.Char> certificates_path,
+  ) {
+    return _configure_android_runtime(
+      resource_root,
+      user_dir,
+      native_library_dir,
+      certificates_path,
+    );
+  }
+
+  late final _configure_android_runtimePtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.Void Function(
+            ffi.Pointer<ffi.Char>,
+            ffi.Pointer<ffi.Char>,
+            ffi.Pointer<ffi.Char>,
+            ffi.Pointer<ffi.Char>,
+          )
+        >
+      >('configure_android_runtime');
+  late final _configure_android_runtime = _configure_android_runtimePtr
+      .asFunction<
+        void Function(
+          ffi.Pointer<ffi.Char>,
+          ffi.Pointer<ffi.Char>,
+          ffi.Pointer<ffi.Char>,
+          ffi.Pointer<ffi.Char>,
+        )
+      >();
+
   void init_ladybird() {
     return _init_ladybird();
   }
@@ -96,6 +131,17 @@ class LadybirdBindings {
           ffi.Pointer<ffi.Int>,
         )
       >();
+
+  ffi.Pointer<ffi.Void> get_android_hardware_buffer(int view_id) {
+    return _get_android_hardware_buffer(view_id);
+  }
+
+  late final _get_android_hardware_bufferPtr =
+      _lookup<ffi.NativeFunction<ffi.Pointer<ffi.Void> Function(ffi.Int)>>(
+        'get_android_hardware_buffer',
+      );
+  late final _get_android_hardware_buffer = _get_android_hardware_bufferPtr
+      .asFunction<ffi.Pointer<ffi.Void> Function(int)>();
 
   int get_frame_generation(int view_id) {
     return _get_frame_generation(view_id);
@@ -407,6 +453,23 @@ class LadybirdBindings {
   late final _set_new_web_view_callback = _set_new_web_view_callbackPtr
       .asFunction<void Function(int, NewWebViewCallback)>();
 
+  void set_input_caret_rect_change_callback(
+    int view_id,
+    InputCaretRectChangeCallback callback,
+  ) {
+    return _set_input_caret_rect_change_callback(view_id, callback);
+  }
+
+  late final _set_input_caret_rect_change_callbackPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.Void Function(ffi.Int, InputCaretRectChangeCallback)
+        >
+      >('set_input_caret_rect_change_callback');
+  late final _set_input_caret_rect_change_callback =
+      _set_input_caret_rect_change_callbackPtr
+          .asFunction<void Function(int, InputCaretRectChangeCallback)>();
+
   bool activate_context_menu_action(int view_id, int action_token) {
     return _activate_context_menu_action(view_id, action_token);
   }
@@ -426,6 +489,43 @@ class LadybirdBindings {
       _lookup<ffi.NativeFunction<ffi.Bool Function(ffi.Int)>>('is_tab_loading');
   late final _is_tab_loading = _is_tab_loadingPtr
       .asFunction<bool Function(int)>(isLeaf: true);
+
+  void commit_text_from_input_method(int view_id, ffi.Pointer<ffi.Char> text) {
+    return _commit_text_from_input_method(view_id, text);
+  }
+
+  late final _commit_text_from_input_methodPtr =
+      _lookup<
+        ffi.NativeFunction<ffi.Void Function(ffi.Int, ffi.Pointer<ffi.Char>)>
+      >('commit_text_from_input_method');
+  late final _commit_text_from_input_method = _commit_text_from_input_methodPtr
+      .asFunction<void Function(int, ffi.Pointer<ffi.Char>)>();
+
+  void set_marked_text_from_input_method(
+    int view_id,
+    ffi.Pointer<ffi.Char> text,
+  ) {
+    return _set_marked_text_from_input_method(view_id, text);
+  }
+
+  late final _set_marked_text_from_input_methodPtr =
+      _lookup<
+        ffi.NativeFunction<ffi.Void Function(ffi.Int, ffi.Pointer<ffi.Char>)>
+      >('set_marked_text_from_input_method');
+  late final _set_marked_text_from_input_method =
+      _set_marked_text_from_input_methodPtr
+          .asFunction<void Function(int, ffi.Pointer<ffi.Char>)>();
+
+  void unmark_text_from_input_method(int view_id) {
+    return _unmark_text_from_input_method(view_id);
+  }
+
+  late final _unmark_text_from_input_methodPtr =
+      _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Int)>>(
+        'unmark_text_from_input_method',
+      );
+  late final _unmark_text_from_input_method = _unmark_text_from_input_methodPtr
+      .asFunction<void Function(int)>();
 
   void tick_ladybird() {
     return _tick_ladybird();
@@ -850,6 +950,26 @@ typedef NewWebViewCallbackFunction =
     ffi.Void Function(ffi.Int new_view_id, ffi.Bool activate_tab);
 typedef DartNewWebViewCallbackFunction =
     void Function(int new_view_id, bool activate_tab);
+typedef InputCaretRectChangeCallback =
+    ffi.Pointer<ffi.NativeFunction<InputCaretRectChangeCallbackFunction>>;
+typedef InputCaretRectChangeCallbackFunction =
+    ffi.Void Function(
+      ffi.Int view_id,
+      ffi.Bool has_rect,
+      ffi.Int x,
+      ffi.Int y,
+      ffi.Int width,
+      ffi.Int height,
+    );
+typedef DartInputCaretRectChangeCallbackFunction =
+    void Function(
+      int view_id,
+      bool has_rect,
+      int x,
+      int y,
+      int width,
+      int height,
+    );
 typedef AskUserForDownloadPathCallback =
     ffi.Pointer<ffi.NativeFunction<AskUserForDownloadPathCallbackFunction>>;
 typedef AskUserForDownloadPathCallbackFunction =

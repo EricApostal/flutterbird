@@ -239,6 +239,7 @@ public:
   CursorChangeCallback m_cursor_change_callback = nullptr;
   ContextMenuRequestCallback m_context_menu_request_callback = nullptr;
   NewWebViewCallback m_new_web_view_callback = nullptr;
+  InputCaretRectChangeCallback m_input_caret_rect_change_callback = nullptr;
   bool m_is_loading{false};
 
   std::mutex m_context_menu_mutex;
@@ -623,6 +624,20 @@ public:
       if (m_cursor_change_callback)
         m_cursor_change_callback(to_cursor_type_for_flutter(cursor));
     };
+
+    on_input_caret_rect_change =
+        [this](Optional<Web::DevicePixelRect> const &rect) {
+          std::lock_guard lock(m_info_mutex);
+          if (!m_input_caret_rect_change_callback)
+            return;
+          if (rect.has_value()) {
+            m_input_caret_rect_change_callback(
+                m_view_id, true, rect->x().value(), rect->y().value(),
+                rect->width().value(), rect->height().value());
+          } else {
+            m_input_caret_rect_change_callback(m_view_id, false, 0, 0, 0, 0);
+          }
+        };
 
     on_new_web_view = [this](Web::HTML::ActivateTab activate_tab,
                              Web::HTML::WebViewHints,
@@ -1412,6 +1427,38 @@ void set_new_web_view_callback(int view_id, NewWebViewCallback callback) {
     std::lock_guard lock(it->second->m_info_mutex);
     it->second->m_new_web_view_callback = callback;
   }
+}
+
+void set_input_caret_rect_change_callback(
+    int view_id, InputCaretRectChangeCallback callback) {
+  auto it = g_web_views.find(view_id);
+  if (it != g_web_views.end()) {
+    std::lock_guard lock(it->second->m_info_mutex);
+    it->second->m_input_caret_rect_change_callback = callback;
+  }
+}
+
+void commit_text_from_input_method(int view_id, const char *text) {
+  auto it = g_web_views.find(view_id);
+  if (it == g_web_views.end() || !text)
+    return;
+  it->second->commit_text_from_input_method(
+      Utf16String::from_utf8(StringView{text, strlen(text)}));
+}
+
+void set_marked_text_from_input_method(int view_id, const char *text) {
+  auto it = g_web_views.find(view_id);
+  if (it == g_web_views.end() || !text)
+    return;
+  it->second->set_marked_text_from_input_method(
+      Utf16String::from_utf8(StringView{text, strlen(text)}));
+}
+
+void unmark_text_from_input_method(int view_id) {
+  auto it = g_web_views.find(view_id);
+  if (it == g_web_views.end())
+    return;
+  it->second->unmark_text_from_input_method();
 }
 
 bool activate_context_menu_action(int view_id, int action_token) {

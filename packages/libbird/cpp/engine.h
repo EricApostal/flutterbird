@@ -90,6 +90,8 @@ typedef void (*LoadingStateChangeCallback)(bool is_loading);
 typedef void (*CursorChangeCallback)(int cursor_type);
 typedef void (*ContextMenuRequestCallback)(int view_id, char *menu_json);
 typedef void (*NewWebViewCallback)(int new_view_id, bool activate_tab);
+typedef void (*InputCaretRectChangeCallback)(int view_id, bool has_rect, int x,
+                                             int y, int width, int height);
 
 LADYBIRD_API void set_url_change_callback(int view_id,
                                           UrlChangeCallback callback);
@@ -109,8 +111,21 @@ LADYBIRD_API void set_context_menu_request_callback(
   int view_id, ContextMenuRequestCallback callback);
 LADYBIRD_API void set_new_web_view_callback(int view_id,
                                             NewWebViewCallback callback);
+LADYBIRD_API void
+set_input_caret_rect_change_callback(int view_id,
+                                     InputCaretRectChangeCallback callback);
 LADYBIRD_API bool activate_context_menu_action(int view_id, int action_token);
 LADYBIRD_API bool is_tab_loading(int view_id);
+
+// Feeds committed/composed text from a platform input method (e.g. a Flutter
+// soft keyboard IME) into the currently-focused editable element.
+LADYBIRD_API void commit_text_from_input_method(int view_id, const char *text);
+// Sets in-progress (preedit/marked) composition text, replacing any previous
+// marked text. Used for predictive/composed input methods (e.g. Pinyin).
+LADYBIRD_API void set_marked_text_from_input_method(int view_id,
+                                                     const char *text);
+// Finalizes (commits in place) any current marked text.
+LADYBIRD_API void unmark_text_from_input_method(int view_id);
 
 LADYBIRD_API void tick_ladybird();
 

@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/physics.dart'; // Added for FrictionSimulation
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:ladybird/ladybird.dart';
@@ -19,10 +18,23 @@ class LadybirdView extends StatefulWidget {
   State<LadybirdView> createState() => _LadybirdViewState();
 }
 
+// A single zero-width sentinel character kept in the IME's local editing
+// buffer at all times, so a platform soft keyboard always has "something" to
+// delete on backspace. Without it, backspace on an empty buffer is silently
+// swallowed by the platform IME (a well-known Flutter/iOS/Android limitation)
+// instead of being reported to us as a deletion delta -- which would make
+// backspace stop working entirely as soon as the local buffer was flushed.
+const TextEditingValue _kBaselineEditingValue = TextEditingValue(
+  text: '\u200B',
+  selection: TextSelection.collapsed(offset: 1),
+);
+
 class _LadybirdViewState extends State<LadybirdView>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, TextInputClient, DeltaTextInputClient {
   int? _textureId;
   final FocusNode _focusNode = FocusNode();
+  TextInputConnection? _textInputConnection;
+  TextEditingValue _shadowEditingValue = _kBaselineEditingValue;
   Timer? _frameDiagnosticsTimer;
   bool _frameDiagnosticsPollInFlight = false;
   final ValueNotifier<_FrameDiagnosticsSnapshot?> _frameDiagnosticsNotifier =
@@ -42,8 +54,9 @@ class _LadybirdViewState extends State<LadybirdView>
   double _lastSimX = 0;
   double _lastSimY = 0;
 
-  bool get _showFrameDiagnostics =>
-      defaultTargetPlatform == TargetPlatform.android;
+  // bool get _showFrameDiagnostics =>
+  //     defaultTargetPlatform == TargetPlatform.android;
+  bool get _showFrameDiagnostics => false;
 
   void _onNativeResize() {
     if (!mounted) return;
@@ -52,15 +65,27 @@ class _LadybirdViewState extends State<LadybirdView>
 
   void _onLoadingStateChanged() {
     if (!mounted) return;
+    if (widget.controller.isLoadingNotifier.value) {
+      // A real navigation just started loading a new document -- close the
+      // soft keyboard now rather than waiting for the engine to report the
+      // old focused element as gone. SPA route changes via the History API
+      // don't flip isLoadingNotifier (no document is actually reloaded), so
+      // a persistently-focused search field across client-side routes is
+      // left alone; only genuine navigations (typed URL, submitted search,
+      // clicked link, reload) dismiss the keyboard.
+      _detachTextInputConnection();
+    }
   }
 
   void _attachControllerListeners(LadybirdController controller) {
     controller.addResizeListener(_onNativeResize);
     controller.isLoadingNotifier.addListener(_onLoadingStateChanged);
     controller.mouseCursorNotifier.addListener(_onCursorChanged);
+    controller.inputCaretRectNotifier.addListener(_onInputCaretRectChanged);
   }
 
   void _detachControllerListeners(LadybirdController controller) {
+    controller.inputCaretRectNotifier.removeListener(_onInputCaretRectChanged);
     controller.mouseCursorNotifier.removeListener(_onCursorChanged);
     controller.isLoadingNotifier.removeListener(_onLoadingStateChanged);
     controller.removeResizeListener(_onNativeResize);
@@ -70,6 +95,192 @@ class _LadybirdViewState extends State<LadybirdView>
     if (mounted) {
       setState(() {});
     }
+  }
+
+  // Attaches/detaches (and shows/hides) a platform soft-keyboard connection
+  // in lockstep with whether ladybird reports an editable element as focused
+  // -- see LadybirdController.inputCaretRectNotifier and
+  // Web::PageClient::page_did_change_focused_editable_element on the engine
+  // side, which is what drives this notifier.
+  void _onInputCaretRectChanged() {
+    if (!mounted) return;
+
+    final rect = widget.controller.inputCaretRectNotifier.value;
+    if (rect == null) {
+      _detachTextInputConnection();
+      return;
+    }
+
+    _ensureTextInputConnectionAttached();
+
+    final density = MediaQuery.devicePixelRatioOf(context);
+    _textInputConnection?.setCaretRect(
+      Rect.fromLTWH(
+        rect.left / density,
+        rect.top / density,
+        rect.width / density,
+        rect.height / density,
+      ),
+    );
+  }
+
+  void _ensureTextInputConnectionAttached() {
+    if (_textInputConnection != null && _textInputConnection!.attached) {
+      _textInputConnection!.show();
+      return;
+    }
+
+    _shadowEditingValue = _kBaselineEditingValue;
+    _textInputConnection = TextInput.attach(
+      this,
+      const TextInputConfiguration(
+        inputType: TextInputType.text,
+        enableDeltaModel: true,
+        autocorrect: true,
+        enableSuggestions: true,
+        inputAction: TextInputAction.done,
+      ),
+    );
+    _textInputConnection!.setEditingState(_shadowEditingValue);
+    _textInputConnection!.show();
+  }
+
+  void _detachTextInputConnection() {
+    if (_textInputConnection == null) return;
+    _textInputConnection!.close();
+    _textInputConnection = null;
+    _shadowEditingValue = _kBaselineEditingValue;
+  }
+
+  void _applyTextEditingDelta(TextEditingDelta delta) {
+    final newValue = delta.apply(_shadowEditingValue);
+
+    if (delta is TextEditingDeltaNonTextUpdate) {
+      _shadowEditingValue = newValue;
+      return;
+    }
+
+    final isComposing =
+        newValue.composing.isValid && !newValue.composing.isCollapsed;
+    if (isComposing) {
+      // Mid-composition (e.g. Pinyin/predictive underlined text): preview
+      // the composing text without committing it to the page yet.
+      final composingText = newValue.composing.textInside(newValue.text);
+      widget.controller.setMarkedTextFromInputMethod(composingText);
+      _shadowEditingValue = newValue;
+      return;
+    }
+
+    if (delta is TextEditingDeltaInsertion) {
+      widget.controller.commitTextFromInputMethod(delta.textInserted);
+    } else if (delta is TextEditingDeltaReplacement) {
+      // commit_text_from_input_method replaces any in-progress marked text
+      // on the real focused element (see the engine-side IME contract), so
+      // this correctly finalizes a composition regardless of what our local
+      // shadow buffer's replacedRange says.
+      widget.controller.commitTextFromInputMethod(delta.replacementText);
+    } else if (delta is TextEditingDeltaDeletion) {
+      final deletedLength = delta.deletedRange.end - delta.deletedRange.start;
+      _sendBackspaces(deletedLength);
+    }
+
+    // Reset the local buffer back to a single sentinel character so the next
+    // backspace always has something to delete locally (see
+    // _kBaselineEditingValue) instead of being silently swallowed.
+    _shadowEditingValue = _kBaselineEditingValue;
+    _textInputConnection?.setEditingState(_shadowEditingValue);
+  }
+
+  void _sendBackspaces(int count) {
+    if (count <= 0) return;
+    final keycode = getLadybirdKeyCode(LogicalKeyboardKey.backspace);
+    final modifiers = getModifiersForEvent(
+      HardwareKeyboard.instance.logicalKeysPressed,
+    );
+    for (var i = 0; i < count; i++) {
+      widget.controller.dispatchKeyEvent(
+        type: 0,
+        keycode: keycode,
+        modifiers: modifiers,
+        codePoint: 0,
+        repeat: false,
+      );
+      widget.controller.dispatchKeyEvent(
+        type: 1,
+        keycode: keycode,
+        modifiers: modifiers,
+        codePoint: 0,
+        repeat: false,
+      );
+    }
+  }
+
+  @override
+  TextEditingValue? get currentTextEditingValue => _shadowEditingValue;
+
+  @override
+  AutofillScope? get currentAutofillScope => null;
+
+  @override
+  void updateEditingValue(TextEditingValue value) {
+    // Only reached when the platform doesn't support the delta model.
+    // Treat the whole value as replacing our local buffer in one shot.
+    updateEditingValueWithDeltas([
+      TextEditingDeltaReplacement(
+        oldText: _shadowEditingValue.text,
+        replacementText: value.text,
+        replacedRange: TextRange(
+          start: 0,
+          end: _shadowEditingValue.text.length,
+        ),
+        selection: value.selection,
+        composing: value.composing,
+      ),
+    ]);
+  }
+
+  @override
+  void updateEditingValueWithDeltas(List<TextEditingDelta> textEditingDeltas) {
+    for (final delta in textEditingDeltas) {
+      _applyTextEditingDelta(delta);
+    }
+  }
+
+  @override
+  void performAction(TextInputAction action) {
+    final keycode = getLadybirdKeyCode(LogicalKeyboardKey.enter);
+    final modifiers = getModifiersForEvent(
+      HardwareKeyboard.instance.logicalKeysPressed,
+    );
+    widget.controller.dispatchKeyEvent(
+      type: 0,
+      keycode: keycode,
+      modifiers: modifiers,
+      codePoint: 0x0D,
+      repeat: false,
+    );
+    widget.controller.dispatchKeyEvent(
+      type: 1,
+      keycode: keycode,
+      modifiers: modifiers,
+      codePoint: 0x0D,
+      repeat: false,
+    );
+  }
+
+  @override
+  void performPrivateCommand(String action, Map<String, dynamic> data) {}
+
+  @override
+  void updateFloatingCursor(RawFloatingCursorPoint point) {}
+
+  @override
+  void showAutocorrectionPromptRect(int start, int end) {}
+
+  @override
+  void connectionClosed() {
+    _textInputConnection = null;
+    _shadowEditingValue = _kBaselineEditingValue;
   }
 
   @override
@@ -86,6 +297,7 @@ class _LadybirdViewState extends State<LadybirdView>
     super.didUpdateWidget(oldWidget);
     if (oldWidget.controller != widget.controller) {
       _detachControllerListeners(oldWidget.controller);
+      _detachTextInputConnection();
 
       if (_textureId != null) {
         oldWidget.controller.unregisterTexture(_textureId!);
@@ -124,18 +336,10 @@ class _LadybirdViewState extends State<LadybirdView>
     if (size.width <= 0 || size.height <= 0) return;
     final physicalSize = Size(size.width * density, size.height * density);
 
-    debugPrint(
-      "[LibBird] _onSizeChanged: flutterSize: $size, density: $density, physicalSize: $physicalSize",
-    );
+    // debugPrint(
+    //   "[LibBird] _onSizeChanged: flutterSize: $size, density: $density, physicalSize: $physicalSize",
+    // );
 
-    // Forward every size change to native immediately -- Qt/AppKit/GTK/
-    // Android all call handle_resize() synchronously on every resize
-    // event with no debounce. A debounce here cancels and restarts on
-    // every frame during a continuous drag (which fires faster than any
-    // debounce window), so native never sees an intermediate size at all
-    // until the drag stops -- the resize() call is what actually tells
-    // WebContent to repaint at the new size, so no debounce means no
-    // repaint during the drag.
     widget.controller.updateDevicePixelRatio(density);
     widget.controller.resizeWindow(physicalSize);
 
@@ -452,6 +656,7 @@ class _LadybirdViewState extends State<LadybirdView>
   @override
   void dispose() {
     _detachControllerListeners(widget.controller);
+    _detachTextInputConnection();
     _momentumTicker?.dispose();
     _focusNode.dispose();
     _stopFrameDiagnostics();
@@ -534,9 +739,9 @@ class _LadybirdViewState extends State<LadybirdView>
           final paddedWidth = widget.controller.getSurfaceWidth() / density;
           final paddedHeight = widget.controller.getSurfaceHeight() / density;
 
-          debugPrint(
-            "[LibBird] Window.build: constraints=$constraints, density=$density, paddedWidth=$paddedWidth, paddedHeight=$paddedHeight, surfaceWidth=${widget.controller.getSurfaceWidth()}",
-          );
+          // debugPrint(
+          //   "[LibBird] Window.build: constraints=$constraints, density=$density, paddedWidth=$paddedWidth, paddedHeight=$paddedHeight, surfaceWidth=${widget.controller.getSurfaceWidth()}",
+          // );
 
           return ClipRect(
             child: OverflowBox(

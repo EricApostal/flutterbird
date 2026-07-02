@@ -50,6 +50,10 @@ class LadybirdController {
   _contextMenuRequestCallback;
   late final ffi.NativeCallable<ffi.Void Function(ffi.Int, ffi.Bool)>
   _newWebViewCallback;
+  late final ffi.NativeCallable<
+    ffi.Void Function(ffi.Int, ffi.Bool, ffi.Int, ffi.Int, ffi.Int, ffi.Int)
+  >
+  _inputCaretRectChangeCallback;
 
   static ffi.NativeCallable<DisplayDownloadConfirmationDialogCallbackFunction>?
   _displayDownloadConfirmationDialogCallback;
@@ -75,6 +79,10 @@ class LadybirdController {
   final ValueNotifier<MouseCursor> mouseCursorNotifier = ValueNotifier(
     SystemMouseCursors.basic,
   );
+  // The device-pixel caret rect of the currently-focused editable element, or
+  // null when no editable element is focused. Embedders (LadybirdView) use the
+  // null <-> non-null transition to attach/detach a platform soft keyboard.
+  final ValueNotifier<ui.Rect?> inputCaretRectNotifier = ValueNotifier(null);
 
   int get viewId => _viewId;
 
@@ -209,6 +217,22 @@ class LadybirdController {
       _newWebViewCallback.nativeFunction,
     );
 
+    _inputCaretRectChangeCallback =
+        ffi.NativeCallable<
+          ffi.Void Function(
+            ffi.Int,
+            ffi.Bool,
+            ffi.Int,
+            ffi.Int,
+            ffi.Int,
+            ffi.Int,
+          )
+        >.listener(_onInputCaretRectChange);
+    _bindings.set_input_caret_rect_change_callback(
+      _viewId,
+      _inputCaretRectChangeCallback.nativeFunction,
+    );
+
     if (existingViewId != null) {
       syncUrlFromEngine();
     }
@@ -318,6 +342,25 @@ class LadybirdController {
   void _onNewWebView(int newViewId, bool activateTab) {
     if (newViewId <= 0) return;
     onNewWebView?.call(newViewId, activateTab);
+  }
+
+  void _onInputCaretRectChange(
+    int viewId,
+    bool hasRect,
+    int x,
+    int y,
+    int width,
+    int height,
+  ) {
+    if (viewId != _viewId) return;
+    inputCaretRectNotifier.value = hasRect
+        ? ui.Rect.fromLTWH(
+            x.toDouble(),
+            y.toDouble(),
+            width.toDouble(),
+            height.toDouble(),
+          )
+        : null;
   }
 
   void syncUrlFromEngine() {
@@ -473,6 +516,33 @@ class LadybirdController {
     _bindings.paste_from_clipboard(_viewId);
   }
 
+  // Commits text from a platform input method (e.g. a Flutter soft keyboard)
+  // into the currently-focused editable element, replacing any marked text.
+  void commitTextFromInputMethod(String text) {
+    final ffi.Pointer<Utf8> textPointer = text.toNativeUtf8();
+    _bindings.commit_text_from_input_method(
+      _viewId,
+      textPointer.cast<ffi.Char>(),
+    );
+    malloc.free(textPointer);
+  }
+
+  // Sets in-progress (preedit/marked) composition text, used by predictive
+  // input methods to preview text before it's committed.
+  void setMarkedTextFromInputMethod(String text) {
+    final ffi.Pointer<Utf8> textPointer = text.toNativeUtf8();
+    _bindings.set_marked_text_from_input_method(
+      _viewId,
+      textPointer.cast<ffi.Char>(),
+    );
+    malloc.free(textPointer);
+  }
+
+  // Finalizes (commits in place) any current marked text.
+  void unmarkTextFromInputMethod() {
+    _bindings.unmark_text_from_input_method(_viewId);
+  }
+
   Future<int> createTexture() async {
     return await _channel.invokeMethod('createTexture', _viewId);
   }
@@ -524,7 +594,7 @@ class LadybirdController {
 
   bool resizeWindow(Size size) {
     if (size == _lastSize) return false;
-    print("[LibBird] Controller.resizeWindow: size=$size");
+    // print("[LibBird] Controller.resizeWindow: size=$size");
     _lastSize = size;
     _bindings.resize_window(_viewId, size.width.round(), size.height.round());
     return true;
@@ -588,6 +658,7 @@ class LadybirdController {
     _bindings.set_cursor_change_callback(_viewId, ffi.nullptr);
     _bindings.set_cross_site_navigation_callback(_viewId, ffi.nullptr);
     _bindings.set_loading_state_change_callback(_viewId, ffi.nullptr);
+    _bindings.set_input_caret_rect_change_callback(_viewId, ffi.nullptr);
     urlNotifier.dispose();
     titleNotifier.dispose();
     faviconNotifier.dispose();
@@ -595,6 +666,7 @@ class LadybirdController {
     canGoBackNotifier.dispose();
     canGoForwardNotifier.dispose();
     mouseCursorNotifier.dispose();
+    inputCaretRectNotifier.dispose();
     _resizeCallback.close();
     _urlChangeCallback.close();
     _titleChangeCallback.close();
@@ -604,6 +676,7 @@ class LadybirdController {
     _cursorChangeCallback.close();
     _contextMenuRequestCallback.close();
     _newWebViewCallback.close();
+    _inputCaretRectChangeCallback.close();
     _bindings.destroy_web_view(_viewId);
   }
 }
