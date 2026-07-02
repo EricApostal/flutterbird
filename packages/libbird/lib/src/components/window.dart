@@ -34,6 +34,7 @@ class _LadybirdViewState extends State<LadybirdView>
 
   Ticker? _momentumTicker;
   Offset _lastPointerPos = Offset.zero;
+  VelocityTracker? _panZoomVelocityTracker;
 
   // Platform-native scrolling physics trackers
   Simulation? _simulationX;
@@ -316,11 +317,15 @@ class _LadybirdViewState extends State<LadybirdView>
   void _onPointerPanZoomStart(PointerPanZoomStartEvent event) {
     _momentumTicker?.stop();
     _lastPointerPos = event.localPosition;
+    _panZoomVelocityTracker = VelocityTracker.withKind(
+      PointerDeviceKind.trackpad,
+    )..addPosition(event.timeStamp, Offset.zero);
   }
 
   void _onPointerPanZoomUpdate(PointerPanZoomUpdateEvent event) {
     _momentumTicker?.stop();
     _lastPointerPos = event.localPosition;
+    _panZoomVelocityTracker?.addPosition(event.timeStamp, event.pan);
 
     _dispatchWheelDelta(
       event.localPosition,
@@ -330,7 +335,20 @@ class _LadybirdViewState extends State<LadybirdView>
   }
 
   void _onPointerPanZoomEnd(PointerPanZoomEndEvent event) {
-    // Let native momentum events continue via the OS naturally.
+    final Offset velocity =
+        _panZoomVelocityTracker?.getVelocity().pixelsPerSecond ?? Offset.zero;
+    _panZoomVelocityTracker = null;
+
+    _simulationX = _getPlatformSimulation(velocity.dx, Axis.horizontal);
+    _simulationY = _getPlatformSimulation(velocity.dy, Axis.vertical);
+    _lastSimX = 0;
+    _lastSimY = 0;
+
+    if (_simulationX != null || _simulationY != null) {
+      _momentumTicker?.start();
+    } else {
+      _momentumTicker?.stop();
+    }
   }
 
   void _onTouchTapDown(TapDownDetails details) {
