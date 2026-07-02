@@ -27,12 +27,7 @@
 #include "view_backend.h"
 
 #include <CoreVideo/CoreVideo.h>
-#include <TargetConditionals.h>
-#if TARGET_OS_IPHONE
-#include <IOSurface/IOSurfaceRef.h>
-#else
 #include <IOSurface/IOSurface.h>
-#endif
 
 class MacOSViewBackend final : public ViewBackend {
 public:
@@ -55,13 +50,6 @@ public:
   uint64_t frame_generation() const override;
   int width() const override;
   int height() const override;
-
-  // Returns a retained IOSurfaceRef of the latest frame (caller must
-  // CFRelease), or nullptr if none is available yet. Used by the Flutter
-  // plugin's FlutterTexture.copyPixelBuffer() to crop the (possibly
-  // +256-padded) surface down to last_painted_size via a GPU texture-view
-  // + blit on the Swift side, rather than cropping here.
-  IOSurfaceRef latest_surface() const;
 
 private:
   mutable std::mutex m_mutex;

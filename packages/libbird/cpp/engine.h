@@ -37,11 +37,6 @@ typedef struct {
   uint64_t generation;
 } LadybirdLinuxDmaBufFrame;
 
-LADYBIRD_API void configure_android_runtime(const char *resource_root,
-                                            const char *user_dir,
-                                            const char *native_library_dir,
-                                            const char *certificates_path);
-
 LADYBIRD_API void init_ladybird();
 
 LADYBIRD_API int create_web_view();
@@ -51,7 +46,6 @@ LADYBIRD_API void *get_latest_pixel_buffer(int view_id);
 LADYBIRD_API bool copy_latest_pixel_buffer(int view_id, uint8_t *out_buffer,
                                            int out_capacity, int *out_width,
                                            int *out_height);
-LADYBIRD_API void *get_android_hardware_buffer(int view_id);
 LADYBIRD_API uint64_t get_frame_generation(int view_id);
 LADYBIRD_API bool acquire_latest_frame(int view_id, const uint8_t **out_pixels,
                                        int *out_width, int *out_height,
@@ -74,28 +68,13 @@ LADYBIRD_API void navigate_to(int view_id, const char *url);
 LADYBIRD_API void set_zoom(int view_id, double zoom);
 
 LADYBIRD_API void set_display_metadata(int view_id, bool has_display_id,
-                                       uint64_t display_id, double refresh_rate,
+                                       uint64_t display_id,
+                                       double refresh_rate,
                                        double maximum_frames_per_second);
 
 LADYBIRD_API int get_iosurface_width(int view_id);
 
 LADYBIRD_API int get_iosurface_height(int view_id);
-
-// The size WebContent/Compositor actually last painted at, which can
-// briefly lag m_viewport_width/height (get_iosurface_width/height above)
-// while the backing store is padded mid-resize. On macOS/iOS the Flutter
-// plugin uses this to crop the (possibly padded) IOSurface down to the
-// real content size via a GPU texture-view + blit, the same way
-// UI/Gtk/WebContentView.cpp and UI/AppKit/Interface/LadybirdWebView.mm
-// both crop to this exact field.
-LADYBIRD_API int get_last_painted_width(int view_id);
-
-LADYBIRD_API int get_last_painted_height(int view_id);
-
-// Returns a retained IOSurfaceRef (as an opaque pointer -- caller must
-// CFRelease) of the latest frame on macOS/iOS, or null elsewhere / if none
-// is available yet.
-LADYBIRD_API void *get_latest_iosurface(int view_id);
 
 typedef void (*UrlChangeCallback)(const char *);
 typedef void (*TitleChangeCallback)(const char *);
@@ -120,9 +99,8 @@ set_loading_state_change_callback(int view_id,
                                   LoadingStateChangeCallback callback);
 LADYBIRD_API void set_cursor_change_callback(int view_id,
                                              CursorChangeCallback callback);
-LADYBIRD_API void
-set_context_menu_request_callback(int view_id,
-                                  ContextMenuRequestCallback callback);
+LADYBIRD_API void set_context_menu_request_callback(
+  int view_id, ContextMenuRequestCallback callback);
 LADYBIRD_API void set_new_web_view_callback(int view_id,
                                             NewWebViewCallback callback);
 LADYBIRD_API bool activate_context_menu_action(int view_id, int action_token);

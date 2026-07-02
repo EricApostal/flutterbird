@@ -5,47 +5,17 @@
 #include <algorithm>
 #include <cstring>
 
-// CVPixelBufferCreateWithIOSurface() otherwise reports the IOSurface's literal
-// backing dimensions (which can be padded/aligned larger than what was actually
-// requested/painted) via CVPixelBufferGetWidth/Height -- and that's what Flutter's
-// external texture path reads to size what it renders, regardless of any size
-// bookkeeping done elsewhere. Passing kCVPixelBufferWidthKey/HeightKey explicitly
-// makes Core Video report (and crop to) the size Ladybird was actually asked to
-// paint at, instead of the surface's true/padded allocation size.
-static CVPixelBufferRef create_pixel_buffer_from_iosurface(IOSurfaceRef surface,
-                                                           int width,
-                                                           int height) {
+static CVPixelBufferRef create_pixel_buffer_from_iosurface(IOSurfaceRef surface) {
   if (!surface)
     return nullptr;
 
-  auto surface_width = static_cast<int>(IOSurfaceGetWidth(surface));
-  auto surface_height = static_cast<int>(IOSurfaceGetHeight(surface));
-  bool use_explicit_size = width > 0 && height > 0 && width <= surface_width &&
-                           height <= surface_height;
-
-  CFMutableDictionaryRef attributes = CFDictionaryCreateMutable(
-      kCFAllocatorDefault, 0, &kCFTypeDictionaryKeyCallBacks,
+  const void *keys[] = {kCVPixelBufferMetalCompatibilityKey};
+  const void *values[] = {kCFBooleanTrue};
+  auto *attributes = CFDictionaryCreate(
+      kCFAllocatorDefault, keys, values, 1, &kCFTypeDictionaryKeyCallBacks,
       &kCFTypeDictionaryValueCallBacks);
   if (!attributes)
     return nullptr;
-
-  CFDictionarySetValue(attributes, kCVPixelBufferMetalCompatibilityKey,
-                       kCFBooleanTrue);
-
-  if (use_explicit_size) {
-    auto *width_number =
-        CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &width);
-    auto *height_number =
-        CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &height);
-    if (width_number)
-      CFDictionarySetValue(attributes, kCVPixelBufferWidthKey, width_number);
-    if (height_number)
-      CFDictionarySetValue(attributes, kCVPixelBufferHeightKey, height_number);
-    if (width_number)
-      CFRelease(width_number);
-    if (height_number)
-      CFRelease(height_number);
-  }
 
   CVPixelBufferRef pixel_buffer = nullptr;
   auto cv_result = CVPixelBufferCreateWithIOSurface(
@@ -116,60 +86,39 @@ bool MacOSViewBackend::on_iosurface_ready(IOSurfaceRef surface, int width,
   if (!surface || width <= 0 || height <= 0)
     return false;
 
-  auto surface_width = static_cast<int>(IOSurfaceGetWidth(surface));
-  auto surface_height = static_cast<int>(IOSurfaceGetHeight(surface));
-
   bool size_changed = false;
   bool has_pixel_buffer = false;
-  bool should_publish = false;
   {
     std::lock_guard lock(m_mutex);
+    size_changed = (width != m_width || height != m_height);
+    m_width = width;
+    m_height = height;
 
-    // The surface hasn't grown to fit the requested (broadcast) size yet --
-    // e.g. mid-resize, before Ladybird's compositor has reallocated its
-    // backing store to match. Don't publish a frame cropped/reported at some
-    // smaller, stale size (that reads as the viewport having shrunk, even
-    // though it never actually did). Keep showing whatever frame we already
-    // have -- Flutter will just stretch that to fill the box, which is
-    // already sized correctly since it comes from the broadcast value
-    // directly, not from this backend -- until a surface big enough to
-    // satisfy the request arrives.
-    if (width > surface_width || height > surface_height) {
-      has_pixel_buffer = (m_pixel_buffer != nullptr);
-    } else {
-      size_changed = (width != m_width || height != m_height);
-      m_width = width;
-      m_height = height;
+    if (surface != m_surface || !m_pixel_buffer) {
+      auto *new_pixel_buffer = create_pixel_buffer_from_iosurface(surface);
+      if (!new_pixel_buffer)
+        return false;
 
-      if (surface != m_surface || !m_pixel_buffer || size_changed) {
-        auto *new_pixel_buffer =
-            create_pixel_buffer_from_iosurface(surface, width, height);
-        if (!new_pixel_buffer)
-          return false;
-
-        if (m_pixel_buffer) {
-          CVPixelBufferRelease(m_pixel_buffer);
-          m_pixel_buffer = nullptr;
-        }
-        if (m_surface) {
-          CFRelease(m_surface);
-          m_surface = nullptr;
-        }
-
-        m_pixel_buffer = new_pixel_buffer;
-        m_surface = surface;
-        CFRetain(m_surface);
+      if (m_pixel_buffer) {
+        CVPixelBufferRelease(m_pixel_buffer);
+        m_pixel_buffer = nullptr;
+      }
+      if (m_surface) {
+        CFRelease(m_surface);
+        m_surface = nullptr;
       }
 
-      has_pixel_buffer = (m_pixel_buffer != nullptr);
-      if (has_pixel_buffer) {
-        ++m_generation;
-        should_publish = true;
-      }
+      m_pixel_buffer = new_pixel_buffer;
+      m_surface = surface;
+      CFRetain(m_surface);
     }
+
+    has_pixel_buffer = (m_pixel_buffer != nullptr);
+    if (has_pixel_buffer)
+      ++m_generation;
   }
 
-  if (should_publish)
+  if (has_pixel_buffer)
     fire_frame_ready(size_changed);
 
   return has_pixel_buffer;
@@ -241,14 +190,6 @@ int MacOSViewBackend::width() const {
 int MacOSViewBackend::height() const {
   std::lock_guard lock(m_mutex);
   return m_height;
-}
-
-IOSurfaceRef MacOSViewBackend::latest_surface() const {
-  std::lock_guard lock(m_mutex);
-  if (!m_surface)
-    return nullptr;
-  CFRetain(m_surface);
-  return m_surface;
 }
 
 #endif // __APPLE__

@@ -1,8 +1,8 @@
 #include "engine.h"
 #include "LibWebView/Application.h"
-#include <AK/ByteString.h>
 #include <cstdio>
 #include <memory>
+#include <mutex>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -73,13 +73,17 @@ struct RegisterMains {
 } s_register_mains;
 #endif
 #ifndef __APPLE__
+
 namespace IPC {
+
 template <> ErrorOr<void> encode(Encoder &encoder, float const &value) {
   return encoder.encode(AK::bit_cast<u32>(value));
 }
+
 template <> ErrorOr<void> encode(Encoder &encoder, double const &value) {
   return encoder.encode(AK::bit_cast<u64>(value));
 }
+
 } // namespace IPC
 #endif
 
@@ -214,10 +218,6 @@ public:
   int m_viewport_width{800};
   int m_viewport_height{600};
 
-  Gfx::IntSize last_painted_size() const {
-    return m_client_state.front_bitmap.last_painted_size.to_type<int>();
-  }
-
   // Platform rendering backend (LinuxViewBackend / MacOSViewBackend).
   std::unique_ptr<ViewBackend> m_backend;
   uint64_t m_debug_paint_event_count{0};
@@ -247,7 +247,9 @@ public:
 
   static int to_cursor_type_for_flutter(Gfx::Cursor const &cursor) {
     return cursor.visit(
-        [](Gfx::StandardCursor standard) { return static_cast<int>(standard); },
+        [](Gfx::StandardCursor standard) {
+          return static_cast<int>(standard);
+        },
         [](Gfx::ImageCursor const &) {
           // Flutter cannot consume custom pixel cursors via this API, so use
           // a standard fallback.
@@ -255,8 +257,7 @@ public:
         });
   }
 
-  int register_context_menu_action(
-      NonnullRefPtr<WebView::Action> const &action) {
+  int register_context_menu_action(NonnullRefPtr<WebView::Action> const &action) {
     int token = m_next_context_menu_action_token++;
     m_context_menu_actions.set(token, action->make_weak_ptr());
     return token;
@@ -360,7 +361,8 @@ public:
       free(payload);
   }
 
-  void set_context_menu_request_callback(ContextMenuRequestCallback callback) {
+  void set_context_menu_request_callback(
+      ContextMenuRequestCallback callback) {
     std::lock_guard lock(m_context_menu_mutex);
     m_context_menu_request_callback = callback;
     if (!callback)
@@ -431,8 +433,7 @@ public:
 
   void set_display_metadata(Optional<u64> display_id, double refresh_rate,
                             double maximum_frames_per_second) {
-    auto const sanitized_refresh_rate =
-        refresh_rate > 0.0 ? refresh_rate : 60.0;
+    auto const sanitized_refresh_rate = refresh_rate > 0.0 ? refresh_rate : 60.0;
     auto const sanitized_maximum_frames_per_second =
         maximum_frames_per_second > 0.0 ? maximum_frames_per_second
                                         : sanitized_refresh_rate;
@@ -454,10 +455,6 @@ public:
   virtual void initialize_client(
       CreateNewClient create_new_client = CreateNewClient::Yes) override {
 
-    // Single-process iOS transparently reuses the one WebContent connection that can ever exist
-    // for the app's lifetime (see Web::Bindings::initialize_main_thread_vm()'s
-    // VERIFY(!main_thread_vm_ptr())) — handled centrally inside
-    // WebView::Application::launch_web_content_process(), so no special-casing is needed here.
     ViewImplementation::initialize_client(create_new_client);
     configure_client_process();
     set_system_visibility_state(Web::HTML::VisibilityState::Visible);
@@ -481,7 +478,8 @@ public:
 #ifndef __APPLE__
 #ifdef USE_VULKAN_DMABUF_IMAGES
       auto *linux_backend = static_cast<LinuxViewBackend *>(m_backend.get());
-      if (auto const &dmabuf = shared_image_buffer->linux_dmabuf_handle()) {
+      if (auto const &dmabuf = shared_image_buffer->linux_dmabuf_handle();
+          dmabuf.has_value()) {
         linux_backend->set_linux_dmabuf_frame(
             dmabuf->file.fd(), dmabuf->size.width(), dmabuf->size.height(),
             static_cast<int>(dmabuf->pitch), dmabuf->drm_format,
@@ -496,24 +494,13 @@ public:
       auto *surface = static_cast<IOSurfaceRef>(
           shared_image_buffer->iosurface_handle().core_foundation_pointer());
       if (surface) {
-        // Use last_painted_size -- the same value Dart sizes its box with
-        // (get_iosurface_width/height) and the same value the Swift plugin
-        // crops the IOSurface to (get_last_painted_width/height) -- not
-        // m_viewport_width/height. on_iosurface_ready() below uses this
-        // width/height to decide whether the surface has grown enough to
-        // accept as the new latest frame; m_viewport_width races ahead of
-        // what's actually been painted during a resize, so that check would
-        // keep rejecting newer surfaces in favor of a stale one whenever the
-        // target outpaces the real paint -- reporting last_painted_size
-        // keeps the accept-check in sync with what Swift will actually crop
-        // to, instead of one frame behind it.
-        auto const &painted_size =
-            m_client_state.front_bitmap.last_painted_size.to_type<int>();
-        auto surface_width = painted_size.width();
-        auto surface_height = painted_size.height();
+        auto surface_width = static_cast<int>(IOSurfaceGetWidth(surface));
+        auto surface_height = static_cast<int>(IOSurfaceGetHeight(surface));
         if (surface_width <= 0 || surface_height <= 0) {
-          surface_width = static_cast<int>(IOSurfaceGetWidth(surface));
-          surface_height = static_cast<int>(IOSurfaceGetHeight(surface));
+          auto bitmap_size =
+              m_client_state.front_bitmap.last_painted_size.to_type<int>();
+          surface_width = bitmap_size.width();
+          surface_height = bitmap_size.height();
         }
 
         if (mac_backend->on_iosurface_ready(surface, surface_width,
@@ -526,15 +513,16 @@ public:
             m_last_mac_frame_source = MacFrameSource::IOSurface;
           }
           if ((m_debug_paint_event_count % 30) == 1) {
+            auto const &bitmap_size = m_client_state.front_bitmap.last_painted_size.to_type<int>();
             std::fprintf(
                 stderr,
                 "[Ladybird][engine] view=%d paint#=%llu source=IOSurface "
-                "surface_size=%dx%d bitmap_size=%dx%d viewport_size=%dx%d "
-                "m_zoom=%f\n",
+                "surface_size=%dx%d bitmap_size=%dx%d viewport_size=%dx%d m_zoom=%f\n",
                 m_view_id,
                 static_cast<unsigned long long>(m_debug_paint_event_count),
-                surface_width, surface_height, painted_size.width(),
-                painted_size.height(), m_viewport_width, m_viewport_height,
+                surface_width, surface_height,
+                bitmap_size.width(), bitmap_size.height(),
+                m_viewport_width, m_viewport_height,
                 m_zoom);
           }
           return;
@@ -656,56 +644,38 @@ public:
       return handle;
     };
 
-    page_context_menu().on_activation = [this](Gfx::IntPoint position) {
-      dispatch_context_menu_request("page"sv, position, page_context_menu());
-    };
-    link_context_menu().on_activation = [this](Gfx::IntPoint position) {
-      dispatch_context_menu_request("link"sv, position, link_context_menu());
-    };
-    image_context_menu().on_activation = [this](Gfx::IntPoint position) {
-      dispatch_context_menu_request("image"sv, position, image_context_menu());
-    };
-    media_context_menu().on_activation = [this](Gfx::IntPoint position) {
-      dispatch_context_menu_request("media"sv, position, media_context_menu());
-    };
+    page_context_menu().on_activation =
+        [this](Gfx::IntPoint position) {
+          dispatch_context_menu_request("page"sv, position,
+                                        page_context_menu());
+        };
+    link_context_menu().on_activation =
+        [this](Gfx::IntPoint position) {
+          dispatch_context_menu_request("link"sv, position,
+                                        link_context_menu());
+        };
+    image_context_menu().on_activation =
+        [this](Gfx::IntPoint position) {
+          dispatch_context_menu_request("image"sv, position,
+                                        image_context_menu());
+        };
+    media_context_menu().on_activation =
+        [this](Gfx::IntPoint position) {
+          dispatch_context_menu_request("media"sv, position,
+                                        media_context_menu());
+        };
   }
 
   void resize(int width, int height) {
-    std::fprintf(stderr, "[LibBird] resize: incoming %dx%d, m_zoom: %f\n",
-                 width, height, m_zoom);
-    bool size_changed =
-        (width != m_viewport_width || height != m_viewport_height);
+    std::fprintf(stderr, "[LibBird] resize: incoming %dx%d, m_zoom: %f\n", width, height, m_zoom);
     m_viewport_width = width;
     m_viewport_height = height;
-    // Notify the host immediately, rather than waiting for a subsequent
-    // compositor frame to arrive and the backend's own frame-size
-    // bookkeeping to notice a difference (which can lag or be masked by
-    // surface padding). This guarantees the Dart side re-reads the new
-    // viewport size on every actual change.
-    if (size_changed)
-      m_backend->fire_resize_callback();
     auto size = Web::DevicePixelSize{width, height};
     sync_device_pixel_ratio();
     client().async_set_viewport(m_client_state.page_index, size,
                                 m_device_pixel_ratio, is_fullscreen());
     client().async_set_window_size(m_client_state.page_index, size);
-    // Pass Yes here (matching upstream's own ViewImplementation::handle_resize())
-    // so BackingStoreManager pads the backing store by +256px instead of
-    // reallocating on every single resize() call -- Flutter can call this
-    // several times in quick succession during e.g. a keyboard show/hide
-    // animation, and reallocating on every intermediate frame causes visible
-    // real-time shrinking/jitter as each transient size gets painted.
-    //
-    // ContextState::schedule_backing_store_shrink (Services/Compositor) is
-    // the shared mechanism that shrinks it back down once resizing settles --
-    // shortened there from Ladybird's stock 3s to 150ms, since that one choke
-    // point also covers non-Flutter-driven resizes (e.g. handle_resize()
-    // called internally during a cross-site navigation process swap), which
-    // our own call here never sees.
-    WebView::Application::the().update_compositor_viewport(
-        client().compositor_context_id_for_page(m_client_state.page_index),
-        viewport_size().to_type<int>(),
-        Web::Compositor::WindowResizingInProgress::Yes);
+    WebView::Application::the().update_compositor_viewport(client().compositor_context_id_for_page(m_client_state.page_index), viewport_size().to_type<int>(), Web::Compositor::WindowResizingInProgress::Yes);
   }
 
   void update_zoom_scale() {
@@ -766,12 +736,6 @@ private:
 // View registry — owns all FlutterViewImpl instances.
 static std::map<int, AK::OwnPtr<FlutterViewImpl>> g_web_views;
 
-#if defined(AK_OS_IOS)
-// Defined in liblagom-ipc.dylib (TransportMachPort.cpp). Returns true while
-// the main thread is inside a synchronous IPC wait with CFRunLoop pumping.
-extern "C" bool ladybird_is_ipc_wait_in_progress();
-#endif
-
 String FlutterViewImpl::create_child_web_view_handle(Optional<u64> page_index,
                                                      int &new_view_id) {
   new_view_id = -1;
@@ -814,12 +778,8 @@ public:
       request_server_options.certificates.append(config.certificates_path);
     web_content_options.force_cpu_painting = WebView::ForceCPUPainting::No;
 #elif defined(AK_OS_IOS)
-    // iOS (including the single-process Compositor thread) uses the GPU/Metal IOSurface
-    // painting path; forcing CPU painting routes Compositor through an untested CPU raster
-    // fallback that crashes (see BackingStoreManager.cpp's create_shareable_bitmap_backing_stores).
+    // honestly cpu painting should never happen
     web_content_options.force_cpu_painting = WebView::ForceCPUPainting::No;
-#else
-    web_content_options.force_cpu_painting = WebView::ForceCPUPainting::Yes;
 #endif
   }
 
@@ -848,6 +808,7 @@ public:
   open_blank_new_tab(Web::HTML::ActivateTab) const override {
     return {};
   }
+
   virtual Optional<ByteString>
   ask_user_for_download_path(ByteString const& file) const override {
     if (g_ask_user_for_download_path_callback) {
@@ -861,6 +822,7 @@ public:
     }
     return {};
   }
+
   virtual void display_download_confirmation_dialog(
       StringView path, LexicalPath const &lexical_path) const override {
     if (g_display_download_confirmation_dialog_callback) {
@@ -961,7 +923,6 @@ void init_ladybird() {
 
   if (auto const &browser_options = WebView::Application::browser_options();
       !browser_options.headless_mode.has_value()) {
-
     if (browser_options.force_new_process == WebView::ForceNewProcess::No) {
       auto disposition = s_browser_process->connect(browser_options.raw_urls,
                                                     browser_options.new_window);
@@ -976,6 +937,7 @@ void init_ladybird() {
   }
 }
 
+// The following was written by AI a while ago and works so idk
 // ---------------------------------------------------------------------------
 // Event-loop tick — inspired by GTK's EventLoopImplementationGtk::pump():
 //
@@ -998,7 +960,6 @@ extern "C" void tick_ladybird() {
   if (ladybird_is_ipc_wait_in_progress())
     return;
 #endif
-
   // Pre-drain: flush events queued since last tick.
   Core::ThreadEventQueue::current().process();
 
@@ -1013,12 +974,10 @@ extern "C" void tick_ladybird() {
 int create_web_view() {
   int id = g_next_view_id++;
   auto view = FlutterViewImpl::create(id).release_value();
+  view->initialize_client();
   g_web_views[id] = std::move(view);
   if (g_active_view_id == -1)
     g_active_view_id = id;
-
-  g_web_views[id]->initialize_client();
-
   return id;
 }
 
@@ -1179,19 +1138,17 @@ void navigate_to(int view_id, const char *url) {
   if (!url)
     return;
   auto it = g_web_views.find(view_id);
-  if (it == g_web_views.end())
-    return;
-
-  auto parsed = URL::Parser::basic_parse(AK::StringView(url, strlen(url)));
-  if (parsed.has_value())
-    it->second->load(parsed.value());
+  if (it != g_web_views.end()) {
+    auto parsed = URL::Parser::basic_parse(AK::StringView(url, strlen(url)));
+    if (parsed.has_value())
+      it->second->load(parsed.value());
+  }
 }
 
 void set_zoom(int view_id, double zoom) {
   if (zoom <= 0.0)
     return;
-  std::fprintf(stderr, "[LibBird] set_zoom: view_id=%d, zoom=%f\n", view_id,
-               zoom);
+  std::fprintf(stderr, "[LibBird] set_zoom: view_id=%d, zoom=%f\n", view_id, zoom);
   auto it = g_web_views.find(view_id);
   if (it != g_web_views.end()) {
     it->second->m_zoom = zoom;
@@ -1211,8 +1168,7 @@ void set_display_metadata(int view_id, bool has_display_id, uint64_t display_id,
     optional_display_id = display_id;
 
   std::fprintf(stderr,
-               "[LibBird] set_display_metadata: view_id=%d has_display_id=%d "
-               "display_id=%llu refresh_rate=%f max_fps=%f\n",
+               "[LibBird] set_display_metadata: view_id=%d has_display_id=%d display_id=%llu refresh_rate=%f max_fps=%f\n",
                view_id, has_display_id ? 1 : 0,
                static_cast<unsigned long long>(display_id), refresh_rate,
                maximum_frames_per_second);
@@ -1224,47 +1180,14 @@ int get_iosurface_width(int view_id) {
   auto it = g_web_views.find(view_id);
   if (it == g_web_views.end())
     return 0;
-  // last_painted_size, not m_viewport_width -- Dart sizes its SizedBox to
-  // this value specifically so Flutter's Texture widget never has to
-  // stretch (see LadybirdView.build()). The Metal-cropped CVPixelBuffer
-  // handed to Flutter is sized to last_painted_size, which can briefly lag
-  // m_viewport_width during a resize; reporting the target here instead
-  // would size the box larger than the real texture content and Flutter
-  // would stretch it to fill the gap.
-  return it->second->last_painted_size().width();
+  return it->second->m_backend->width();
 }
 
 int get_iosurface_height(int view_id) {
   auto it = g_web_views.find(view_id);
   if (it == g_web_views.end())
     return 0;
-  return it->second->last_painted_size().height();
-}
-
-int get_last_painted_width(int view_id) {
-  auto it = g_web_views.find(view_id);
-  if (it == g_web_views.end())
-    return 0;
-  return it->second->last_painted_size().width();
-}
-
-int get_last_painted_height(int view_id) {
-  auto it = g_web_views.find(view_id);
-  if (it == g_web_views.end())
-    return 0;
-  return it->second->last_painted_size().height();
-}
-
-void *get_latest_iosurface(int view_id) {
-  auto it = g_web_views.find(view_id);
-  if (it == g_web_views.end())
-    return nullptr;
-#ifdef __APPLE__
-  auto *mac_backend = static_cast<MacOSViewBackend *>(it->second->m_backend.get());
-  return mac_backend->latest_surface();
-#else
-  return nullptr;
-#endif
+  return it->second->m_backend->height();
 }
 
 void set_url_change_callback(int view_id, UrlChangeCallback callback) {
@@ -1275,7 +1198,7 @@ void set_url_change_callback(int view_id, UrlChangeCallback callback) {
     {
       std::lock_guard lock(it->second->m_info_mutex);
       it->second->m_url_change_callback = callback;
-      auto const &url = it->second->url();
+      auto const& url = it->second->url();
       has_valid_initial_url = !url.scheme().is_empty();
       if (has_valid_initial_url)
         current_url = url.to_string().to_byte_string();
@@ -1330,8 +1253,7 @@ void go_back(int view_id) {
   // std::lock_guard<std::mutex> lock(g_web_views_mutex);
   auto it = g_web_views.find(view_id);
   if (it != g_web_views.end()) {
-    [[maybe_unused]] auto result =
-        it->second->traverse_the_history_by_delta(-1);
+    it->second->traverse_the_history_by_delta(-1);
   }
 }
 
@@ -1339,7 +1261,7 @@ void go_forward(int view_id) {
   // std::lock_guard<std::mutex> lock(g_web_views_mutex);
   auto it = g_web_views.find(view_id);
   if (it != g_web_views.end()) {
-    [[maybe_unused]] auto result = it->second->traverse_the_history_by_delta(1);
+    it->second->traverse_the_history_by_delta(1);
   }
 }
 
