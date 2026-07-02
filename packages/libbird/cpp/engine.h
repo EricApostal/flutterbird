@@ -37,6 +37,11 @@ typedef struct {
   uint64_t generation;
 } LadybirdLinuxDmaBufFrame;
 
+LADYBIRD_API void configure_android_runtime(const char *resource_root,
+                                            const char *user_dir,
+                                            const char *native_library_dir,
+                                            const char *certificates_path);
+
 LADYBIRD_API void init_ladybird();
 
 LADYBIRD_API int create_web_view();
@@ -46,6 +51,7 @@ LADYBIRD_API void *get_latest_pixel_buffer(int view_id);
 LADYBIRD_API bool copy_latest_pixel_buffer(int view_id, uint8_t *out_buffer,
                                            int out_capacity, int *out_width,
                                            int *out_height);
+LADYBIRD_API void *get_android_hardware_buffer(int view_id);
 LADYBIRD_API uint64_t get_frame_generation(int view_id);
 LADYBIRD_API bool acquire_latest_frame(int view_id, const uint8_t **out_pixels,
                                        int *out_width, int *out_height,
