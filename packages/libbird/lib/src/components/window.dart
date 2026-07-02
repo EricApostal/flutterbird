@@ -509,7 +509,9 @@ class _LadybirdViewState extends State<LadybirdView>
       child: LayoutBuilder(
         builder: (context, constraints) {
           final density = MediaQuery.devicePixelRatioOf(context);
-          _onSizeChanged(constraints.biggest, density);
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            _onSizeChanged(constraints.biggest, density);
+          });
 
           final paddedWidth = widget.controller.getSurfaceWidth() / density;
           final paddedHeight = widget.controller.getSurfaceHeight() / density;

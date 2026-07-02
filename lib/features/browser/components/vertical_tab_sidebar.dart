@@ -162,6 +162,7 @@ class _BrowserVerticalTabSidebarState
               width: double.infinity,
               child: FilledButton(
                 // backgroundColor: theme.colorScheme.surfaceContainerHigh,
+                // style: FilledButton.styleFrom(),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   mainAxisSize: MainAxisSize.min,
@@ -169,14 +170,14 @@ class _BrowserVerticalTabSidebarState
                     Icon(
                       Icons.add,
                       size: 18,
-                      color: theme.colorScheme.onSurface,
+                      // color: theme.colorScheme.onSurface,
                     ),
                     const SizedBox(width: 8),
                     Text(
                       'New Tab',
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: theme.colorScheme.onSurface,
-                      ),
+                      // style: theme.textTheme.bodyMedium?.copyWith(
+                      //   // color: theme.colorScheme.onSurface,
+                      // ),
                     ),
                   ],
                 ),
