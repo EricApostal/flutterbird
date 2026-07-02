@@ -1,25 +1,3 @@
-/*
- * macOS ViewBackend — placeholder for the IOSurface / CVPixelBuffer path.
- *
- * On macOS, the WebContent process renders into an IOSurface.  The ideal
- * Flutter integration wraps that IOSurface in a CVPixelBuffer and uploads
- * it as an external GPU texture, avoiding any CPU-side pixel copy.
- *
- * This class is intentionally left unimplemented.
- * When adding proper macOS support:
- *
- *  1. Add on_iosurface_ready() that calls CVPixelBufferCreateWithIOSurface
- *     and stores the resulting CVPixelBufferRef in m_pixel_buffer.
- *  2. pixel_data() should return a retained CVPixelBufferRef; the Flutter
- *     plugin releases it after uploading the GPU texture each frame.
- *  3. Update FlutterViewImpl::initialize_client's on_ready_to_paint lambda
- *     to extract the IOSurface and call on_iosurface_ready() instead of
- *     on_bitmap_ready().
- *
- * Until then, on_bitmap_ready() provides a CPU fallback (useful for
- * testing on macOS before the GPU path is ready).
- */
-
 #pragma once
 
 #ifdef __APPLE__
@@ -27,7 +5,12 @@
 #include "view_backend.h"
 
 #include <CoreVideo/CoreVideo.h>
+#include <TargetConditionals.h>
+#if TARGET_OS_IPHONE
+#include <IOSurface/IOSurfaceRef.h>
+#else
 #include <IOSurface/IOSurface.h>
+#endif
 
 class MacOSViewBackend final : public ViewBackend {
 public:
