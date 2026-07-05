@@ -46,24 +46,8 @@ class MainApp extends StatefulWidget {
 }
 
 class _MainAppState extends State<MainApp> {
-  bool _loaded = false;
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      setState(() {
-        _loaded = true;
-      });
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
-    // return MaterialApp(
-    //   home: Scaffold(body: Center(child: Text("asd"))),
-    // );
-
     final pageTransition = const PageTransitionsTheme(
       builders: {
         TargetPlatform.fuchsia: GoTransitions.none,

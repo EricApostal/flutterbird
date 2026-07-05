@@ -792,13 +792,9 @@ public:
     if (!config.certificates_path.is_empty())
       request_server_options.certificates.append(config.certificates_path);
     web_content_options.force_cpu_painting = WebView::ForceCPUPainting::No;
-    web_content_options.user_agent_preset =
-        AK::StringView("Chrome Android Mobile", strlen("Chrome Android Mobile"));
 #elif defined(AK_OS_IOS)
     // honestly cpu painting should never happen
     web_content_options.force_cpu_painting = WebView::ForceCPUPainting::No;
-    web_content_options.user_agent_preset =
-        AK::StringView("Safari iOS Mobile", strlen("Safari iOS Mobile"));
 #endif
   }
 
