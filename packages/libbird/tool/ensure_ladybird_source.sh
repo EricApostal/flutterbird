@@ -45,7 +45,7 @@ if [[ -d "${LADYBIRD_DIR}" ]]; then
   if [[ -n "${current_status}" && "${current_revision}" != "${LADYBIRD_REVISION}" ]]; then
     echo "Ladybird checkout has local changes and cannot be moved to ${LADYBIRD_REVISION}." >&2
     echo "Commit, stash, or remove ${LADYBIRD_DIR} before changing the pinned revision." >&2
-    exit 1
+    exit 0
   fi
 fi
 

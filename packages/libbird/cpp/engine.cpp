@@ -784,7 +784,7 @@ public:
       WebView::BrowserOptions &browser_options,
       WebView::RequestServerOptions &request_server_options,
       WebView::WebContentOptions &web_content_options) override {
-#ifdef __linux__
+#if defined(__linux__) || defined(AK_OS_IOS)
     browser_options.disable_sandbox = WebView::DisableSandbox::Yes;
 #endif
 #ifdef __ANDROID__
