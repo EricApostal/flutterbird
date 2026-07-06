@@ -24,7 +24,7 @@ class OmniboxSuggestionsOverlay extends StatelessWidget {
       alignment: Alignment.topLeft,
       child: Material(
         elevation: 6,
-        color: theme.colorScheme.surface,
+        color: theme.colorScheme.surfaceContainer,
         borderRadius: BorderRadius.circular(10),
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 760, maxHeight: 320),

@@ -519,16 +519,16 @@ public:
           }
           if ((m_debug_paint_event_count % 30) == 1) {
             auto const &bitmap_size = m_client_state.front_bitmap.last_painted_size.to_type<int>();
-            std::fprintf(
-                stderr,
-                "[Ladybird][engine] view=%d paint#=%llu source=IOSurface "
-                "surface_size=%dx%d bitmap_size=%dx%d viewport_size=%dx%d m_zoom=%f\n",
-                m_view_id,
-                static_cast<unsigned long long>(m_debug_paint_event_count),
-                surface_width, surface_height,
-                bitmap_size.width(), bitmap_size.height(),
-                m_viewport_width, m_viewport_height,
-                m_zoom);
+            // std::fprintf(
+            //     stderr,
+            //     "[Ladybird][engine] view=%d paint#=%llu source=IOSurface "
+            //     "surface_size=%dx%d bitmap_size=%dx%d viewport_size=%dx%d m_zoom=%f\n",
+            //     m_view_id,
+            //     static_cast<unsigned long long>(m_debug_paint_event_count),
+            //     surface_width, surface_height,
+            //     bitmap_size.width(), bitmap_size.height(),
+            //     m_viewport_width, m_viewport_height,
+            //     m_zoom);
           }
           return;
         }
@@ -555,14 +555,14 @@ public:
       m_backend->on_bitmap_ready(std::move(bitmap));
 
       if ((m_debug_paint_event_count % 120) == 1) {
-        std::fprintf(
-            stderr,
-            "[Ladybird][engine] view=%d paint#=%llu source=Bitmap size=%dx%d "
-            "gen=%llu\n",
-            m_view_id,
-            static_cast<unsigned long long>(m_debug_paint_event_count),
-            m_backend->width(), m_backend->height(),
-            static_cast<unsigned long long>(m_backend->frame_generation()));
+        // std::fprintf(
+        //     stderr,
+        //     "[Ladybird][engine] view=%d paint#=%llu source=Bitmap size=%dx%d "
+        //     "gen=%llu\n",
+        //     m_view_id,
+        //     static_cast<unsigned long long>(m_debug_paint_event_count),
+        //     m_backend->width(), m_backend->height(),
+        //     static_cast<unsigned long long>(m_backend->frame_generation()));
       }
 
 #ifdef __APPLE__
@@ -1156,10 +1156,10 @@ void set_frame_callback(int view_id, FrameCallback callback, void *context) {
     std::lock_guard lock(it->second->m_backend->callback_mutex);
     it->second->m_backend->frame_callback = callback;
     it->second->m_backend->frame_callback_context = context;
-    std::fprintf(stderr,
-                 "[Ladybird][engine] set_frame_callback view=%d callback=%p "
-                 "context=%p\n",
-                 view_id, reinterpret_cast<void *>(callback), context);
+    // std::fprintf(stderr,
+    //              "[Ladybird][engine] set_frame_callback view=%d callback=%p "
+    //              "context=%p\n",
+    //              view_id, reinterpret_cast<void *>(callback), context);
   }
 }
 

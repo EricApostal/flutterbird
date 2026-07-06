@@ -35,10 +35,23 @@ class OmniboxSuggestionRow extends StatelessWidget {
     final theme = Theme.of(context);
     final isUrlSuggestion = _isUrlSuggestion(option);
     final urlText = option.subtitle?.trim();
-    final hasUrlText =
-        isUrlSuggestion && urlText != null && urlText.isNotEmpty;
+    final hasUrlText = isUrlSuggestion && urlText != null && urlText.isNotEmpty;
     final title = option.title.trim();
     final showTitle = title.isNotEmpty && (!hasUrlText || title != urlText);
+
+    Widget sep() {
+      return Padding(
+        padding: .symmetric(horizontal: 6),
+        child: Container(
+          width: 4,
+          height: 4,
+          decoration: BoxDecoration(
+            shape: .circle,
+            color: theme.colorScheme.primary,
+          ),
+        ),
+      );
+    }
 
     return InkWell(
       onTap: onTap,
@@ -54,36 +67,31 @@ class OmniboxSuggestionRow extends StatelessWidget {
             ),
             const SizedBox(width: 10),
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  if (hasUrlText)
-                    Text.rich(
-                      styledUrlSpan(theme, urlText),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  if (showTitle)
+                  if (showTitle) ...[
                     Text(
                       title,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: hasUrlText
-                          ? theme.textTheme.bodySmall?.copyWith(
-                              color: theme.colorScheme.onSurfaceVariant,
-                            )
+                          ? theme.textTheme.bodyMedium?.copyWith()
                           : null,
                     ),
-                  if (!hasUrlText && option.subtitle != null)
-                    Text(
-                      option.subtitle!,
+                    sep(),
+                  ],
+                  if (hasUrlText) ...[
+                    Text.rich(
+                      styledUrlSpan(
+                        theme,
+                        urlText.replaceFirst("https://", ""),
+                      ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
                     ),
+                  ],
                 ],
               ),
             ),
