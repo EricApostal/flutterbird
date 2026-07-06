@@ -128,6 +128,7 @@ class _BrowserWindowState extends ConsumerState<BrowserWindow> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     final controller = ref.watch(browserTabProvider(widget.viewId));
     if (controller == null) {
       return const SizedBox.shrink();

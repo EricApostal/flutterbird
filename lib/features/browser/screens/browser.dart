@@ -166,7 +166,15 @@ class _BrowserWindowScreenState extends ConsumerState<BrowserWindowScreen> {
                         BrowserOmniboxBar(
                           currentTabController: currentTabController,
                         ),
-                        Expanded(child: BrowserWindow(viewId: viewId)),
+                        Expanded(
+                          child: Container(
+                            color: theme.colorScheme.primaryContainer,
+                            child: ClipRRect(
+                              borderRadius: .only(topLeft: .circular(8)),
+                              child: BrowserWindow(viewId: viewId),
+                            ),
+                          ),
+                        ),
                       ],
                     )
                   : Column(
