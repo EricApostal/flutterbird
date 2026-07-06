@@ -4,6 +4,7 @@ import 'package:bird_core/bird_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutterbird/features/browser/components/desktop/omnibox/omnibox_style.dart';
 import 'package:flutterbird/features/browser/components/desktop/tabs/tab.dart';
 import 'package:flutterbird/features/browser/state/tab_actions.dart';
 import 'package:flutterbird/features/browser/state/tab_layout_mode.dart';
@@ -66,7 +67,7 @@ class _BrowserVerticalTabSidebarState
     return Container(
       width: _kSidebarWidth,
       decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerLow,
+        color: omniboxSurfaceColor(theme),
         border: Border(
           right: BorderSide(color: theme.colorScheme.outline.withAlpha(36)),
         ),
@@ -100,74 +101,128 @@ class _BrowserVerticalTabSidebarState
             ),
           ),
           Expanded(
-            child: ReorderableListView.builder(
-              buildDefaultDragHandles: false,
-              padding: EdgeInsets.fromLTRB(8, 0, 8, 8),
-              itemCount: tabs.length,
-              proxyDecorator:
-                  (Widget child, int index, Animation<double> animation) {
-                    return Material(
-                      color: Colors.transparent,
-                      elevation: 0,
-                      child: child,
-                    );
-                  },
-              itemBuilder: (context, index) {
-                final id = tabs[index].viewId;
-                return _AnimatedSidebarTabItem(
-                  key: ValueKey(id),
-                  index: index,
-                  viewId: id,
-                  selected: id == widget.currentViewId,
-                  width: _kSidebarWidth - 16,
-                  height: _kTabHeight,
-                  animateOnMount: _animateNewTabs,
-                  onCloseRequested: () {
-                    HapticFeedback.lightImpact();
-                    return BrowserTabActions.prepareCloseTabNavigation(
-                      context,
-                      currentViewId: widget.currentViewId,
-                      closeViewId: id,
-                      tabs: tabs,
-                    );
-                  },
-                  onCloseCommitted: () =>
-                      BrowserTabActions.commitCloseTab(ref, id),
-                );
-              },
-              onReorder: (oldIndex, newIndex) {
-                if (oldIndex < newIndex) {
-                  newIndex -= 1;
-                }
+            child: CustomScrollView(
+              slivers: [
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(8, 0, 8, 0),
+                  sliver: SliverReorderableList(
+                    itemCount: tabs.length,
+                    proxyDecorator:
+                        (Widget child, int index, Animation<double> animation) {
+                          return Material(
+                            color: Colors.transparent,
+                            elevation: 0,
+                            child: child,
+                          );
+                        },
+                    itemBuilder: (context, index) {
+                      final id = tabs[index].viewId;
+                      return _AnimatedSidebarTabItem(
+                        key: ValueKey(id),
+                        index: index,
+                        viewId: id,
+                        selected: id == widget.currentViewId,
+                        width: _kSidebarWidth - 16,
+                        height: _kTabHeight,
+                        animateOnMount: _animateNewTabs,
+                        onCloseRequested: () {
+                          HapticFeedback.lightImpact();
+                          return BrowserTabActions.prepareCloseTabNavigation(
+                            context,
+                            currentViewId: widget.currentViewId,
+                            closeViewId: id,
+                            tabs: tabs,
+                          );
+                        },
+                        onCloseCommitted: () =>
+                            BrowserTabActions.commitCloseTab(ref, id),
+                      );
+                    },
+                    onReorder: (oldIndex, newIndex) {
+                      if (oldIndex < newIndex) {
+                        newIndex -= 1;
+                      }
 
-                final maxIndex = tabs.length - 1;
-                if (newIndex > maxIndex) {
-                  newIndex = maxIndex;
-                }
-                if (newIndex < 0 || oldIndex == newIndex) return;
+                      final maxIndex = tabs.length - 1;
+                      if (newIndex > maxIndex) {
+                        newIndex = maxIndex;
+                      }
+                      if (newIndex < 0 || oldIndex == newIndex) return;
 
-                ref
-                    .read(browserTabControllerProvider.notifier)
-                    .reorder(oldIndex, newIndex);
-              },
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
-            child: SizedBox(
-              width: double.infinity,
-              child: FilledButton(
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.add, size: 18),
-                    const SizedBox(width: 8),
-                    Text('New Tab'),
-                  ],
+                      ref
+                          .read(browserTabControllerProvider.notifier)
+                          .reorder(oldIndex, newIndex);
+                    },
+                  ),
                 ),
-                onPressed: () => BrowserTabActions.openNewTab(ref, context),
-              ),
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
+                  sliver: SliverToBoxAdapter(
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(8.0),
+                        onTap: () {
+                          HapticFeedback.lightImpact();
+                          BrowserTabActions.openNewTab(ref, context);
+                        },
+                        child: Container(
+                          constraints: const BoxConstraints(minHeight: 36),
+                          decoration: BoxDecoration(
+                            color: Color.lerp(
+                              Colors.black,
+                              theme.colorScheme.primaryContainer,
+                              0.5,
+                            )!,
+                            borderRadius: BorderRadius.circular(8.0),
+                          ),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: Padding(
+                                    padding: const EdgeInsets.only(
+                                      left: 10,
+                                      right: 6,
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Padding(
+                                          padding: const EdgeInsets.only(
+                                            right: 8.0,
+                                          ),
+                                          child: Icon(
+                                            Icons.add,
+                                            size: 16,
+                                            color: theme.colorScheme.onSurface,
+                                          ),
+                                        ),
+                                        Expanded(
+                                          child: Text(
+                                            'New Tab',
+                                            style: TextStyle(
+                                              color:
+                                                  theme.colorScheme.onSurface,
+                                              fontSize: 13,
+                                            ),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ],

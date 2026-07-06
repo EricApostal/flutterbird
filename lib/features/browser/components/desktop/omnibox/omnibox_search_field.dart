@@ -71,9 +71,6 @@ class OmniboxSearchField extends ConsumerWidget {
                   valueListenable: textEditingController,
                   builder: (context, editingValue, child) {
                     final isFocused = focusNode.hasFocus;
-                    final hasSuggestions = omniboxController
-                        .suggestionsFor(currentTabController, editingValue.text)
-                        .isNotEmpty;
 
                     final fieldRadius = BorderRadius.circular(
                       kOmniboxFieldRadius,

@@ -561,6 +561,7 @@ class _BrowserOmniboxBarState extends ConsumerState<BrowserOmniboxBar> {
                         ),
                   ),
                 ),
+                const SizedBox(width: 6),
                 const DownloadsButton(),
                 const SizedBox(width: 6),
                 IconButton(
