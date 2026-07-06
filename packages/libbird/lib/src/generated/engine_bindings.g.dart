@@ -748,6 +748,14 @@ class LadybirdBindings {
   late final _paste_from_clipboard = _paste_from_clipboardPtr
       .asFunction<void Function(int)>();
 
+  void select_all(int view_id) {
+    return _select_all(view_id);
+  }
+
+  late final _select_allPtr =
+      _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Int)>>('select_all');
+  late final _select_all = _select_allPtr.asFunction<void Function(int)>();
+
   void dispatch_mouse_event(
     int view_id,
     int type,

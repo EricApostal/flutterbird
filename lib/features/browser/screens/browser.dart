@@ -5,9 +5,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutterbird/features/browser/components/browser_window.dart';
 import 'package:flutterbird/features/browser/components/mobile_browser_layout.dart';
-import 'package:flutterbird/features/browser/components/omnibox_bar.dart';
-import 'package:flutterbird/features/browser/components/tab_bar.dart';
-import 'package:flutterbird/features/browser/components/vertical_tab_sidebar.dart';
+import 'package:flutterbird/features/browser/components/desktop/omnibox/omnibox_bar.dart';
+import 'package:flutterbird/features/browser/components/desktop/tabs/tab_bar.dart';
+import 'package:flutterbird/features/browser/components/desktop/tabs/vertical_tab_sidebar.dart';
 import 'package:flutterbird/features/browser/state/tab_actions.dart';
 import 'package:flutterbird/features/browser/state/tab_layout_mode.dart';
 

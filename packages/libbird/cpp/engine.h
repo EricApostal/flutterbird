@@ -190,6 +190,7 @@ LADYBIRD_API char *get_settings_json();
 
 LADYBIRD_API void copy_selection(int view_id);
 LADYBIRD_API void paste_from_clipboard(int view_id);
+LADYBIRD_API void select_all(int view_id);
 
 LADYBIRD_API void dispatch_mouse_event(int view_id, int type, int x, int y,
                                        int button, int buttons, int modifiers,

@@ -671,6 +671,10 @@ class LadybirdController {
     _bindings.paste_from_clipboard(_viewId);
   }
 
+  void selectAll() {
+    _bindings.select_all(_viewId);
+  }
+
   // Commits text from a platform input method (e.g. a Flutter soft keyboard)
   // into the currently-focused editable element, replacing any marked text.
   void commitTextFromInputMethod(String text) {

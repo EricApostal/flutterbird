@@ -4,7 +4,7 @@ import 'package:bird_core/bird_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutterbird/features/browser/components/tab.dart';
+import 'package:flutterbird/features/browser/components/desktop/tabs/tab.dart';
 import 'package:flutterbird/features/browser/state/tab_actions.dart';
 import 'package:flutterbird/features/browser/state/tab_layout_mode.dart';
 import 'package:window_manager/window_manager.dart';
@@ -81,14 +81,10 @@ class _BrowserVerticalTabSidebarState
                 SizedBox(width: Platform.isMacOS ? _kMacControlsWidth : 8),
                 Expanded(
                   child: DragToMoveArea(
-                    child: SizedBox(width: .infinity, height: .infinity),
-                    // child: Align(
-                    //   alignment: Alignment.centerLeft,
-                    //   child: Text(
-                    //     'Workspace',
-                    //     style: theme.textTheme.labelLarge,
-                    //   ),
-                    // ),
+                    child: SizedBox(
+                      width: double.infinity,
+                      height: double.infinity,
+                    ),
                   ),
                 ),
                 IconButton(
@@ -161,24 +157,13 @@ class _BrowserVerticalTabSidebarState
             child: SizedBox(
               width: double.infinity,
               child: FilledButton(
-                // backgroundColor: theme.colorScheme.surfaceContainerHigh,
-                // style: FilledButton.styleFrom(),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(
-                      Icons.add,
-                      size: 18,
-                      // color: theme.colorScheme.onSurface,
-                    ),
+                    Icon(Icons.add, size: 18),
                     const SizedBox(width: 8),
-                    Text(
-                      'New Tab',
-                      // style: theme.textTheme.bodyMedium?.copyWith(
-                      //   // color: theme.colorScheme.onSurface,
-                      // ),
-                    ),
+                    Text('New Tab'),
                   ],
                 ),
                 onPressed: () => BrowserTabActions.openNewTab(ref, context),

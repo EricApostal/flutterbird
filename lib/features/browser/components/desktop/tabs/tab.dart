@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:ladybird/ladybird.dart';
 
 enum BrowserTabVariant { horizontal, arcSidebar }
 
@@ -33,7 +34,7 @@ class BrowserTab extends ConsumerStatefulWidget {
 class _BrowserTabState extends ConsumerState<BrowserTab> {
   bool _isHovering = false;
 
-  Widget _buildTabLeadingIcon(dynamic browserTab, ThemeData theme) {
+  Widget _buildTabLeadingIcon(LadybirdController browserTab, ThemeData theme) {
     return ValueListenableBuilder<bool>(
       valueListenable: browserTab.isLoadingNotifier,
       builder: (context, isLoading, child) {
@@ -66,7 +67,7 @@ class _BrowserTabState extends ConsumerState<BrowserTab> {
   }
 
   Widget _buildTabTitle(
-    dynamic browserTab,
+    LadybirdController browserTab,
     TextStyle? titleStyle,
     Color titleColor,
   ) {

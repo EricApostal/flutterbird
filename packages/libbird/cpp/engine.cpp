@@ -1543,6 +1543,14 @@ void paste_from_clipboard(int view_id) {
   it->second->paste_text_from_clipboard();
 }
 
+void select_all(int view_id) {
+  auto it = g_web_views.find(view_id);
+  if (it == g_web_views.end())
+    return;
+
+  it->second->select_all();
+}
+
 void set_loading_state_change_callback(int view_id,
                                        LoadingStateChangeCallback callback) {
   auto it = g_web_views.find(view_id);

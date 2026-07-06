@@ -629,6 +629,11 @@ class _LadybirdViewState extends State<LadybirdView>
       return true;
     }
 
+    if (event.logicalKey == LogicalKeyboardKey.keyA) {
+      widget.controller.selectAll();
+      return true;
+    }
+
     return false;
   }
 
