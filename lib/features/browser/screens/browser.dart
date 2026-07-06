@@ -95,6 +95,7 @@ class _BrowserWindowScreenState extends ConsumerState<BrowserWindowScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     final viewId = widget.viewId;
     final layoutMode = ref.watch(browserTabLayoutModeControllerProvider);
     final isVerticalLayout = layoutMode == BrowserTabLayoutMode.vertical;
@@ -111,6 +112,11 @@ class _BrowserWindowScreenState extends ConsumerState<BrowserWindowScreen> {
     final padding = MediaQuery.paddingOf(context);
 
     return Scaffold(
+      backgroundColor: Color.lerp(
+        Colors.black,
+        theme.colorScheme.primaryContainer,
+        0.5,
+      ),
       body: Row(
         children: [
           AnimatedContainer(

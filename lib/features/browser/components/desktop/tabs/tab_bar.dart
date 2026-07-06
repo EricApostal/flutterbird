@@ -88,7 +88,7 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar>
 
   @override
   Widget build(BuildContext context) {
-    final tabStripHeight = 45.0;
+    final tabStripHeight = 40.0;
     final tabListPadding = const EdgeInsets.only(top: 4, bottom: 4);
 
     final tabs = ref.watch(browserTabControllerProvider);

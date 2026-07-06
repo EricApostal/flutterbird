@@ -43,7 +43,7 @@ TextTheme getBaseTextTheme(TextTheme baseTextTheme) {
       fontSize: 13,
     ),
     bodySmall: baseTextTheme.bodySmall?.copyWith(
-      fontWeight: FontWeight.w500,
+      fontWeight: FontWeight.w400,
       fontSize: 11,
     ),
   );

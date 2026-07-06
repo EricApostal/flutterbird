@@ -65,7 +65,7 @@ class _MainAppState extends State<MainApp> {
         pageTransitionsTheme: pageTransition,
         colorScheme: ColorScheme.fromSeed(
           brightness: Brightness.dark,
-          seedColor: const Color.fromARGB(255, 35, 174, 255),
+          seedColor: const Color.fromARGB(255, 53, 111, 227),
         ),
         textTheme: getBaseTextTheme(ThemeData.dark().textTheme),
         materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,

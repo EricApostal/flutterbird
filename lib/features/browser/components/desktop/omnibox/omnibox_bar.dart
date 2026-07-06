@@ -478,7 +478,7 @@ class _BrowserOmniboxBarState extends ConsumerState<BrowserOmniboxBar> {
     final currentTabController = widget.currentTabController;
 
     return Container(
-      color: theme.colorScheme.surfaceContainerHigh,
+      color: theme.colorScheme.primaryContainer,
       child: Padding(
         padding: const EdgeInsets.only(left: 4, right: 4, bottom: 4, top: 4),
         child: Column(

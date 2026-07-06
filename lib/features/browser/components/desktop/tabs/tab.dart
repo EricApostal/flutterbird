@@ -129,8 +129,12 @@ class _BrowserTabState extends ConsumerState<BrowserTab> {
           ),
           decoration: BoxDecoration(
             color: widget.selected
-                ? theme.colorScheme.surfaceContainerHigh
-                : theme.colorScheme.surface,
+                ? theme.colorScheme.primaryContainer
+                : Color.lerp(
+                    Colors.black,
+                    theme.colorScheme.primaryContainer,
+                    0.5,
+                  )!,
             borderRadius: borderRadius,
           ),
           child: Row(

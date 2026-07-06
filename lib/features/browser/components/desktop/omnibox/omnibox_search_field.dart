@@ -5,7 +5,7 @@ import 'package:flutterbird/features/browser/components/desktop/omnibox/omnibox_
 import 'package:flutterbird/features/browser/state/omnibox_state.dart';
 import 'package:ladybird/ladybird.dart';
 
-const double _kFieldRadius = 8.0;
+const double _kFieldRadius = 10.0;
 
 /// The URL/search input in the desktop omnibox toolbar. Navigation is fully
 /// delegated to the parent via [onSubmitted] and [onSuggestionSelected]
@@ -89,7 +89,11 @@ class OmniboxSearchField extends ConsumerWidget {
                           ),
                           decoration: InputDecoration(
                             filled: true,
-                            fillColor: theme.colorScheme.surface,
+                            fillColor: Color.lerp(
+                              Colors.black,
+                              theme.colorScheme.primaryContainer,
+                              0.5,
+                            )!,
                             isDense: true,
                             contentPadding: const EdgeInsets.symmetric(
                               horizontal: 10,
@@ -104,7 +108,7 @@ class OmniboxSearchField extends ConsumerWidget {
                               ),
                               borderSide: BorderSide(
                                 color: theme.colorScheme.surface,
-                                width: 1,
+                                width: 0,
                               ),
                             ),
                             focusedBorder: OutlineInputBorder(
@@ -113,7 +117,7 @@ class OmniboxSearchField extends ConsumerWidget {
                               ),
                               borderSide: BorderSide(
                                 color: theme.colorScheme.primary,
-                                width: 1,
+                                width: 0,
                               ),
                             ),
                             errorBorder: OutlineInputBorder(
