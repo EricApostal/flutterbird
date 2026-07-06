@@ -45,6 +45,8 @@
 #include <LibWebView/BrowserProcess.h>
 #include <LibWebView/HistoryStore.h>
 #include <LibWebView/Menu.h>
+#include <LibWebView/SearchEngine.h>
+#include <LibWebView/Settings.h>
 #include <LibWebView/Utilities.h>
 #include <LibWebView/ViewImplementation.h>
 #ifndef __APPLE__
@@ -923,9 +925,15 @@ void init_ladybird() {
   }
 #endif
 
+#if defined(__APPLE__) && TARGET_OS_IPHONE
   static char const *argv[] = {"ladybird", "--disable-sql-database", nullptr};
   static AK::StringView string_views[] = {AK::StringView("ladybird", 8), AK::StringView("--disable-sql-database", 22)};
   Main::Arguments arguments = {2, (char **)argv, {string_views, 2}};
+#else
+  static char const *argv[] = {"ladybird", nullptr};
+  static AK::StringView string_views[] = {AK::StringView("ladybird", 8)};
+  Main::Arguments arguments = {1, (char **)argv, {string_views, 1}};
+#endif
 
   auto app = FlutterApplication::create(arguments, lib_path);
   if (app.is_error()) {
@@ -1372,6 +1380,124 @@ char *history_autocomplete_json(const char *query, int limit) {
   }
 
   auto json = JsonValue(move(suggestions)).serialized();
+  auto bytes = json.to_byte_string();
+  return strdup(bytes.characters());
+}
+
+char *get_builtin_search_engines_json() {
+  JsonArray engines;
+  for (auto const &engine : WebView::builtin_search_engines()) {
+    JsonObject item;
+    item.set("name"sv, engine.name);
+    item.set("queryUrl"sv, engine.query_url);
+    engines.must_append(move(item));
+  }
+
+  auto json = JsonValue(move(engines)).serialized();
+  auto bytes = json.to_byte_string();
+  return strdup(bytes.characters());
+}
+
+char *get_search_engine_name() {
+  if (!s_app)
+    return nullptr;
+
+  auto const &search_engine = WebView::Application::settings().search_engine();
+  if (!search_engine.has_value())
+    return nullptr;
+
+  auto bytes = search_engine->name.to_byte_string();
+  return strdup(bytes.characters());
+}
+
+void set_search_engine(const char *name) {
+  if (!s_app)
+    return;
+
+  if (name && strlen(name) > 0) {
+    WebView::Application::settings().set_search_engine(
+        StringView(name, strlen(name)));
+  } else {
+    WebView::Application::settings().set_search_engine({});
+  }
+}
+
+static char const *json_value_type_name(JsonValue::Type type) {
+  switch (type) {
+  case JsonValue::Type::Null:
+    return "null";
+  case JsonValue::Type::Bool:
+    return "bool";
+  case JsonValue::Type::Number:
+    return "number";
+  case JsonValue::Type::String:
+    return "string";
+  case JsonValue::Type::Array:
+    return "array";
+  case JsonValue::Type::Object:
+    return "object";
+  }
+  return "unknown";
+}
+
+char *get_config_variable_definitions_json() {
+  JsonArray definitions;
+  for (auto const &variable : WebView::config_variable_definitions()) {
+    JsonObject item;
+    item.set("name"sv, variable.name);
+    item.set("title"sv, variable.title);
+    item.set("description"sv, variable.description);
+    item.set("defaultValue"sv, variable.default_value);
+    if (variable.array_element_type.has_value()) {
+      auto const *type_name = json_value_type_name(*variable.array_element_type);
+      item.set("arrayElementType"sv, StringView(type_name, strlen(type_name)));
+    }
+    definitions.must_append(move(item));
+  }
+
+  auto json = JsonValue(move(definitions)).serialized();
+  auto bytes = json.to_byte_string();
+  return strdup(bytes.characters());
+}
+
+char *get_config_variable_json(const char *name) {
+  if (!s_app || !name)
+    return nullptr;
+
+  auto id =
+      WebView::config_variable_id_from_name(StringView(name, strlen(name)));
+  if (!id.has_value())
+    return nullptr;
+
+  auto const &value = WebView::Application::settings().config_variable(*id);
+  auto bytes = value.serialized().to_byte_string();
+  return strdup(bytes.characters());
+}
+
+bool set_config_variable_json(const char *name, const char *json_value) {
+  if (!s_app || !name || !json_value)
+    return false;
+
+  auto id =
+      WebView::config_variable_id_from_name(StringView(name, strlen(name)));
+  if (!id.has_value())
+    return false;
+
+  auto parsed =
+      JsonValue::from_string(StringView(json_value, strlen(json_value)));
+  if (parsed.is_error())
+    return false;
+
+  WebView::Application::settings().set_config_variable(
+      *id, parsed.release_value());
+  return true;
+}
+
+char *get_settings_json() {
+  if (!s_app)
+    return nullptr;
+
+  auto json = WebView::Application::settings().serialize_json().serialized();
   auto bytes = json.to_byte_string();
   return strdup(bytes.characters());
 }

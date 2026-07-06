@@ -165,7 +165,7 @@ class _BrowserOmniboxBarState extends ConsumerState<BrowserOmniboxBar> {
     final currentUrl = controller.urlNotifier.value;
     final shouldHideDefaultSearchHome =
         _hideDefaultSearchHomeForTabs.contains(controller.viewId) &&
-        omnibox.isDefaultSearchHome(currentUrl);
+        omnibox.isDefaultSearchHome(controller, currentUrl);
     final displayText = shouldHideDefaultSearchHome ? '' : currentUrl;
     _setOmniboxText(displayText);
   }
@@ -190,7 +190,7 @@ class _BrowserOmniboxBarState extends ConsumerState<BrowserOmniboxBar> {
     if (currentUrl.trim().isEmpty) return;
 
     final omnibox = ref.read(browserOmniboxProvider.notifier);
-    if (!omnibox.isDefaultSearchHome(currentUrl)) {
+    if (!omnibox.isDefaultSearchHome(controller, currentUrl)) {
       _hideDefaultSearchHomeForTabs.remove(controller.viewId);
     }
   }
@@ -550,7 +550,10 @@ class _BrowserOmniboxBarState extends ConsumerState<BrowserOmniboxBar> {
     final rawInput = value.trim();
     if (rawInput.isEmpty) return;
 
-    final target = omnibox.buildNavigationTarget(rawInput);
+    final target = omnibox.buildNavigationTarget(
+      currentTabController,
+      rawInput,
+    );
     if (target.isEmpty) return;
 
     _omniboxFocusNode.unfocus();
@@ -567,7 +570,7 @@ class _BrowserOmniboxBarState extends ConsumerState<BrowserOmniboxBar> {
     final target =
         suggestion.type == OmniboxSuggestionType.searchAction ||
             suggestion.type == OmniboxSuggestionType.searchQuery
-        ? omnibox.buildNavigationTarget(suggestion.value)
+        ? omnibox.buildNavigationTarget(currentTabController, suggestion.value)
         : suggestion.value;
 
     if (target.isEmpty) return;
@@ -788,6 +791,7 @@ class _BrowserOmniboxBarState extends ConsumerState<BrowserOmniboxBar> {
                         displayStringForOption: (option) => option.value,
                         optionsBuilder: (textEditingValue) {
                           return omniboxController.suggestionsFor(
+                            currentTabController,
                             textEditingValue.text,
                           );
                         },

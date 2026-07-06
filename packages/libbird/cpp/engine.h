@@ -150,6 +150,44 @@ LADYBIRD_API bool is_current_view_bookmarked(int view_id);
 // Caller owns returned memory and must free it.
 LADYBIRD_API char *history_autocomplete_json(const char *query, int limit);
 
+// Returns a JSON array string of the engine's built-in search engines, each
+// with "name" and "queryUrl" fields. Caller owns returned memory and must
+// free it.
+LADYBIRD_API char *get_builtin_search_engines_json();
+
+// Returns the name of the currently configured search engine, or nullptr if
+// no explicit search engine has been configured (the embedder should treat
+// this as "use the default"). Caller owns returned memory and must free it.
+LADYBIRD_API char *get_search_engine_name();
+
+// Sets the active search engine by name (must match a builtin or custom
+// search engine name). Pass nullptr or an empty string to clear the
+// selection and fall back to the default.
+LADYBIRD_API void set_search_engine(const char *name);
+
+// Returns a JSON array string describing all generic config variables
+// exposed by the engine (name, title, description, default value, and
+// optional array element type). Caller owns returned memory and must free
+// it.
+LADYBIRD_API char *get_config_variable_definitions_json();
+
+// Returns the current JSON-encoded value of a config variable by name, or
+// nullptr if the name is not recognized. Caller owns returned memory and
+// must free it.
+LADYBIRD_API char *get_config_variable_json(const char *name);
+
+// Sets a config variable by name from a JSON-encoded value. Returns false if
+// the name is not recognized (invalid values are silently ignored, matching
+// engine behavior).
+LADYBIRD_API bool set_config_variable_json(const char *name,
+                                           const char *json_value);
+
+// Returns a JSON object string snapshot of all engine settings (search
+// engine, tab settings, zoom, languages, browsing behavior, etc), as defined
+// by WebView::Settings::serialize_json(). Caller owns returned memory and
+// must free it.
+LADYBIRD_API char *get_settings_json();
+
 LADYBIRD_API void copy_selection(int view_id);
 LADYBIRD_API void paste_from_clipboard(int view_id);
 

@@ -640,6 +640,94 @@ class LadybirdBindings {
         isLeaf: true,
       );
 
+  ffi.Pointer<ffi.Char> get_builtin_search_engines_json() {
+    return _get_builtin_search_engines_json();
+  }
+
+  late final _get_builtin_search_engines_jsonPtr =
+      _lookup<ffi.NativeFunction<ffi.Pointer<ffi.Char> Function()>>(
+        'get_builtin_search_engines_json',
+      );
+  late final _get_builtin_search_engines_json =
+      _get_builtin_search_engines_jsonPtr
+          .asFunction<ffi.Pointer<ffi.Char> Function()>();
+
+  ffi.Pointer<ffi.Char> get_search_engine_name() {
+    return _get_search_engine_name();
+  }
+
+  late final _get_search_engine_namePtr =
+      _lookup<ffi.NativeFunction<ffi.Pointer<ffi.Char> Function()>>(
+        'get_search_engine_name',
+      );
+  late final _get_search_engine_name = _get_search_engine_namePtr
+      .asFunction<ffi.Pointer<ffi.Char> Function()>();
+
+  void set_search_engine(ffi.Pointer<ffi.Char> name) {
+    return _set_search_engine(name);
+  }
+
+  late final _set_search_enginePtr =
+      _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Pointer<ffi.Char>)>>(
+        'set_search_engine',
+      );
+  late final _set_search_engine = _set_search_enginePtr
+      .asFunction<void Function(ffi.Pointer<ffi.Char>)>();
+
+  ffi.Pointer<ffi.Char> get_config_variable_definitions_json() {
+    return _get_config_variable_definitions_json();
+  }
+
+  late final _get_config_variable_definitions_jsonPtr =
+      _lookup<ffi.NativeFunction<ffi.Pointer<ffi.Char> Function()>>(
+        'get_config_variable_definitions_json',
+      );
+  late final _get_config_variable_definitions_json =
+      _get_config_variable_definitions_jsonPtr
+          .asFunction<ffi.Pointer<ffi.Char> Function()>();
+
+  ffi.Pointer<ffi.Char> get_config_variable_json(ffi.Pointer<ffi.Char> name) {
+    return _get_config_variable_json(name);
+  }
+
+  late final _get_config_variable_jsonPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.Pointer<ffi.Char> Function(ffi.Pointer<ffi.Char>)
+        >
+      >('get_config_variable_json');
+  late final _get_config_variable_json = _get_config_variable_jsonPtr
+      .asFunction<ffi.Pointer<ffi.Char> Function(ffi.Pointer<ffi.Char>)>();
+
+  bool set_config_variable_json(
+    ffi.Pointer<ffi.Char> name,
+    ffi.Pointer<ffi.Char> json_value,
+  ) {
+    return _set_config_variable_json(name, json_value);
+  }
+
+  late final _set_config_variable_jsonPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.Bool Function(ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Char>)
+        >
+      >('set_config_variable_json');
+  late final _set_config_variable_json = _set_config_variable_jsonPtr
+      .asFunction<
+        bool Function(ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Char>)
+      >();
+
+  ffi.Pointer<ffi.Char> get_settings_json() {
+    return _get_settings_json();
+  }
+
+  late final _get_settings_jsonPtr =
+      _lookup<ffi.NativeFunction<ffi.Pointer<ffi.Char> Function()>>(
+        'get_settings_json',
+      );
+  late final _get_settings_json = _get_settings_jsonPtr
+      .asFunction<ffi.Pointer<ffi.Char> Function()>();
+
   void copy_selection(int view_id) {
     return _copy_selection(view_id);
   }

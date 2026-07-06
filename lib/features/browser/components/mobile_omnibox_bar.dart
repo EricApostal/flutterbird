@@ -166,7 +166,7 @@ class _MobileOmniboxBarState extends ConsumerState<MobileOmniboxBar> {
     final currentUrl = controller.urlNotifier.value;
     final shouldHideDefaultSearchHome =
         _hideDefaultSearchHomeForTabs.contains(controller.viewId) &&
-        omnibox.isDefaultSearchHome(currentUrl);
+        omnibox.isDefaultSearchHome(controller, currentUrl);
     final displayText = shouldHideDefaultSearchHome ? '' : currentUrl;
     _setOmniboxText(displayText);
   }
@@ -191,7 +191,7 @@ class _MobileOmniboxBarState extends ConsumerState<MobileOmniboxBar> {
     if (currentUrl.trim().isEmpty) return;
 
     final omnibox = ref.read(browserOmniboxProvider.notifier);
-    if (!omnibox.isDefaultSearchHome(currentUrl)) {
+    if (!omnibox.isDefaultSearchHome(controller, currentUrl)) {
       _hideDefaultSearchHomeForTabs.remove(controller.viewId);
     }
   }
@@ -551,7 +551,10 @@ class _MobileOmniboxBarState extends ConsumerState<MobileOmniboxBar> {
     final rawInput = value.trim();
     if (rawInput.isEmpty) return;
 
-    final target = omnibox.buildNavigationTarget(rawInput);
+    final target = omnibox.buildNavigationTarget(
+      currentTabController,
+      rawInput,
+    );
     if (target.isEmpty) return;
 
     _omniboxFocusNode.unfocus();
@@ -568,7 +571,7 @@ class _MobileOmniboxBarState extends ConsumerState<MobileOmniboxBar> {
     final target =
         suggestion.type == OmniboxSuggestionType.searchAction ||
             suggestion.type == OmniboxSuggestionType.searchQuery
-        ? omnibox.buildNavigationTarget(suggestion.value)
+        ? omnibox.buildNavigationTarget(currentTabController, suggestion.value)
         : suggestion.value;
 
     if (target.isEmpty) return;
@@ -724,319 +727,376 @@ class _MobileOmniboxBarState extends ConsumerState<MobileOmniboxBar> {
               child: SafeArea(
                 bottom: false,
                 child: Padding(
-                  padding: const EdgeInsets.only(left: 4, right: 4, bottom: 4, top: 4),
+                  padding: const EdgeInsets.only(
+                    left: 4,
+                    right: 4,
+                    bottom: 4,
+                    top: 4,
+                  ),
                   child: Column(
-          children: [
-            Row(
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.home, size: 22),
-                  onPressed: () {
-                    currentTabController.navigate('https://duckduckgo.com/');
-                  },
-                ),
-                const SizedBox(width: 4),
-                Expanded(
-                  child: ValueListenableBuilder<String>(
-                    valueListenable: currentTabController.urlNotifier,
-                    builder: (context, url, child) {
-                      return RawAutocomplete<OmniboxSuggestion>(
-                        textEditingController: _omniboxTextController,
-                        focusNode: _omniboxFocusNode,
-                        displayStringForOption: (option) => option.value,
-                        optionsBuilder: (textEditingValue) {
-                          return omniboxController.suggestionsFor(
-                            textEditingValue.text,
-                          );
-                        },
-                        onSelected: (suggestion) {
-                          _onSuggestionSelected(
-                            omniboxController,
-                            currentTabController,
-                            suggestion,
-                          );
-                        },
-                        fieldViewBuilder:
-                            (
-                              context,
-                              textEditingController,
-                              focusNode,
-                              onFieldSubmitted,
-                            ) {
-                              return ValueListenableBuilder<TextEditingValue>(
-                                valueListenable: textEditingController,
-                                builder: (context, editingValue, child) {
-                                  final isFocused = focusNode.hasFocus;
-                                  return Stack(
-                                    children: [
-                                      TextField(
-                                        onSubmitted: (value) {
-                                          _submitOmniboxInput(
-                                            omniboxController,
-                                            currentTabController,
-                                            value,
-                                          );
-                                          onFieldSubmitted();
-                                        },
-                                        controller: textEditingController,
-                                        focusNode: focusNode,
-                                        style: theme.textTheme.bodyMedium!
-                                            .copyWith(
-                                              fontSize: 13,
-                                              color: isFocused
-                                                  ? theme.colorScheme.onSurface
-                                                  : Colors.transparent,
-                                            ),
-                                        decoration: InputDecoration(
-                                          filled: true,
-                                          fillColor: theme.colorScheme.surface,
-                                          isDense: true,
-                                          contentPadding:
-                                              const EdgeInsets.symmetric(
-                                                horizontal: 10,
-                                                vertical: 12,
-                                              ),
-                                          hintStyle: theme.textTheme.bodyMedium
-                                              ?.copyWith(
-                                                color: theme
-                                                    .colorScheme
-                                                    .onSurface
-                                                    .withAlpha(150),
-                                              ),
-                                          enabledBorder: OutlineInputBorder(
-                                            borderRadius: BorderRadius.circular(
-                                              radius,
-                                            ),
-                                            borderSide: BorderSide(
-                                              color: theme.colorScheme.surface,
-                                              width: 1,
-                                            ),
-                                          ),
-                                          focusedBorder: OutlineInputBorder(
-                                            borderRadius: BorderRadius.circular(
-                                              radius,
-                                            ),
-                                            borderSide: BorderSide(
-                                              color: theme.colorScheme.primary,
-                                              width: 1,
-                                            ),
-                                          ),
-                                          errorBorder: OutlineInputBorder(
-                                            borderRadius: BorderRadius.circular(
-                                              radius,
-                                            ),
-                                            borderSide: BorderSide(
-                                              color: theme.colorScheme.error,
-                                              width: 1,
-                                            ),
-                                          ),
-                                          focusedErrorBorder:
-                                              OutlineInputBorder(
-                                                borderRadius:
-                                                    BorderRadius.circular(
-                                                      radius,
-                                                    ),
-                                                borderSide: BorderSide(
-                                                  color:
-                                                      theme.colorScheme.error,
-                                                  width: 1,
-                                                ),
-                                              ),
-                                        ),
-                                      ),
-                                      if (!isFocused)
-                                        _buildStyledOmniboxOverlay(
-                                          theme,
-                                          editingValue.text,
-                                        ),
-                                    ],
-                                  );
-                                },
+                    children: [
+                      Row(
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.home, size: 22),
+                            onPressed: () {
+                              currentTabController.navigate(
+                                currentTabController.homeUrl,
                               );
                             },
-                        optionsViewBuilder: (context, onSelected, options) {
-                          final optionList = options.toList(growable: false);
-                          if (optionList.isEmpty) {
-                            return const SizedBox.shrink();
-                          }
-
-                          return Align(
-                            alignment: Alignment.topLeft,
-                            child: Material(
-                              elevation: 6,
-                              color: theme.colorScheme.surface,
-                              borderRadius: BorderRadius.circular(10),
-                              child: ConstrainedBox(
-                                constraints: const BoxConstraints(
-                                  maxWidth: 760,
-                                  maxHeight: 320,
-                                ),
-                                child: ListView.separated(
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: 6,
-                                  ),
-                                  shrinkWrap: true,
-                                  itemCount: optionList.length,
-                                  separatorBuilder: (context, index) {
-                                    return Divider(
-                                      height: 1,
-                                      color: theme.colorScheme.outline
-                                          .withAlpha(50),
+                          ),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: ValueListenableBuilder<String>(
+                              valueListenable: currentTabController.urlNotifier,
+                              builder: (context, url, child) {
+                                return RawAutocomplete<OmniboxSuggestion>(
+                                  textEditingController: _omniboxTextController,
+                                  focusNode: _omniboxFocusNode,
+                                  displayStringForOption: (option) =>
+                                      option.value,
+                                  optionsBuilder: (textEditingValue) {
+                                    return omniboxController.suggestionsFor(
+                                      currentTabController,
+                                      textEditingValue.text,
                                     );
                                   },
-                                  itemBuilder: (context, index) {
-                                    final option = optionList[index];
-                                    final isUrlSuggestion = _isUrlSuggestion(
-                                      option,
+                                  onSelected: (suggestion) {
+                                    _onSuggestionSelected(
+                                      omniboxController,
+                                      currentTabController,
+                                      suggestion,
                                     );
-                                    final urlText = option.subtitle?.trim();
-                                    final hasUrlText =
-                                        isUrlSuggestion &&
-                                        urlText != null &&
-                                        urlText.isNotEmpty;
-                                    final title = option.title.trim();
-                                    final showTitle =
-                                        title.isNotEmpty &&
-                                        (!hasUrlText || title != urlText);
-
-                                    return InkWell(
-                                      onTap: () => onSelected(option),
-                                      child: Padding(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 12,
-                                          vertical: 10,
-                                        ),
-                                        child: Row(
-                                          children: [
-                                            _suggestionLeading(theme, option),
-                                            const SizedBox(width: 10),
-                                            Expanded(
-                                              child: Column(
-                                                crossAxisAlignment:
-                                                    CrossAxisAlignment.start,
-                                                mainAxisSize: MainAxisSize.min,
-                                                children: [
-                                                  if (hasUrlText)
-                                                    Text.rich(
-                                                      _styledUrlSpan(
-                                                        theme,
-                                                        urlText,
+                                  },
+                                  fieldViewBuilder:
+                                      (
+                                        context,
+                                        textEditingController,
+                                        focusNode,
+                                        onFieldSubmitted,
+                                      ) {
+                                        return ValueListenableBuilder<
+                                          TextEditingValue
+                                        >(
+                                          valueListenable:
+                                              textEditingController,
+                                          builder: (context, editingValue, child) {
+                                            final isFocused =
+                                                focusNode.hasFocus;
+                                            return Stack(
+                                              children: [
+                                                TextField(
+                                                  onSubmitted: (value) {
+                                                    _submitOmniboxInput(
+                                                      omniboxController,
+                                                      currentTabController,
+                                                      value,
+                                                    );
+                                                    onFieldSubmitted();
+                                                  },
+                                                  controller:
+                                                      textEditingController,
+                                                  focusNode: focusNode,
+                                                  style: theme
+                                                      .textTheme
+                                                      .bodyMedium!
+                                                      .copyWith(
+                                                        fontSize: 13,
+                                                        color: isFocused
+                                                            ? theme
+                                                                  .colorScheme
+                                                                  .onSurface
+                                                            : Colors
+                                                                  .transparent,
                                                       ),
-                                                      maxLines: 1,
-                                                      overflow:
-                                                          TextOverflow.ellipsis,
-                                                    ),
-                                                  if (showTitle)
-                                                    Text(
-                                                      title,
-                                                      maxLines: 1,
-                                                      overflow:
-                                                          TextOverflow.ellipsis,
-                                                      style: hasUrlText
-                                                          ? theme
-                                                                .textTheme
-                                                                .bodySmall
-                                                                ?.copyWith(
-                                                                  color: theme
-                                                                      .colorScheme
-                                                                      .onSurfaceVariant,
-                                                                )
-                                                          : null,
-                                                    ),
-                                                  if (!hasUrlText &&
-                                                      option.subtitle != null)
-                                                    Text(
-                                                      option.subtitle!,
-                                                      maxLines: 1,
-                                                      overflow:
-                                                          TextOverflow.ellipsis,
-                                                      style: theme
-                                                          .textTheme
-                                                          .bodySmall
-                                                          ?.copyWith(
-                                                            color: theme
-                                                                .colorScheme
-                                                                .onSurfaceVariant,
+                                                  decoration: InputDecoration(
+                                                    filled: true,
+                                                    fillColor: theme
+                                                        .colorScheme
+                                                        .surface,
+                                                    isDense: true,
+                                                    contentPadding:
+                                                        const EdgeInsets.symmetric(
+                                                          horizontal: 10,
+                                                          vertical: 12,
+                                                        ),
+                                                    hintStyle: theme
+                                                        .textTheme
+                                                        .bodyMedium
+                                                        ?.copyWith(
+                                                          color: theme
+                                                              .colorScheme
+                                                              .onSurface
+                                                              .withAlpha(150),
+                                                        ),
+                                                    enabledBorder:
+                                                        OutlineInputBorder(
+                                                          borderRadius:
+                                                              BorderRadius.circular(
+                                                                radius,
+                                                              ),
+                                                          borderSide:
+                                                              BorderSide(
+                                                                color: theme
+                                                                    .colorScheme
+                                                                    .surface,
+                                                                width: 1,
+                                                              ),
+                                                        ),
+                                                    focusedBorder:
+                                                        OutlineInputBorder(
+                                                          borderRadius:
+                                                              BorderRadius.circular(
+                                                                radius,
+                                                              ),
+                                                          borderSide:
+                                                              BorderSide(
+                                                                color: theme
+                                                                    .colorScheme
+                                                                    .primary,
+                                                                width: 1,
+                                                              ),
+                                                        ),
+                                                    errorBorder: OutlineInputBorder(
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                            radius,
                                                           ),
+                                                      borderSide: BorderSide(
+                                                        color: theme
+                                                            .colorScheme
+                                                            .error,
+                                                        width: 1,
+                                                      ),
                                                     ),
-                                                ],
-                                              ),
+                                                    focusedErrorBorder:
+                                                        OutlineInputBorder(
+                                                          borderRadius:
+                                                              BorderRadius.circular(
+                                                                radius,
+                                                              ),
+                                                          borderSide:
+                                                              BorderSide(
+                                                                color: theme
+                                                                    .colorScheme
+                                                                    .error,
+                                                                width: 1,
+                                                              ),
+                                                        ),
+                                                  ),
+                                                ),
+                                                if (!isFocused)
+                                                  _buildStyledOmniboxOverlay(
+                                                    theme,
+                                                    editingValue.text,
+                                                  ),
+                                              ],
+                                            );
+                                          },
+                                        );
+                                      },
+                                  optionsViewBuilder: (context, onSelected, options) {
+                                    final optionList = options.toList(
+                                      growable: false,
+                                    );
+                                    if (optionList.isEmpty) {
+                                      return const SizedBox.shrink();
+                                    }
+
+                                    return Align(
+                                      alignment: Alignment.topLeft,
+                                      child: Material(
+                                        elevation: 6,
+                                        color: theme.colorScheme.surface,
+                                        borderRadius: BorderRadius.circular(10),
+                                        child: ConstrainedBox(
+                                          constraints: const BoxConstraints(
+                                            maxWidth: 760,
+                                            maxHeight: 320,
+                                          ),
+                                          child: ListView.separated(
+                                            padding: const EdgeInsets.symmetric(
+                                              vertical: 6,
                                             ),
-                                          ],
+                                            shrinkWrap: true,
+                                            itemCount: optionList.length,
+                                            separatorBuilder: (context, index) {
+                                              return Divider(
+                                                height: 1,
+                                                color: theme.colorScheme.outline
+                                                    .withAlpha(50),
+                                              );
+                                            },
+                                            itemBuilder: (context, index) {
+                                              final option = optionList[index];
+                                              final isUrlSuggestion =
+                                                  _isUrlSuggestion(option);
+                                              final urlText = option.subtitle
+                                                  ?.trim();
+                                              final hasUrlText =
+                                                  isUrlSuggestion &&
+                                                  urlText != null &&
+                                                  urlText.isNotEmpty;
+                                              final title = option.title.trim();
+                                              final showTitle =
+                                                  title.isNotEmpty &&
+                                                  (!hasUrlText ||
+                                                      title != urlText);
+
+                                              return InkWell(
+                                                onTap: () => onSelected(option),
+                                                child: Padding(
+                                                  padding:
+                                                      const EdgeInsets.symmetric(
+                                                        horizontal: 12,
+                                                        vertical: 10,
+                                                      ),
+                                                  child: Row(
+                                                    children: [
+                                                      _suggestionLeading(
+                                                        theme,
+                                                        option,
+                                                      ),
+                                                      const SizedBox(width: 10),
+                                                      Expanded(
+                                                        child: Column(
+                                                          crossAxisAlignment:
+                                                              CrossAxisAlignment
+                                                                  .start,
+                                                          mainAxisSize:
+                                                              MainAxisSize.min,
+                                                          children: [
+                                                            if (hasUrlText)
+                                                              Text.rich(
+                                                                _styledUrlSpan(
+                                                                  theme,
+                                                                  urlText,
+                                                                ),
+                                                                maxLines: 1,
+                                                                overflow:
+                                                                    TextOverflow
+                                                                        .ellipsis,
+                                                              ),
+                                                            if (showTitle)
+                                                              Text(
+                                                                title,
+                                                                maxLines: 1,
+                                                                overflow:
+                                                                    TextOverflow
+                                                                        .ellipsis,
+                                                                style:
+                                                                    hasUrlText
+                                                                    ? theme
+                                                                          .textTheme
+                                                                          .bodySmall
+                                                                          ?.copyWith(
+                                                                            color:
+                                                                                theme.colorScheme.onSurfaceVariant,
+                                                                          )
+                                                                    : null,
+                                                              ),
+                                                            if (!hasUrlText &&
+                                                                option.subtitle !=
+                                                                    null)
+                                                              Text(
+                                                                option
+                                                                    .subtitle!,
+                                                                maxLines: 1,
+                                                                overflow:
+                                                                    TextOverflow
+                                                                        .ellipsis,
+                                                                style: theme
+                                                                    .textTheme
+                                                                    .bodySmall
+                                                                    ?.copyWith(
+                                                                      color: theme
+                                                                          .colorScheme
+                                                                          .onSurfaceVariant,
+                                                                    ),
+                                                              ),
+                                                          ],
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                              );
+                                            },
+                                          ),
                                         ),
                                       ),
                                     );
                                   },
-                                ),
-                              ),
+                                );
+                              },
                             ),
-                          );
-                        },
-                      );
-                    },
-                  ),
-                ),
-                const SizedBox(width: 6),
-                Consumer(
-                  builder: (context, ref, child) {
-                    final tabs = ref.watch(browserTabControllerProvider);
-                    return InkWell(
-                      borderRadius: BorderRadius.circular(6),
-                      onTap: () {
-                        context.push('/browser/mobile_tabs');
-                      },
-                      child: Container(
-                        width: 24,
-                        height: 24,
-                        decoration: BoxDecoration(
-                          border: Border.all(color: theme.colorScheme.onSurface, width: 1.5),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        alignment: Alignment.center,
-                        child: Text(
-                          '${tabs.length}',
-                          style: theme.textTheme.labelSmall?.copyWith(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 11,
+                          ),
+                          const SizedBox(width: 6),
+                          Consumer(
+                            builder: (context, ref, child) {
+                              final tabs = ref.watch(
+                                browserTabControllerProvider,
+                              );
+                              return InkWell(
+                                borderRadius: BorderRadius.circular(6),
+                                onTap: () {
+                                  context.push('/browser/mobile_tabs');
+                                },
+                                child: Container(
+                                  width: 24,
+                                  height: 24,
+                                  decoration: BoxDecoration(
+                                    border: Border.all(
+                                      color: theme.colorScheme.onSurface,
+                                      width: 1.5,
+                                    ),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  alignment: Alignment.center,
+                                  child: Text(
+                                    '${tabs.length}',
+                                    style: theme.textTheme.labelSmall?.copyWith(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 11,
+                                    ),
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                          const SizedBox(width: 6),
+                          IconButton(
+                            key: _toolbarMenuButtonKey,
+                            tooltip: 'Open menu',
+                            icon: const Icon(Icons.more_vert, size: 22),
+                            onPressed: () {
+                              _showToolbarContextMenu(
+                                omniboxController,
+                                currentTabController,
+                                bookmarks,
+                              );
+                            },
+                          ),
+                        ],
+                      ),
+                      if (bookmarks.isNotEmpty) ...[
+                        const SizedBox(height: 6),
+                        SizedBox(
+                          // height: 36,
+                          width: double.infinity,
+                          child: _buildBookmarksToolbar(
+                            theme,
+                            bookmarks,
+                            currentTabController,
                           ),
                         ),
-                      ),
-                    );
-                  },
-                ),
-                const SizedBox(width: 6),
-                IconButton(
-                  key: _toolbarMenuButtonKey,
-                  tooltip: 'Open menu',
-                  icon: const Icon(Icons.more_vert, size: 22),
-                  onPressed: () {
-                    _showToolbarContextMenu(
-                      omniboxController,
-                      currentTabController,
-                      bookmarks,
-                    );
-                  },
-                ),
-              ],
-            ),
-            if (bookmarks.isNotEmpty) ...[
-              const SizedBox(height: 6),
-              SizedBox(
-                // height: 36,
-                width: double.infinity,
-                child: _buildBookmarksToolbar(
-                  theme,
-                  bookmarks,
-                  currentTabController,
+                      ],
+                    ],
+                  ),
                 ),
               ),
-            ],
-          ],
-        ),
-       ),
-      ),
-     ),
-    );
+            ),
+          );
         },
       ),
     );

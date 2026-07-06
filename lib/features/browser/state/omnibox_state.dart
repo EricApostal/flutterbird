@@ -53,27 +53,29 @@ class BrowserOmniboxState {
 
 @Riverpod(keepAlive: true)
 class BrowserOmnibox extends _$BrowserOmnibox {
-  static const String defaultSearchEngineLabel = 'DuckDuckGo';
-  static const String _defaultSearchEngineHost = 'duckduckgo.com';
-  static const String _defaultSearchEngineUrl =
-      'https://$_defaultSearchEngineHost/';
-
   @override
   BrowserOmniboxState build() {
     return const BrowserOmniboxState();
   }
 
-  bool isDefaultSearchHome(String inputUrl) {
+  String searchEngineLabel(LadybirdController controller) =>
+      controller.activeSearchEngine.name;
+
+  bool isDefaultSearchHome(LadybirdController controller, String inputUrl) {
     final value = inputUrl.trim();
     if (value.isEmpty) return false;
 
     final parsed = Uri.tryParse(value);
     if (parsed == null || !parsed.hasScheme) return false;
 
+    final searchEngineHost = Uri.tryParse(
+      controller.activeSearchEngine.queryUrl,
+    )?.host.toLowerCase();
+    if (searchEngineHost == null || searchEngineHost.isEmpty) return false;
+
     final host = parsed.host.toLowerCase();
     final isDefaultHost =
-        host == _defaultSearchEngineHost ||
-        host == 'www.$_defaultSearchEngineHost';
+        host == searchEngineHost || host == 'www.$searchEngineHost';
     if (!isDefaultHost) return false;
 
     final hasRootPath = parsed.path.isEmpty || parsed.path == '/';
@@ -100,7 +102,7 @@ class BrowserOmnibox extends _$BrowserOmnibox {
     return value.contains('.') && !value.contains(' ');
   }
 
-  String buildNavigationTarget(String input) {
+  String buildNavigationTarget(LadybirdController controller, String input) {
     final value = input.trim();
     if (value.isEmpty) return '';
 
@@ -108,8 +110,8 @@ class BrowserOmnibox extends _$BrowserOmnibox {
       return normalizeUrl(value);
     }
 
-    final query = Uri.encodeQueryComponent(value);
-    return '$_defaultSearchEngineUrl?q=$query';
+    final engine = controller.activeSearchEngine;
+    return engine.queryUrl.replaceAll('%s', Uri.encodeQueryComponent(value));
   }
 
   bool isBookmarked(String url) {
@@ -232,7 +234,10 @@ class BrowserOmnibox extends _$BrowserOmnibox {
     return items;
   }
 
-  Iterable<OmniboxSuggestion> suggestionsFor(String input) {
+  Iterable<OmniboxSuggestion> suggestionsFor(
+    LadybirdController controller,
+    String input,
+  ) {
     final query = input.trim();
     final queryLower = query.toLowerCase();
 
@@ -242,7 +247,7 @@ class BrowserOmnibox extends _$BrowserOmnibox {
       items.add(
         OmniboxSuggestion(
           type: OmniboxSuggestionType.searchAction,
-          title: 'Search $defaultSearchEngineLabel for "$query"',
+          title: 'Search ${searchEngineLabel(controller)} for "$query"',
           value: query,
           subtitle: 'Search suggestion',
         ),

@@ -355,7 +355,9 @@ class _LadybirdViewState extends State<LadybirdView>
         if (widget.controller.hasStartedNavigation || currentUrl.isNotEmpty) {
           return;
         }
-        widget.controller.navigate(widget.controller.initialUrl);
+        widget.controller.navigate(
+          widget.controller.initialUrl ?? widget.controller.homeUrl,
+        );
       });
     }
   }

@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:ladybird/src/generated/engine_bindings.g.dart';
 import 'package:ladybird/src/models/context_menu.dart';
+import 'package:ladybird/src/models/settings.dart';
 import 'dart:ui' as ui;
 
 ffi.DynamicLibrary _openLadybirdLibrary() {
@@ -25,7 +26,9 @@ class LadybirdController {
   Size? _lastSize;
   double? _lastDevicePixelRatio;
   late final int _viewId;
-  final String initialUrl;
+  // When null, the initial navigation falls back to [homeUrl], which is
+  // derived from the engine's configured search engine.
+  final String? initialUrl;
   bool hasNavigatedInitial = false;
   bool hasStartedNavigation = false;
 
@@ -86,14 +89,14 @@ class LadybirdController {
 
   int get viewId => _viewId;
 
-  LadybirdController({this.initialUrl = "https://www.duckduckgo.com/"}) {
+  LadybirdController({this.initialUrl}) {
     _bindings = LadybirdBindings(_openLadybirdLibrary());
     _initialize();
   }
 
   LadybirdController.fromExistingViewId({
     required int viewId,
-    this.initialUrl = "https://www.duckduckgo.com/",
+    this.initialUrl,
   }) {
     _bindings = LadybirdBindings(_openLadybirdLibrary());
     _initialize(existingViewId: viewId);
@@ -506,6 +509,133 @@ class LadybirdController {
     final json = ptr.cast<Utf8>().toDartString();
     malloc.free(ptr);
     return json;
+  }
+
+  // Returns the engine's built-in search engines (name + query URL
+  // template), as shipped by WebView::builtin_search_engines().
+  List<LadybirdSearchEngine> getBuiltinSearchEngines() {
+    final ptr = _bindings.get_builtin_search_engines_json();
+    if (ptr == ffi.nullptr) return const [];
+    final json = ptr.cast<Utf8>().toDartString();
+    malloc.free(ptr);
+
+    final decoded = jsonDecode(json);
+    if (decoded is! List) return const [];
+    return decoded
+        .whereType<Map<String, dynamic>>()
+        .map(LadybirdSearchEngineMapper.fromMap)
+        .toList();
+  }
+
+  // Returns the name of the currently configured search engine, or null if
+  // none has been explicitly configured. The engine itself has no implicit
+  // default in that case (see WebView::sanitize_url) — callers should fall
+  // back to a search engine of their choosing, e.g. via [activeSearchEngine].
+  String? getSearchEngineName() {
+    final ptr = _bindings.get_search_engine_name();
+    if (ptr == ffi.nullptr) return null;
+    final name = ptr.cast<Utf8>().toDartString();
+    malloc.free(ptr);
+    return name;
+  }
+
+  // Sets the active search engine by name. Pass null to clear the selection
+  // and fall back to [fallbackSearchEngine].
+  void setSearchEngine(String? name) {
+    if (name == null || name.isEmpty) {
+      _bindings.set_search_engine(ffi.nullptr);
+      return;
+    }
+    final namePtr = name.toNativeUtf8();
+    _bindings.set_search_engine(namePtr.cast<ffi.Char>());
+    malloc.free(namePtr);
+  }
+
+  // Used when no search engine has been explicitly configured.
+  static const LadybirdSearchEngine fallbackSearchEngine = LadybirdSearchEngine(
+    name: 'DuckDuckGo',
+    queryUrl: 'https://duckduckgo.com/?q=%s',
+  );
+
+  // Resolves the search engine that should currently be used for queries:
+  // the configured engine if it's still a known builtin/custom engine,
+  // otherwise [fallbackSearchEngine].
+  LadybirdSearchEngine get activeSearchEngine {
+    final engines = getBuiltinSearchEngines();
+    final wantedName = getSearchEngineName() ?? fallbackSearchEngine.name;
+
+    for (final engine in engines) {
+      if (engine.name == wantedName) return engine;
+    }
+    return engines.isNotEmpty ? engines.first : fallbackSearchEngine;
+  }
+
+  // The home/new-tab URL for the active search engine, e.g.
+  // "https://duckduckgo.com/".
+  String get homeUrl {
+    final host = Uri.tryParse(activeSearchEngine.queryUrl)?.host;
+    return host != null && host.isNotEmpty
+        ? 'https://$host/'
+        : 'https://duckduckgo.com/';
+  }
+
+  // Returns the schema (name/title/description/default value) for every
+  // generic engine config variable, so new settings surfaced by the engine
+  // don't require new bindings to be discoverable.
+  List<LadybirdConfigVariableDefinition> getConfigVariableDefinitions() {
+    final ptr = _bindings.get_config_variable_definitions_json();
+    if (ptr == ffi.nullptr) return const [];
+    final json = ptr.cast<Utf8>().toDartString();
+    malloc.free(ptr);
+
+    final decoded = jsonDecode(json);
+    if (decoded is! List) return const [];
+    return decoded
+        .whereType<Map<String, dynamic>>()
+        .map(LadybirdConfigVariableDefinitionMapper.fromMap)
+        .toList();
+  }
+
+  // Returns the current value of a config variable by name, or null if the
+  // name isn't recognized by the engine.
+  dynamic getConfigVariable(String name) {
+    final namePtr = name.toNativeUtf8();
+    final ptr = _bindings.get_config_variable_json(namePtr.cast<ffi.Char>());
+    malloc.free(namePtr);
+    if (ptr == ffi.nullptr) return null;
+
+    final json = ptr.cast<Utf8>().toDartString();
+    malloc.free(ptr);
+    return jsonDecode(json);
+  }
+
+  // Sets a config variable by name. Returns false if the name isn't
+  // recognized by the engine (invalid values for a known variable are
+  // silently ignored, matching engine behavior).
+  bool setConfigVariable(String name, Object? value) {
+    final namePtr = name.toNativeUtf8();
+    final valuePtr = jsonEncode(value).toNativeUtf8();
+    final result = _bindings.set_config_variable_json(
+      namePtr.cast<ffi.Char>(),
+      valuePtr.cast<ffi.Char>(),
+    );
+    malloc.free(namePtr);
+    malloc.free(valuePtr);
+    return result;
+  }
+
+  // Returns a full snapshot of every engine setting (search engine, tab
+  // settings, zoom, languages, browsing behavior, autoplay, etc), as defined
+  // by WebView::Settings::serialize_json().
+  Map<String, dynamic> getSettingsJson() {
+    final ptr = _bindings.get_settings_json();
+    if (ptr == ffi.nullptr) return const {};
+    final json = ptr.cast<Utf8>().toDartString();
+    malloc.free(ptr);
+
+    final decoded = jsonDecode(json);
+    if (decoded is! Map<String, dynamic>) return const {};
+    return decoded;
   }
 
   void copySelection() {
