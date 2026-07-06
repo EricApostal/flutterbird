@@ -26,10 +26,7 @@ class OmniboxSuggestionsOverlay extends StatelessWidget {
       child: Material(
         elevation: 6,
         color: omniboxSurfaceColor(theme),
-        borderRadius: const BorderRadius.only(
-          bottomLeft: Radius.circular(kOmniboxFieldRadius),
-          bottomRight: Radius.circular(kOmniboxFieldRadius),
-        ),
+        borderRadius: BorderRadius.circular(kOmniboxFieldRadius),
         clipBehavior: Clip.antiAlias,
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 760, maxHeight: 320),

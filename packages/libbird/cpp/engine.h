@@ -73,6 +73,12 @@ LADYBIRD_API void navigate_to(int view_id, const char *url);
 
 LADYBIRD_API void set_zoom(int view_id, double zoom);
 
+// Sets the page's preferred color scheme, mirroring the host's light/dark
+// theme so `prefers-color-scheme` media queries resolve correctly.
+// color_scheme: 0 = Auto, 1 = Dark, 2 = Light (matches
+// Web::CSS::PreferredColorScheme).
+LADYBIRD_API void set_preferred_color_scheme(int view_id, int color_scheme);
+
 LADYBIRD_API void set_display_metadata(int view_id, bool has_display_id,
                                        uint64_t display_id,
                                        double refresh_rate,

@@ -291,6 +291,17 @@ class LadybirdBindings {
       );
   late final _set_zoom = _set_zoomPtr.asFunction<void Function(int, double)>();
 
+  void set_preferred_color_scheme(int view_id, int color_scheme) {
+    return _set_preferred_color_scheme(view_id, color_scheme);
+  }
+
+  late final _set_preferred_color_schemePtr =
+      _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Int, ffi.Int)>>(
+        'set_preferred_color_scheme',
+      );
+  late final _set_preferred_color_scheme = _set_preferred_color_schemePtr
+      .asFunction<void Function(int, int)>();
+
   void set_display_metadata(
     int view_id,
     bool has_display_id,

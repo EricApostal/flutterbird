@@ -74,13 +74,10 @@ class OmniboxSearchField extends ConsumerWidget {
                     final hasSuggestions = omniboxController
                         .suggestionsFor(currentTabController, editingValue.text)
                         .isNotEmpty;
-                    final showingSuggestions = isFocused && hasSuggestions;
-                    final fieldRadius = showingSuggestions
-                        ? const BorderRadius.only(
-                            topLeft: Radius.circular(kOmniboxFieldRadius),
-                            topRight: Radius.circular(kOmniboxFieldRadius),
-                          )
-                        : BorderRadius.circular(kOmniboxFieldRadius);
+
+                    final fieldRadius = BorderRadius.circular(
+                      kOmniboxFieldRadius,
+                    );
                     return Stack(
                       children: [
                         TextField(
@@ -145,9 +142,12 @@ class OmniboxSearchField extends ConsumerWidget {
                 );
               },
           optionsViewBuilder: (context, onSelected, options) {
-            return OmniboxSuggestionsOverlay(
-              options: options.toList(growable: false),
-              onSelected: onSelected,
+            return Padding(
+              padding: const EdgeInsets.only(top: 4.0),
+              child: OmniboxSuggestionsOverlay(
+                options: options.toList(growable: false),
+                onSelected: onSelected,
+              ),
             );
           },
         );

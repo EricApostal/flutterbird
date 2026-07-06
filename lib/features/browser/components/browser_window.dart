@@ -134,6 +134,7 @@ class _BrowserWindowState extends ConsumerState<BrowserWindow> {
     }
 
     _bindController(controller);
+    controller.updateColorScheme(Theme.of(context).brightness);
 
     return KeyedSubtree(
       key: _viewKey,

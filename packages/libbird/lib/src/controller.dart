@@ -478,6 +478,18 @@ class LadybirdController {
     _bindings.set_zoom(_viewId, ratio);
   }
 
+  Brightness? _lastBrightness;
+
+  // Mirrors the host's light/dark theme into the page so
+  // `prefers-color-scheme` media queries resolve correctly. Values match
+  // Web::CSS::PreferredColorScheme (0 = Auto, 1 = Dark, 2 = Light).
+  void updateColorScheme(Brightness brightness) {
+    if (_lastBrightness == brightness) return;
+    _lastBrightness = brightness;
+    final colorScheme = brightness == Brightness.dark ? 1 : 2;
+    _bindings.set_preferred_color_scheme(_viewId, colorScheme);
+  }
+
   void reload() {
     _bindings.reload_tab(_viewId);
     _refreshNavigationState();

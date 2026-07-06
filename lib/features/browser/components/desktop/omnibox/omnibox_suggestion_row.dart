@@ -83,13 +83,15 @@ class OmniboxSuggestionRow extends StatelessWidget {
                     sep(),
                   ],
                   if (hasUrlText) ...[
-                    Text.rich(
-                      styledUrlSpan(
-                        theme,
-                        urlText.replaceFirst("https://", ""),
+                    Flexible(
+                      child: Text.rich(
+                        styledUrlSpan(
+                          theme,
+                          urlText.replaceFirst("https://", ""),
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
                     ),
                   ],
                 ],

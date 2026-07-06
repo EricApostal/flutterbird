@@ -42,6 +42,7 @@
 #include <LibURL/URL.h>
 #include <LibWeb/Page/InputEvent.h>
 #include <LibWeb/PixelUnits.h>
+#include <LibWeb/CSS/PreferredColorScheme.h>
 #include <LibWebView/BrowserProcess.h>
 #include <LibWebView/HistoryStore.h>
 #include <LibWebView/Menu.h>
@@ -1199,6 +1200,14 @@ void set_zoom(int view_id, double zoom) {
     it->second->m_zoom = zoom;
     it->second->update_zoom_scale();
   }
+}
+
+void set_preferred_color_scheme(int view_id, int color_scheme) {
+  auto it = g_web_views.find(view_id);
+  if (it == g_web_views.end())
+    return;
+  it->second->set_preferred_color_scheme(
+      static_cast<Web::CSS::PreferredColorScheme>(color_scheme));
 }
 
 void set_display_metadata(int view_id, bool has_display_id, uint64_t display_id,
