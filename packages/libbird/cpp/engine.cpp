@@ -686,7 +686,7 @@ public:
   }
 
   void resize(int width, int height) {
-    std::fprintf(stderr, "[LibBird] resize: incoming %dx%d, m_zoom: %f\n", width, height, m_zoom);
+    // std::fprintf(stderr, "[LibBird] resize: incoming %dx%d, m_zoom: %f\n", width, height, m_zoom);
     m_viewport_width = width;
     m_viewport_height = height;
     auto size = Web::DevicePixelSize{width, height};

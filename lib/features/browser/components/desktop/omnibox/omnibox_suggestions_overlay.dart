@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutterbird/features/browser/components/desktop/omnibox/omnibox_style.dart';
 import 'package:flutterbird/features/browser/components/desktop/omnibox/omnibox_suggestion_row.dart';
 import 'package:flutterbird/features/browser/state/omnibox_state.dart';
 
@@ -24,8 +25,12 @@ class OmniboxSuggestionsOverlay extends StatelessWidget {
       alignment: Alignment.topLeft,
       child: Material(
         elevation: 6,
-        color: theme.colorScheme.surfaceContainer,
-        borderRadius: BorderRadius.circular(10),
+        color: omniboxSurfaceColor(theme),
+        borderRadius: const BorderRadius.only(
+          bottomLeft: Radius.circular(kOmniboxFieldRadius),
+          bottomRight: Radius.circular(kOmniboxFieldRadius),
+        ),
+        clipBehavior: Clip.antiAlias,
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 760, maxHeight: 320),
           child: ListView.separated(

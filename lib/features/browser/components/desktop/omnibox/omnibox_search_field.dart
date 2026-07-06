@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutterbird/features/browser/components/desktop/omnibox/omnibox_style.dart';
 import 'package:flutterbird/features/browser/components/desktop/omnibox/omnibox_suggestions_overlay.dart';
 import 'package:flutterbird/features/browser/components/desktop/omnibox/omnibox_url_text.dart';
 import 'package:flutterbird/features/browser/state/omnibox_state.dart';
 import 'package:ladybird/ladybird.dart';
-
-const double _kFieldRadius = 10.0;
 
 /// The URL/search input in the desktop omnibox toolbar. Navigation is fully
 /// delegated to the parent via [onSubmitted] and [onSuggestionSelected]
@@ -72,6 +71,16 @@ class OmniboxSearchField extends ConsumerWidget {
                   valueListenable: textEditingController,
                   builder: (context, editingValue, child) {
                     final isFocused = focusNode.hasFocus;
+                    final hasSuggestions = omniboxController
+                        .suggestionsFor(currentTabController, editingValue.text)
+                        .isNotEmpty;
+                    final showingSuggestions = isFocused && hasSuggestions;
+                    final fieldRadius = showingSuggestions
+                        ? const BorderRadius.only(
+                            topLeft: Radius.circular(kOmniboxFieldRadius),
+                            topRight: Radius.circular(kOmniboxFieldRadius),
+                          )
+                        : BorderRadius.circular(kOmniboxFieldRadius);
                     return Stack(
                       children: [
                         TextField(
@@ -89,11 +98,7 @@ class OmniboxSearchField extends ConsumerWidget {
                           ),
                           decoration: InputDecoration(
                             filled: true,
-                            fillColor: Color.lerp(
-                              Colors.black,
-                              theme.colorScheme.primaryContainer,
-                              0.5,
-                            )!,
+                            fillColor: omniboxSurfaceColor(theme),
                             isDense: true,
                             contentPadding: const EdgeInsets.symmetric(
                               horizontal: 10,
@@ -103,36 +108,28 @@ class OmniboxSearchField extends ConsumerWidget {
                               color: theme.colorScheme.onSurface.withAlpha(150),
                             ),
                             enabledBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(
-                                _kFieldRadius,
-                              ),
+                              borderRadius: fieldRadius,
                               borderSide: BorderSide(
                                 color: theme.colorScheme.surface,
                                 width: 0,
                               ),
                             ),
                             focusedBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(
-                                _kFieldRadius,
-                              ),
+                              borderRadius: fieldRadius,
                               borderSide: BorderSide(
                                 color: theme.colorScheme.primary,
                                 width: 0,
                               ),
                             ),
                             errorBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(
-                                _kFieldRadius,
-                              ),
+                              borderRadius: fieldRadius,
                               borderSide: BorderSide(
                                 color: theme.colorScheme.error,
                                 width: 1,
                               ),
                             ),
                             focusedErrorBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(
-                                _kFieldRadius,
-                              ),
+                              borderRadius: fieldRadius,
                               borderSide: BorderSide(
                                 color: theme.colorScheme.error,
                                 width: 1,
