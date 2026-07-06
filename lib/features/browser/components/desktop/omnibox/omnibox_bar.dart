@@ -2,6 +2,7 @@ import 'package:bird_core/bird_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutterbird/features/browser/components/browser_context_menu.dart';
+import 'package:flutterbird/features/browser/components/desktop/downloads/downloads_button.dart';
 import 'package:flutterbird/features/browser/components/desktop/omnibox/omnibox_bookmarks_bar.dart';
 import 'package:flutterbird/features/browser/components/desktop/omnibox/omnibox_search_field.dart';
 import 'package:flutterbird/features/browser/state/tab_actions.dart';
@@ -307,33 +308,33 @@ class _BrowserOmniboxBarState extends ConsumerState<BrowserOmniboxBar> {
     final canGoBack = currentTabController.canGoBack();
     final canGoForward = currentTabController.canGoForward();
 
-    final bookmarkItems = <BrowserContextMenuItem>[
-      actionItem(
-        action: _ToolbarMenuAction.toggleBookmark,
-        label: isBookmarked ? 'Remove Bookmark' : 'Add Bookmark',
-        enabled: hasUrl,
-      ),
-    ];
+    // final bookmarkItems = <BrowserContextMenuItem>[
+    //   actionItem(
+    //     action: _ToolbarMenuAction.toggleBookmark,
+    //     label: isBookmarked ? 'Remove Bookmark' : 'Add Bookmark',
+    //     enabled: hasUrl,
+    //   ),
+    // ];
 
-    if (bookmarks.isEmpty) {
-      bookmarkItems.add(
-        const BrowserContextMenuItem.action(
-          label: 'No bookmarks yet',
-          value: null,
-          enabled: false,
-        ),
-      );
-    } else {
-      final visibleBookmarks = bookmarks.take(6).toList(growable: false);
-      for (final bookmark in visibleBookmarks) {
-        bookmarkItems.add(
-          BrowserContextMenuItem.action(
-            label: bookmark.title,
-            value: _ToolbarMenuSelection.openBookmark(bookmark.url),
-          ),
-        );
-      }
-    }
+    // if (bookmarks.isEmpty) {
+    //   bookmarkItems.add(
+    //     const BrowserContextMenuItem.action(
+    //       label: 'No bookmarks yet',
+    //       value: null,
+    //       enabled: false,
+    //     ),
+    //   );
+    // } else {
+    //   final visibleBookmarks = bookmarks.take(6).toList(growable: false);
+    //   for (final bookmark in visibleBookmarks) {
+    //     bookmarkItems.add(
+    //       BrowserContextMenuItem.action(
+    //         label: bookmark.title,
+    //         value: _ToolbarMenuSelection.openBookmark(bookmark.url),
+    //       ),
+    //     );
+    //   }
+    // }
 
     final isVerticalLayout =
         ref.read(browserTabLayoutModeControllerProvider) ==
@@ -370,8 +371,6 @@ class _BrowserOmniboxBarState extends ConsumerState<BrowserOmniboxBar> {
         action: _ToolbarMenuAction.openPreviousTab,
         label: 'Open Previous Tab',
       ),
-      const BrowserContextMenuItem.separator(),
-      ...bookmarkItems,
       const BrowserContextMenuItem.separator(),
       actionItem(
         action: _ToolbarMenuAction.toggleTabLayout,
@@ -562,6 +561,7 @@ class _BrowserOmniboxBarState extends ConsumerState<BrowserOmniboxBar> {
                         ),
                   ),
                 ),
+                const DownloadsButton(),
                 const SizedBox(width: 6),
                 IconButton(
                   key: _toolbarMenuButtonKey,

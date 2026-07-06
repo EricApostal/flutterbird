@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:ladybird/src/generated/engine_bindings.g.dart';
 import 'package:ladybird/src/models/context_menu.dart';
+import 'package:ladybird/src/models/download.dart';
 import 'package:ladybird/src/models/settings.dart';
 import 'dart:ui' as ui;
 
@@ -64,10 +65,21 @@ class LadybirdController {
   _displayErrorDialogCallback;
   static ffi.NativeCallable<SetClipboardTextCallbackFunction>?
   _setClipboardTextCallback;
+  static ffi.NativeCallable<DownloadUpdateCallbackFunction>?
+  _downloadUpdateCallback;
+  static ffi.NativeCallable<DownloadRemovedCallbackFunction>?
+  _downloadRemovedCallback;
 
   static String? Function(String)? onAskUserForDownloadPath;
   static void Function(String, String)? onDisplayDownloadConfirmationDialog;
   static void Function(String)? onDisplayErrorDialog;
+
+  // Downloads are process-global (tracked by a single WebView::FileDownloader
+  // in the engine), not per-tab, so this lives on the class rather than on an
+  // instance. Newest downloads are kept first.
+  static final ValueNotifier<List<LadybirdDownload>> downloadsNotifier =
+      ValueNotifier(const []);
+  static bool _downloadsSeeded = false;
 
   // Set right before triggering a native paste so the synchronous
   // GetClipboardTextCallback (invoked mid-paste, on the same isolate) has
@@ -154,9 +166,30 @@ class LadybirdController {
       _bindings.set_set_clipboard_text_callback(
         _setClipboardTextCallback!.nativeFunction,
       );
+
+      _downloadUpdateCallback =
+          ffi.NativeCallable<DownloadUpdateCallbackFunction>.listener(
+            _onDownloadUpdate,
+          );
+      _bindings.set_download_update_callback(
+        _downloadUpdateCallback!.nativeFunction,
+      );
+
+      _downloadRemovedCallback =
+          ffi.NativeCallable<DownloadRemovedCallbackFunction>.listener(
+            _onDownloadRemoved,
+          );
+      _bindings.set_download_removed_callback(
+        _downloadRemovedCallback!.nativeFunction,
+      );
     }
 
     _bindings.init_ladybird();
+
+    if (!_downloadsSeeded) {
+      _downloadsSeeded = true;
+      _seedDownloadsFromEngine();
+    }
 
     _viewId = existingViewId ?? _bindings.create_web_view();
     if (existingViewId != null) {
@@ -673,6 +706,49 @@ class LadybirdController {
     return decoded;
   }
 
+  void _seedDownloadsFromEngine() {
+    final ptr = _bindings.get_downloads_json();
+    if (ptr == ffi.nullptr) return;
+    final json = ptr.cast<Utf8>().toDartString();
+    malloc.free(ptr);
+
+    final decoded = jsonDecode(json);
+    if (decoded is! List) return;
+    downloadsNotifier.value = decoded
+        .whereType<Map<String, dynamic>>()
+        .map(LadybirdDownloadMapper.fromMap)
+        .toList();
+  }
+
+  // Downloads are process-global engine state, not tied to any one tab/view,
+  // so these are static and share a single bindings handle rather than
+  // requiring (and wastefully constructing) a per-tab LadybirdController.
+  static final LadybirdBindings _staticBindings = LadybirdBindings(
+    _openLadybirdLibrary(),
+  );
+
+  // Cancels an in-progress download. No-op for downloads that have already
+  // finished/failed/been canceled.
+  static void cancelDownload(int id) {
+    _staticBindings.cancel_download(id);
+  }
+
+  // Opens the downloaded file with the host OS's default handler.
+  static void openDownload(int id) {
+    _staticBindings.open_download(id);
+  }
+
+  // Reveals the downloaded file in the host OS's file manager.
+  static void showDownloadInFolder(int id) {
+    _staticBindings.show_download_in_folder(id);
+  }
+
+  // Drops completed/canceled/failed downloads from the engine's tracked
+  // list. In-progress downloads are left untouched.
+  static void pruneInactiveDownloads() {
+    _staticBindings.prune_inactive_downloads();
+  }
+
   void copySelection() {
     _bindings.copy_selection(_viewId);
   }
@@ -891,4 +967,32 @@ ffi.Pointer<ffi.Char> _onGetClipboardText() {
 void _onSetClipboardText(ffi.Pointer<ffi.Char> text) {
   final value = text.cast<Utf8>().toDartString();
   Clipboard.setData(ClipboardData(text: value));
+}
+
+void _onDownloadUpdate(ffi.Pointer<ffi.Char> downloadJsonPointer) {
+  if (downloadJsonPointer == ffi.nullptr) return;
+  final json = downloadJsonPointer.cast<Utf8>().toDartString();
+  malloc.free(downloadJsonPointer);
+
+  final decoded = jsonDecode(json);
+  if (decoded is! Map<String, dynamic>) return;
+  final download = LadybirdDownloadMapper.fromMap(decoded);
+
+  final downloads = List<LadybirdDownload>.from(
+    LadybirdController.downloadsNotifier.value,
+  );
+  final index = downloads.indexWhere((d) => d.id == download.id);
+  if (index == -1) {
+    downloads.insert(0, download);
+  } else {
+    downloads[index] = download;
+  }
+  LadybirdController.downloadsNotifier.value = downloads;
+}
+
+void _onDownloadRemoved(int id) {
+  final downloads = LadybirdController.downloadsNotifier.value
+      .where((d) => d.id != id)
+      .toList();
+  LadybirdController.downloadsNotifier.value = downloads;
 }

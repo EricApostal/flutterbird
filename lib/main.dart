@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutterbird/features/downloads/downloads_bootstrap.dart';
 import 'package:flutterbird/features/router/controller.dart';
 import 'package:flutterbird/features/theme/base.dart';
 import 'package:go_transitions/go_transitions.dart';
@@ -9,6 +10,7 @@ import 'package:window_manager/window_manager.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await initializeDownloads();
   final isDesktop = Platform.isMacOS || Platform.isLinux || Platform.isWindows;
 
   if (isDesktop) {

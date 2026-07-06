@@ -219,6 +219,28 @@ LADYBIRD_API void set_display_download_confirmation_dialog_callback(
 LADYBIRD_API void
 set_display_error_dialog_callback(DisplayErrorDialogCallback callback);
 
+// Fired whenever a download is created or its progress/status changes.
+// Payload is a single JSON object: {id, url, fileName, destination, status,
+// downloadedSize, totalSize, error}, matching the shape returned by
+// get_downloads_json()'s array entries. Caller owns the string and must free
+// it (mirrors every other *_json callback/getter in this header).
+typedef void (*DownloadUpdateCallback)(const char *download_json);
+// Fired when a download is pruned from the engine's tracked list.
+typedef void (*DownloadRemovedCallback)(uint64_t id);
+
+LADYBIRD_API void
+set_download_update_callback(DownloadUpdateCallback callback);
+LADYBIRD_API void
+set_download_removed_callback(DownloadRemovedCallback callback);
+
+// Returns a JSON array string snapshot of all known downloads. Caller owns
+// returned memory and must free it.
+LADYBIRD_API char *get_downloads_json();
+LADYBIRD_API void cancel_download(uint64_t id);
+LADYBIRD_API void open_download(uint64_t id);
+LADYBIRD_API void show_download_in_folder(uint64_t id);
+LADYBIRD_API void prune_inactive_downloads();
+
 // Bridges the engine's clipboard access to the host Flutter layer (e.g.
 // package:flutter/services.dart Clipboard), since the engine itself has no
 // access to the real OS clipboard. GetClipboardTextCallback is invoked

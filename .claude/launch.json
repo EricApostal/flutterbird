@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "flutterbird-macos",
+      "runtimeExecutable": "flutter",
+      "runtimeArgs": ["run", "-d", "macos"],
+      "port": 0
+    }
+  ]
+}

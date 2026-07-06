@@ -21,6 +21,8 @@ dependencies:
   google_fonts: ^8.1.0
   go_transitions: ^0.8.3
   reorderable_grid_view: ^2.2.8
+  path_provider: ^2.1.5
+  path: ^1.9.0
 dev_dependencies:
   flutter_test:
     sdk: flutter

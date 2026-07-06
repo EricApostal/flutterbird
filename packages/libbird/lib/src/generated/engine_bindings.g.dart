@@ -890,6 +890,83 @@ class LadybirdBindings {
       _set_display_error_dialog_callbackPtr
           .asFunction<void Function(DisplayErrorDialogCallback)>();
 
+  void set_download_update_callback(DownloadUpdateCallback callback) {
+    return _set_download_update_callback(callback);
+  }
+
+  late final _set_download_update_callbackPtr =
+      _lookup<ffi.NativeFunction<ffi.Void Function(DownloadUpdateCallback)>>(
+        'set_download_update_callback',
+      );
+  late final _set_download_update_callback = _set_download_update_callbackPtr
+      .asFunction<void Function(DownloadUpdateCallback)>();
+
+  void set_download_removed_callback(DownloadRemovedCallback callback) {
+    return _set_download_removed_callback(callback);
+  }
+
+  late final _set_download_removed_callbackPtr =
+      _lookup<ffi.NativeFunction<ffi.Void Function(DownloadRemovedCallback)>>(
+        'set_download_removed_callback',
+      );
+  late final _set_download_removed_callback = _set_download_removed_callbackPtr
+      .asFunction<void Function(DownloadRemovedCallback)>();
+
+  ffi.Pointer<ffi.Char> get_downloads_json() {
+    return _get_downloads_json();
+  }
+
+  late final _get_downloads_jsonPtr =
+      _lookup<ffi.NativeFunction<ffi.Pointer<ffi.Char> Function()>>(
+        'get_downloads_json',
+      );
+  late final _get_downloads_json = _get_downloads_jsonPtr
+      .asFunction<ffi.Pointer<ffi.Char> Function()>();
+
+  void cancel_download(int id) {
+    return _cancel_download(id);
+  }
+
+  late final _cancel_downloadPtr =
+      _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Uint64)>>(
+        'cancel_download',
+      );
+  late final _cancel_download = _cancel_downloadPtr
+      .asFunction<void Function(int)>();
+
+  void open_download(int id) {
+    return _open_download(id);
+  }
+
+  late final _open_downloadPtr =
+      _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Uint64)>>(
+        'open_download',
+      );
+  late final _open_download = _open_downloadPtr
+      .asFunction<void Function(int)>();
+
+  void show_download_in_folder(int id) {
+    return _show_download_in_folder(id);
+  }
+
+  late final _show_download_in_folderPtr =
+      _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Uint64)>>(
+        'show_download_in_folder',
+      );
+  late final _show_download_in_folder = _show_download_in_folderPtr
+      .asFunction<void Function(int)>();
+
+  void prune_inactive_downloads() {
+    return _prune_inactive_downloads();
+  }
+
+  late final _prune_inactive_downloadsPtr =
+      _lookup<ffi.NativeFunction<ffi.Void Function()>>(
+        'prune_inactive_downloads',
+      );
+  late final _prune_inactive_downloads = _prune_inactive_downloadsPtr
+      .asFunction<void Function()>();
+
   void set_get_clipboard_text_callback(GetClipboardTextCallback callback) {
     return _set_get_clipboard_text_callback(callback);
   }
@@ -1122,6 +1199,16 @@ typedef DisplayErrorDialogCallbackFunction =
     ffi.Void Function(ffi.Pointer<ffi.Char> message);
 typedef DartDisplayErrorDialogCallbackFunction =
     void Function(ffi.Pointer<ffi.Char> message);
+typedef DownloadUpdateCallback =
+    ffi.Pointer<ffi.NativeFunction<DownloadUpdateCallbackFunction>>;
+typedef DownloadUpdateCallbackFunction =
+    ffi.Void Function(ffi.Pointer<ffi.Char> download_json);
+typedef DartDownloadUpdateCallbackFunction =
+    void Function(ffi.Pointer<ffi.Char> download_json);
+typedef DownloadRemovedCallback =
+    ffi.Pointer<ffi.NativeFunction<DownloadRemovedCallbackFunction>>;
+typedef DownloadRemovedCallbackFunction = ffi.Void Function(ffi.Uint64 id);
+typedef DartDownloadRemovedCallbackFunction = void Function(int id);
 typedef GetClipboardTextCallback =
     ffi.Pointer<ffi.NativeFunction<GetClipboardTextCallbackFunction>>;
 typedef GetClipboardTextCallbackFunction = ffi.Pointer<ffi.Char> Function();

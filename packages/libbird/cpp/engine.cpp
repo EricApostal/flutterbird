@@ -99,6 +99,8 @@ DisplayDownloadConfirmationDialogCallback
 DisplayErrorDialogCallback g_display_error_dialog_callback = nullptr;
 GetClipboardTextCallback g_get_clipboard_text_callback = nullptr;
 SetClipboardTextCallback g_set_clipboard_text_callback = nullptr;
+DownloadUpdateCallback g_download_update_callback = nullptr;
+DownloadRemovedCallback g_download_removed_callback = nullptr;
 
 #ifdef __ANDROID__
 struct AndroidRuntimeConfig {
@@ -775,6 +777,69 @@ String FlutterViewImpl::create_child_web_view_handle(Optional<u64> page_index,
   return handle;
 }
 
+static StringView download_status_to_string(WebView::FileDownloader::DownloadStatus status) {
+  switch (status) {
+  case WebView::FileDownloader::DownloadStatus::InProgress:
+    return "in-progress"sv;
+  case WebView::FileDownloader::DownloadStatus::Completed:
+    return "completed"sv;
+  case WebView::FileDownloader::DownloadStatus::Canceled:
+    return "canceled"sv;
+  case WebView::FileDownloader::DownloadStatus::Failed:
+    return "failed"sv;
+  }
+  VERIFY_NOT_REACHED();
+}
+
+static JsonObject serialize_download(WebView::FileDownloader::Download const &download) {
+  JsonObject serialized;
+  serialized.set("id"sv, download.id);
+  serialized.set("url"sv, download.url.serialize());
+  serialized.set("fileName"sv,
+                 String::from_utf8_with_replacement_character(
+                     download.destination.basename(),
+                     String::WithBOMHandling::No));
+  serialized.set("destination"sv,
+                 String::from_utf8_with_replacement_character(
+                     download.destination.string().view(),
+                     String::WithBOMHandling::No));
+  serialized.set("status"sv, download_status_to_string(download.status));
+  serialized.set("downloadedSize"sv, download.downloaded_size);
+  serialized.set("totalSize"sv, download.total_size.has_value()
+                                     ? JsonValue { *download.total_size }
+                                     : JsonValue {});
+  serialized.set("error"sv, download.error.value_or(String {}));
+  return serialized;
+}
+
+// Bridges WebView::FileDownloader's observer pattern to Flutter. Constructed
+// once from init_ladybird(); the FileDownloaderObserver base ctor/dtor
+// self-register with FileDownloader, so no manual add_observer call is
+// needed here.
+class FlutterFileDownloaderObserver final : public WebView::FileDownloaderObserver {
+public:
+  virtual void download_added(WebView::FileDownloader::Download const &download) override {
+    notify(download);
+  }
+  virtual void download_updated(WebView::FileDownloader::Download const &download) override {
+    notify(download);
+  }
+  virtual void download_removed(u64 id) override {
+    if (g_download_removed_callback)
+      g_download_removed_callback(id);
+  }
+
+private:
+  void notify(WebView::FileDownloader::Download const &download) {
+    if (!g_download_update_callback)
+      return;
+    auto json = serialize_download(download).serialized().to_byte_string();
+    g_download_update_callback(strdup(json.characters()));
+  }
+};
+
+static AK::OwnPtr<FlutterFileDownloaderObserver> g_download_observer;
+
 class FlutterApplication : public WebView::Application {
   WEB_VIEW_APPLICATION(FlutterApplication)
 
@@ -964,6 +1029,7 @@ void init_ladybird() {
     return;
   }
   s_app = app.release_value();
+  g_download_observer = make<FlutterFileDownloaderObserver>();
 
   s_browser_process = make<WebView::BrowserProcess>();
 
@@ -1685,4 +1751,52 @@ void set_get_clipboard_text_callback(GetClipboardTextCallback callback) {
 
 void set_set_clipboard_text_callback(SetClipboardTextCallback callback) {
   g_set_clipboard_text_callback = callback;
+}
+
+void set_download_update_callback(DownloadUpdateCallback callback) {
+  g_download_update_callback = callback;
+}
+
+void set_download_removed_callback(DownloadRemovedCallback callback) {
+  g_download_removed_callback = callback;
+}
+
+char *get_downloads_json() {
+  if (!s_app)
+    return strdup("[]");
+
+  JsonArray array;
+  for (auto const &download : WebView::Application::the().file_downloader().downloads())
+    array.must_append(serialize_download(download));
+
+  auto bytes = array.serialized().to_byte_string();
+  return strdup(bytes.characters());
+}
+
+void cancel_download(uint64_t id) {
+  if (!s_app)
+    return;
+  WebView::Application::the().file_downloader().cancel_download(id);
+}
+
+void open_download(uint64_t id) {
+  if (!s_app)
+    return;
+  if (auto download = WebView::Application::the().file_downloader().download(id);
+      download.has_value())
+    WebView::Application::the().open_download(*download);
+}
+
+void show_download_in_folder(uint64_t id) {
+  if (!s_app)
+    return;
+  if (auto download = WebView::Application::the().file_downloader().download(id);
+      download.has_value())
+    WebView::Application::the().show_download_in_folder(*download);
+}
+
+void prune_inactive_downloads() {
+  if (!s_app)
+    return;
+  (void)WebView::Application::the().file_downloader().prune_inactive_downloads();
 }
