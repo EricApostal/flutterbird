@@ -62,10 +62,17 @@ class LadybirdController {
   _displayDownloadConfirmationDialogCallback;
   static ffi.NativeCallable<DisplayErrorDialogCallbackFunction>?
   _displayErrorDialogCallback;
+  static ffi.NativeCallable<SetClipboardTextCallbackFunction>?
+  _setClipboardTextCallback;
 
   static String? Function(String)? onAskUserForDownloadPath;
   static void Function(String, String)? onDisplayDownloadConfirmationDialog;
   static void Function(String)? onDisplayErrorDialog;
+
+  // Set right before triggering a native paste so the synchronous
+  // GetClipboardTextCallback (invoked mid-paste, on the same isolate) has
+  // something to hand back. See pasteFromClipboard() below.
+  static String? _pendingPasteText;
 
   void Function()? onResize;
   final Set<VoidCallback> _resizeListeners = <VoidCallback>{};
@@ -130,6 +137,22 @@ class LadybirdController {
           );
       _bindings.set_display_error_dialog_callback(
         _displayErrorDialogCallback!.nativeFunction,
+      );
+
+      // The engine has no access to the real OS clipboard, so it asks the
+      // Flutter host for clipboard text via this callback. It's invoked
+      // synchronously mid-paste, so we can't await Clipboard.getData here;
+      // pasteFromClipboard() pre-fetches the text and caches it below.
+      _bindings.set_get_clipboard_text_callback(
+        ffi.Pointer.fromFunction(_onGetClipboardText),
+      );
+
+      _setClipboardTextCallback =
+          ffi.NativeCallable<SetClipboardTextCallbackFunction>.listener(
+            _onSetClipboardText,
+          );
+      _bindings.set_set_clipboard_text_callback(
+        _setClipboardTextCallback!.nativeFunction,
       );
     }
 
@@ -642,7 +665,9 @@ class LadybirdController {
     _bindings.copy_selection(_viewId);
   }
 
-  void pasteFromClipboard() {
+  Future<void> pasteFromClipboard() async {
+    final data = await Clipboard.getData(Clipboard.kTextPlain);
+    LadybirdController._pendingPasteText = data?.text;
     _bindings.paste_from_clipboard(_viewId);
   }
 
@@ -839,4 +864,15 @@ void _onDisplayErrorDialog(ffi.Pointer<ffi.Char> message) {
   if (LadybirdController.onDisplayErrorDialog == null) return;
   final msg = message.cast<Utf8>().toDartString();
   LadybirdController.onDisplayErrorDialog!(msg);
+}
+
+ffi.Pointer<ffi.Char> _onGetClipboardText() {
+  final text = LadybirdController._pendingPasteText;
+  if (text == null) return ffi.nullptr;
+  return text.toNativeUtf8().cast<ffi.Char>();
+}
+
+void _onSetClipboardText(ffi.Pointer<ffi.Char> text) {
+  final value = text.cast<Utf8>().toDartString();
+  Clipboard.setData(ClipboardData(text: value));
 }

@@ -212,6 +212,22 @@ LADYBIRD_API void set_display_download_confirmation_dialog_callback(
 LADYBIRD_API void
 set_display_error_dialog_callback(DisplayErrorDialogCallback callback);
 
+// Bridges the engine's clipboard access to the host Flutter layer (e.g.
+// package:flutter/services.dart Clipboard), since the engine itself has no
+// access to the real OS clipboard. GetClipboardTextCallback is invoked
+// synchronously mid-paste, so the embedder must have the text ready
+// up-front (e.g. by pre-fetching Clipboard.getData before triggering
+// paste_from_clipboard). Caller owns the returned string and must free it.
+typedef char *(*GetClipboardTextCallback)();
+// Invoked with the plain-text selection whenever the engine wants to write
+// to the system clipboard (e.g. after a "Copy" action). Fire-and-forget.
+typedef void (*SetClipboardTextCallback)(const char *text);
+
+LADYBIRD_API void
+set_get_clipboard_text_callback(GetClipboardTextCallback callback);
+LADYBIRD_API void
+set_set_clipboard_text_callback(SetClipboardTextCallback callback);
+
 #ifdef __cplusplus
 }
 #endif

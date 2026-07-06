@@ -96,6 +96,8 @@ AskUserForDownloadPathCallback g_ask_user_for_download_path_callback = nullptr;
 DisplayDownloadConfirmationDialogCallback
     g_display_download_confirmation_dialog_callback = nullptr;
 DisplayErrorDialogCallback g_display_error_dialog_callback = nullptr;
+GetClipboardTextCallback g_get_clipboard_text_callback = nullptr;
+SetClipboardTextCallback g_set_clipboard_text_callback = nullptr;
 
 #ifdef __ANDROID__
 struct AndroidRuntimeConfig {
@@ -857,14 +859,34 @@ public:
 
   // todo: figure out what "Selection" is
   virtual Utf16String clipboard_text(ClipboardType type) const override {
+    if (g_get_clipboard_text_callback) {
+      if (char *result = g_get_clipboard_text_callback()) {
+        auto text = Utf16String::from_utf8(StringView(result, strlen(result)));
+        free(result);
+        return text;
+      }
+      return {};
+    }
     return WebView::Application::clipboard_text();
   }
   virtual Vector<Web::Clipboard::SystemClipboardRepresentation>
   clipboard_entries() const override {
+    if (g_get_clipboard_text_callback) {
+      Vector<Web::Clipboard::SystemClipboardRepresentation> representations;
+      if (char *result = g_get_clipboard_text_callback()) {
+        representations.empend(ByteString(result), "text/plain"_string);
+        free(result);
+      }
+      return representations;
+    }
     return WebView::Application::clipboard_entries();
   }
   virtual void insert_clipboard_entry(
       Web::Clipboard::SystemClipboardRepresentation entry) override {
+    if (g_set_clipboard_text_callback && entry.mime_type == "text/plain"sv) {
+      g_set_clipboard_text_callback(entry.data.characters());
+      return;
+    }
     WebView::Application::insert_clipboard_entry(std::move(entry));
   }
 };
@@ -1638,4 +1660,12 @@ void set_display_download_confirmation_dialog_callback(
 
 void set_display_error_dialog_callback(DisplayErrorDialogCallback callback) {
   g_display_error_dialog_callback = callback;
+}
+
+void set_get_clipboard_text_callback(GetClipboardTextCallback callback) {
+  g_get_clipboard_text_callback = callback;
+}
+
+void set_set_clipboard_text_callback(SetClipboardTextCallback callback) {
+  g_set_clipboard_text_callback = callback;
 }

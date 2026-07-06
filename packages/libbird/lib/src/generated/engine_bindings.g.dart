@@ -870,6 +870,30 @@ class LadybirdBindings {
   late final _set_display_error_dialog_callback =
       _set_display_error_dialog_callbackPtr
           .asFunction<void Function(DisplayErrorDialogCallback)>();
+
+  void set_get_clipboard_text_callback(GetClipboardTextCallback callback) {
+    return _set_get_clipboard_text_callback(callback);
+  }
+
+  late final _set_get_clipboard_text_callbackPtr =
+      _lookup<ffi.NativeFunction<ffi.Void Function(GetClipboardTextCallback)>>(
+        'set_get_clipboard_text_callback',
+      );
+  late final _set_get_clipboard_text_callback =
+      _set_get_clipboard_text_callbackPtr
+          .asFunction<void Function(GetClipboardTextCallback)>();
+
+  void set_set_clipboard_text_callback(SetClipboardTextCallback callback) {
+    return _set_set_clipboard_text_callback(callback);
+  }
+
+  late final _set_set_clipboard_text_callbackPtr =
+      _lookup<ffi.NativeFunction<ffi.Void Function(SetClipboardTextCallback)>>(
+        'set_set_clipboard_text_callback',
+      );
+  late final _set_set_clipboard_text_callback =
+      _set_set_clipboard_text_callbackPtr
+          .asFunction<void Function(SetClipboardTextCallback)>();
 }
 
 final class __mbstate_t extends ffi.Union {
@@ -1079,6 +1103,15 @@ typedef DisplayErrorDialogCallbackFunction =
     ffi.Void Function(ffi.Pointer<ffi.Char> message);
 typedef DartDisplayErrorDialogCallbackFunction =
     void Function(ffi.Pointer<ffi.Char> message);
+typedef GetClipboardTextCallback =
+    ffi.Pointer<ffi.NativeFunction<GetClipboardTextCallbackFunction>>;
+typedef GetClipboardTextCallbackFunction = ffi.Pointer<ffi.Char> Function();
+typedef SetClipboardTextCallback =
+    ffi.Pointer<ffi.NativeFunction<SetClipboardTextCallbackFunction>>;
+typedef SetClipboardTextCallbackFunction =
+    ffi.Void Function(ffi.Pointer<ffi.Char> text);
+typedef DartSetClipboardTextCallbackFunction =
+    void Function(ffi.Pointer<ffi.Char> text);
 
 const int __WORDSIZE = 64;
 
