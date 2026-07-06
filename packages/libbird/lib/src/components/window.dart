@@ -630,7 +630,17 @@ class _LadybirdViewState extends State<LadybirdView>
     return false;
   }
 
+  static final _systemMediaKeys = {
+    LogicalKeyboardKey.audioVolumeUp,
+    LogicalKeyboardKey.audioVolumeDown,
+    LogicalKeyboardKey.audioVolumeMute,
+  };
+
   KeyEventResult _onKeyEvent(FocusNode node, KeyEvent event) {
+    if (_systemMediaKeys.contains(event.logicalKey)) {
+      return KeyEventResult.ignored;
+    }
+
     if (_handleClipboardShortcut(event)) {
       return KeyEventResult.handled;
     }

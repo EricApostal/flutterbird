@@ -158,9 +158,8 @@ Pod::Spec.new do |s|
             "${DEST_HELPER}" 2>/dev/null || true
         done
 
-        # Ladybird data resources (Base/res)
         if [ -d "${BUNDLE_DIR}/res" ]; then
-          cp -af "${BUNDLE_DIR}/res" "${DEST_RES_DIR}/"
+          cp -af "${BUNDLE_DIR}/res/." "${DEST_RES_DIR}/"
         fi
       SCRIPT
     }
