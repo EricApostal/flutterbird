@@ -41,9 +41,15 @@ class _BrowserWindowState extends ConsumerState<BrowserWindow> {
   }
 
   void _onFullscreenChange(bool isFullscreen) {
-    if (!mounted) return;
+    if (!mounted) {
+      print('[Fullscreen] BrowserWindow._onFullscreenChange dropped: not mounted');
+      return;
+    }
     final controller = _boundController;
-    if (controller == null) return;
+    if (controller == null) {
+      print('[Fullscreen] BrowserWindow._onFullscreenChange dropped: no bound controller');
+      return;
+    }
     ref
         .read(browserFullscreenModeControllerProvider.notifier)
         .syncFromEngine(controller, isFullscreen);

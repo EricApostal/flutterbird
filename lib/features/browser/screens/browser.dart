@@ -203,7 +203,10 @@ class _BrowserWindowScreenState extends ConsumerState<BrowserWindowScreen> {
                 ),
                 Expanded(
                   child: isFullscreen
-                      ? BrowserWindow(viewId: viewId)
+                      ? BrowserWindow(
+                          key: GlobalObjectKey<State<BrowserWindow>>(viewId),
+                          viewId: viewId,
+                        )
                       : AnimatedSwitcher(
                           duration: _kLayoutTransitionDuration,
                           switchInCurve: Curves.easeOutCubic,
@@ -238,6 +241,9 @@ class _BrowserWindowScreenState extends ConsumerState<BrowserWindowScreen> {
                                             topLeft: .circular(8),
                                           ),
                                           child: BrowserWindow(
+                                            key: GlobalObjectKey<
+                                              State<BrowserWindow>
+                                            >(viewId),
                                             viewId: viewId,
                                           ),
                                         ),
@@ -251,7 +257,12 @@ class _BrowserWindowScreenState extends ConsumerState<BrowserWindowScreen> {
                                     SizedBox(height: padding.top),
                                     BrowserTabBar(currentViewId: viewId),
                                     Expanded(
-                                      child: BrowserWindow(viewId: viewId),
+                                      child: BrowserWindow(
+                                        key: GlobalObjectKey<
+                                          State<BrowserWindow>
+                                        >(viewId),
+                                        viewId: viewId,
+                                      ),
                                     ),
                                   ],
                                 ),

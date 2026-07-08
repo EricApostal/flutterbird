@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/services.dart';
@@ -46,6 +47,22 @@ class BrowserFullscreenModeController extends _$BrowserFullscreenModeController
   // mirrors Qt's FullscreenMode::exit(ExitInitiatedBy).
   bool _exitInitiatedByUi = false;
 
+  // True while we're waiting for the OS to confirm a platform-level
+  // transition we already asked for (onWindowEnterFullScreen /
+  // onWindowLeaveFullScreen). On macOS, NSWindow.toggleFullScreen(nil) is
+  // animated and asynchronous — the `await windowManager.setFullScreen(...)`
+  // call returns as soon as the *request* is issued, well before the
+  // animation (and its delegate callback) actually completes. Calling
+  // setFullScreen again before that callback lands (e.g. the page firing a
+  // rapid enter/exit) can wedge NSWindow's fullscreen state machine: the
+  // second toggle silently fails to produce a matching delegate callback,
+  // permanently desyncing our state from the real window. So we never issue
+  // a second platform request while one is still in flight — we just
+  // remember the latest desired target and apply it once the current one
+  // resolves.
+  bool _osTransitionPending = false;
+  bool? _pendingPlatformTarget;
+
   @override
   bool build() {
     if (_isDesktopPlatform) {
@@ -72,7 +89,7 @@ class BrowserFullscreenModeController extends _$BrowserFullscreenModeController
       _activeController = controller;
     }
     _exitInitiatedByUi = false;
-    await _applyPlatformFullscreen(isFullscreen);
+    await _requestPlatformFullscreen(isFullscreen);
 
     if (_isMobilePlatform) {
       if (isFullscreen) {
@@ -95,7 +112,7 @@ class BrowserFullscreenModeController extends _$BrowserFullscreenModeController
 
     state = false;
     _exitInitiatedByUi = true;
-    await _applyPlatformFullscreen(false);
+    await _requestPlatformFullscreen(false);
 
     if (_isMobilePlatform) {
       _activeController = null;
@@ -107,10 +124,46 @@ class BrowserFullscreenModeController extends _$BrowserFullscreenModeController
     // OS genuinely confirms the window left fullscreen.
   }
 
+  // Serializes desktop platform-level transitions so we never call
+  // windowManager.setFullScreen() again while a previous call's OS
+  // confirmation (onWindowEnterFullScreen/onWindowLeaveFullScreen) hasn't
+  // landed yet. See _osTransitionPending for why that matters.
+  Future<void> _requestPlatformFullscreen(bool enabled) async {
+    if (_isDesktopPlatform) {
+      if (_osTransitionPending) {
+        print('[Fullscreen] queueing platform request enabled=$enabled '
+            '(transition already in flight)');
+        _pendingPlatformTarget = enabled;
+        return;
+      }
+      _osTransitionPending = true;
+      _pendingPlatformTarget = null;
+    }
+    await _applyPlatformFullscreen(enabled);
+  }
+
+  // Once an in-flight transition has been confirmed by the OS, apply
+  // whatever target was queued while we were waiting (if any, and if it's
+  // still different from what we just confirmed).
+  void _replayPendingPlatformTarget(bool confirmedTarget) {
+    _osTransitionPending = false;
+    final pending = _pendingPlatformTarget;
+    if (pending == null || pending == confirmedTarget) {
+      _pendingPlatformTarget = null;
+      return;
+    }
+    _pendingPlatformTarget = null;
+    unawaited(_requestPlatformFullscreen(pending));
+  }
+
   Future<void> _applyPlatformFullscreen(bool enabled) async {
     print('[Fullscreen] _applyPlatformFullscreen enabled=$enabled');
     if (_isDesktopPlatform) {
+      final before = await windowManager.isFullScreen();
+      print('[Fullscreen] windowManager.isFullScreen() before setFullScreen($enabled) = $before');
       await windowManager.setFullScreen(enabled);
+      final after = await windowManager.isFullScreen();
+      print('[Fullscreen] windowManager.isFullScreen() after setFullScreen($enabled) = $after');
       return;
     }
 
@@ -140,6 +193,7 @@ class BrowserFullscreenModeController extends _$BrowserFullscreenModeController
     print('[Fullscreen] onWindowEnterFullScreen (activeController=${_activeController != null})');
     state = true;
     _activeController?.confirmFullscreenState(true);
+    _replayPendingPlatformTarget(true);
   }
 
   // The OS confirmed the window actually left fullscreen — whether that was
@@ -157,6 +211,8 @@ class BrowserFullscreenModeController extends _$BrowserFullscreenModeController
     _activeController = null;
     final initiatedByUi = _exitInitiatedByUi;
     _exitInitiatedByUi = false;
+
+    _replayPendingPlatformTarget(false);
 
     if (controller == null) return;
     controller.confirmFullscreenState(false);

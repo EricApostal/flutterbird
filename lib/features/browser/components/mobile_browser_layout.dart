@@ -26,7 +26,12 @@ class MobileBrowserLayout extends ConsumerWidget {
             children: [
               if (!isFullscreen)
                 MobileOmniboxBar(currentTabController: currentTabController),
-              Expanded(child: BrowserWindow(viewId: viewId)),
+              Expanded(
+                child: BrowserWindow(
+                  key: GlobalObjectKey<State<BrowserWindow>>(viewId),
+                  viewId: viewId,
+                ),
+              ),
             ],
           ),
           if (isFullscreen)
