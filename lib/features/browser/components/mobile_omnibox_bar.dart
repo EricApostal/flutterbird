@@ -4,7 +4,6 @@ import 'package:bird_core/bird_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutterbird/features/browser/components/browser_context_menu.dart';
-import 'package:flutterbird/features/browser/state/fullscreen_mode.dart';
 import 'package:flutterbird/features/browser/state/tab_actions.dart';
 import 'package:flutterbird/features/browser/state/tab_layout_mode.dart';
 import 'package:flutterbird/features/browser/state/omnibox_state.dart';
@@ -25,7 +24,6 @@ enum _ToolbarMenuAction {
   toggleBookmark,
   openBookmark,
   toggleTabLayout,
-  toggleFullscreen,
 }
 
 class _ToolbarMenuSelection {
@@ -356,7 +354,6 @@ class _MobileOmniboxBarState extends ConsumerState<MobileOmniboxBar> {
     final isVerticalLayout =
         ref.read(browserTabLayoutModeControllerProvider) ==
         BrowserTabLayoutMode.vertical;
-    final isFullscreen = ref.read(browserFullscreenModeControllerProvider);
     return [
       actionItem(action: _ToolbarMenuAction.newTab, label: 'New Tab'),
       actionItem(
@@ -397,10 +394,6 @@ class _MobileOmniboxBarState extends ConsumerState<MobileOmniboxBar> {
         label: isVerticalLayout
             ? 'Switch to Horizontal Tabs'
             : 'Switch to Vertical Tabs',
-      ),
-      actionItem(
-        action: _ToolbarMenuAction.toggleFullscreen,
-        label: isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen',
       ),
     ];
   }
@@ -486,9 +479,6 @@ class _MobileOmniboxBarState extends ConsumerState<MobileOmniboxBar> {
         break;
       case _ToolbarMenuAction.toggleTabLayout:
         ref.read(browserTabLayoutModeControllerProvider.notifier).toggle();
-        break;
-      case _ToolbarMenuAction.toggleFullscreen:
-        ref.read(browserFullscreenModeControllerProvider.notifier).toggle();
         break;
     }
   }

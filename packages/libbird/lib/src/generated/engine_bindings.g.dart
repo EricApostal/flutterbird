@@ -464,6 +464,23 @@ class LadybirdBindings {
   late final _set_new_web_view_callback = _set_new_web_view_callbackPtr
       .asFunction<void Function(int, NewWebViewCallback)>();
 
+  void set_fullscreen_change_callback(
+    int view_id,
+    FullscreenChangeCallback callback,
+  ) {
+    return _set_fullscreen_change_callback(view_id, callback);
+  }
+
+  late final _set_fullscreen_change_callbackPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.Void Function(ffi.Int, FullscreenChangeCallback)
+        >
+      >('set_fullscreen_change_callback');
+  late final _set_fullscreen_change_callback =
+      _set_fullscreen_change_callbackPtr
+          .asFunction<void Function(int, FullscreenChangeCallback)>();
+
   void set_input_caret_rect_change_callback(
     int view_id,
     InputCaretRectChangeCallback callback,
@@ -561,6 +578,17 @@ class LadybirdBindings {
   late final _go_backPtr =
       _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Int)>>('go_back');
   late final _go_back = _go_backPtr.asFunction<void Function(int)>();
+
+  void request_exit_fullscreen(int view_id) {
+    return _request_exit_fullscreen(view_id);
+  }
+
+  late final _request_exit_fullscreenPtr =
+      _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Int)>>(
+        'request_exit_fullscreen',
+      );
+  late final _request_exit_fullscreen = _request_exit_fullscreenPtr
+      .asFunction<void Function(int)>();
 
   void go_forward(int view_id) {
     return _go_forward(view_id);
@@ -1163,6 +1191,12 @@ typedef NewWebViewCallbackFunction =
     ffi.Void Function(ffi.Int new_view_id, ffi.Bool activate_tab);
 typedef DartNewWebViewCallbackFunction =
     void Function(int new_view_id, bool activate_tab);
+typedef FullscreenChangeCallback =
+    ffi.Pointer<ffi.NativeFunction<FullscreenChangeCallbackFunction>>;
+typedef FullscreenChangeCallbackFunction =
+    ffi.Void Function(ffi.Int view_id, ffi.Bool is_fullscreen);
+typedef DartFullscreenChangeCallbackFunction =
+    void Function(int view_id, bool is_fullscreen);
 typedef InputCaretRectChangeCallback =
     ffi.Pointer<ffi.NativeFunction<InputCaretRectChangeCallbackFunction>>;
 typedef InputCaretRectChangeCallbackFunction =

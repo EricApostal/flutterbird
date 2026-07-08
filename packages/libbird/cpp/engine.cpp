@@ -244,6 +244,7 @@ public:
   ContextMenuRequestCallback m_context_menu_request_callback = nullptr;
   NewWebViewCallback m_new_web_view_callback = nullptr;
   InputCaretRectChangeCallback m_input_caret_rect_change_callback = nullptr;
+  FullscreenChangeCallback m_fullscreen_change_callback = nullptr;
   bool m_is_loading{false};
 
   std::mutex m_context_menu_mutex;
@@ -658,6 +659,37 @@ public:
         callback(new_view_id, activate_tab == Web::HTML::ActivateTab::Yes);
 
       return handle;
+    };
+
+    // The page requested fullscreen (element.requestFullscreen() or a
+    // <video>'s native fullscreen control). set_is_fullscreen() confirms the
+    // visual transition back to the engine so `document.fullscreenElement`
+    // and the `:fullscreen` pseudo-class resolve correctly; the Flutter side
+    // is responsible for actually presenting the view fullscreen (hiding its
+    // own chrome, going OS-fullscreen on desktop, etc).
+    on_fullscreen_window = [this]() {
+      set_is_fullscreen(Web::ViewportIsFullscreen::Yes);
+
+      FullscreenChangeCallback callback = nullptr;
+      {
+        std::lock_guard lock(m_info_mutex);
+        callback = m_fullscreen_change_callback;
+      }
+      if (callback)
+        callback(m_view_id, true);
+    };
+
+    // The page (or the user, via Escape) exited fullscreen.
+    on_exit_fullscreen_window = [this]() {
+      set_is_fullscreen(Web::ViewportIsFullscreen::No);
+
+      FullscreenChangeCallback callback = nullptr;
+      {
+        std::lock_guard lock(m_info_mutex);
+        callback = m_fullscreen_change_callback;
+      }
+      if (callback)
+        callback(m_view_id, false);
     };
 
     page_context_menu().on_activation = [this](Gfx::IntPoint position) {
@@ -1383,6 +1415,12 @@ void go_forward(int view_id) {
   }
 }
 
+void request_exit_fullscreen(int view_id) {
+  auto it = g_web_views.find(view_id);
+  if (it != g_web_views.end())
+    it->second->exit_fullscreen();
+}
+
 bool can_go_back(int view_id) {
   auto it = g_web_views.find(view_id);
   if (it == g_web_views.end())
@@ -1664,6 +1702,15 @@ void set_new_web_view_callback(int view_id, NewWebViewCallback callback) {
   if (it != g_web_views.end()) {
     std::lock_guard lock(it->second->m_info_mutex);
     it->second->m_new_web_view_callback = callback;
+  }
+}
+
+void set_fullscreen_change_callback(int view_id,
+                                    FullscreenChangeCallback callback) {
+  auto it = g_web_views.find(view_id);
+  if (it != g_web_views.end()) {
+    std::lock_guard lock(it->second->m_info_mutex);
+    it->second->m_fullscreen_change_callback = callback;
   }
 }
 

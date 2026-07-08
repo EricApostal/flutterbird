@@ -2,6 +2,7 @@ import 'package:bird_core/bird_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutterbird/features/browser/components/browser_context_menu.dart';
+import 'package:flutterbird/features/browser/state/fullscreen_mode.dart';
 import 'package:flutterbird/features/browser/state/tab_actions.dart';
 import 'package:ladybird/ladybird.dart';
 
@@ -21,6 +22,8 @@ class _BrowserWindowState extends ConsumerState<BrowserWindow> {
   late final void Function(LadybirdContextMenuRequest)
   _onContextMenuRequestCallback = _onContextMenuRequest;
   late final void Function(int, bool) _onNewWebViewCallback = _onNewWebView;
+  late final void Function(bool) _onFullscreenChangeCallback =
+      _onFullscreenChange;
 
   void _bindController(LadybirdController controller) {
     if (identical(_boundController, controller)) return;
@@ -28,11 +31,22 @@ class _BrowserWindowState extends ConsumerState<BrowserWindow> {
     if (_boundController != null) {
       _boundController!.onContextMenuRequest = null;
       _boundController!.onNewWebView = null;
+      _boundController!.onFullscreenChange = null;
     }
 
     _boundController = controller;
     _boundController!.onContextMenuRequest = _onContextMenuRequestCallback;
     _boundController!.onNewWebView = _onNewWebViewCallback;
+    _boundController!.onFullscreenChange = _onFullscreenChangeCallback;
+  }
+
+  void _onFullscreenChange(bool isFullscreen) {
+    if (!mounted) return;
+    final controller = _boundController;
+    if (controller == null) return;
+    ref
+        .read(browserFullscreenModeControllerProvider.notifier)
+        .syncFromEngine(controller, isFullscreen);
   }
 
   @override
@@ -40,6 +54,7 @@ class _BrowserWindowState extends ConsumerState<BrowserWindow> {
     if (_boundController != null) {
       _boundController!.onContextMenuRequest = null;
       _boundController!.onNewWebView = null;
+      _boundController!.onFullscreenChange = null;
     }
     super.dispose();
   }

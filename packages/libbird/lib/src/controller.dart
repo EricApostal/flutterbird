@@ -58,6 +58,8 @@ class LadybirdController {
     ffi.Void Function(ffi.Int, ffi.Bool, ffi.Int, ffi.Int, ffi.Int, ffi.Int)
   >
   _inputCaretRectChangeCallback;
+  late final ffi.NativeCallable<ffi.Void Function(ffi.Int, ffi.Bool)>
+  _fullscreenChangeCallback;
 
   static ffi.NativeCallable<DisplayDownloadConfirmationDialogCallbackFunction>?
   _displayDownloadConfirmationDialogCallback;
@@ -91,6 +93,10 @@ class LadybirdController {
   void Function()? onCrossSiteNavigation;
   void Function(LadybirdContextMenuRequest request)? onContextMenuRequest;
   void Function(int newViewId, bool activateTab)? onNewWebView;
+  // Fired when the page enters/exits fullscreen via the DOM Fullscreen API
+  // (e.g. a <video>'s native fullscreen control), not by any user action in
+  // the Flutter chrome.
+  void Function(bool isFullscreen)? onFullscreenChange;
 
   final ValueNotifier<String> urlNotifier = ValueNotifier("");
   final ValueNotifier<String> titleNotifier = ValueNotifier("Tab");
@@ -292,6 +298,15 @@ class LadybirdController {
       _inputCaretRectChangeCallback.nativeFunction,
     );
 
+    _fullscreenChangeCallback =
+        ffi.NativeCallable<ffi.Void Function(ffi.Int, ffi.Bool)>.listener(
+          _onFullscreenChange,
+        );
+    _bindings.set_fullscreen_change_callback(
+      _viewId,
+      _fullscreenChangeCallback.nativeFunction,
+    );
+
     if (existingViewId != null) {
       syncUrlFromEngine();
     }
@@ -401,6 +416,18 @@ class LadybirdController {
   void _onNewWebView(int newViewId, bool activateTab) {
     if (newViewId <= 0) return;
     onNewWebView?.call(newViewId, activateTab);
+  }
+
+  void _onFullscreenChange(int viewId, bool isFullscreen) {
+    if (viewId != _viewId) return;
+    onFullscreenChange?.call(isFullscreen);
+  }
+
+  // Asks the page's fullscreen element (if any) to exit fullscreen. Used for
+  // platform-level exit gestures (e.g. Android back) that aren't a key event
+  // the engine already handles itself (like Escape).
+  void requestExitFullscreen() {
+    _bindings.request_exit_fullscreen(_viewId);
   }
 
   void _onInputCaretRectChange(
@@ -907,6 +934,7 @@ class LadybirdController {
     _bindings.set_cross_site_navigation_callback(_viewId, ffi.nullptr);
     _bindings.set_loading_state_change_callback(_viewId, ffi.nullptr);
     _bindings.set_input_caret_rect_change_callback(_viewId, ffi.nullptr);
+    _bindings.set_fullscreen_change_callback(_viewId, ffi.nullptr);
     urlNotifier.dispose();
     titleNotifier.dispose();
     faviconNotifier.dispose();
@@ -925,6 +953,7 @@ class LadybirdController {
     _contextMenuRequestCallback.close();
     _newWebViewCallback.close();
     _inputCaretRectChangeCallback.close();
+    _fullscreenChangeCallback.close();
     _bindings.destroy_web_view(_viewId);
   }
 }

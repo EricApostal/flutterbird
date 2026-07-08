@@ -98,6 +98,11 @@ typedef void (*ContextMenuRequestCallback)(int view_id, char *menu_json);
 typedef void (*NewWebViewCallback)(int new_view_id, bool activate_tab);
 typedef void (*InputCaretRectChangeCallback)(int view_id, bool has_rect, int x,
                                              int y, int width, int height);
+// Fired when the page enters or exits fullscreen via the DOM Fullscreen API
+// (e.g. `element.requestFullscreen()`/`document.exitFullscreen()`, or a
+// <video>'s native fullscreen control). The embedder should present its own
+// chrome accordingly (hide toolbars, go OS-fullscreen on desktop, etc).
+typedef void (*FullscreenChangeCallback)(int view_id, bool is_fullscreen);
 
 LADYBIRD_API void set_url_change_callback(int view_id,
                                           UrlChangeCallback callback);
@@ -120,6 +125,14 @@ LADYBIRD_API void set_new_web_view_callback(int view_id,
 LADYBIRD_API void
 set_input_caret_rect_change_callback(int view_id,
                                      InputCaretRectChangeCallback callback);
+LADYBIRD_API void
+set_fullscreen_change_callback(int view_id, FullscreenChangeCallback callback);
+// Asks the page's current fullscreen element (if any) to exit fullscreen,
+// e.g. in response to a platform back gesture/button while a page or video
+// is fullscreen. No-op if the page isn't currently fullscreen. This mirrors
+// what pressing Escape already does inside the engine, but lets the embedder
+// trigger it from outside a key event (e.g. Android's back gesture).
+LADYBIRD_API void request_exit_fullscreen(int view_id);
 LADYBIRD_API bool activate_context_menu_action(int view_id, int action_token);
 LADYBIRD_API bool is_tab_loading(int view_id);
 

@@ -42,11 +42,7 @@ class MobileBrowserLayout extends ConsumerWidget {
                     child: IconButton(
                       tooltip: 'Exit fullscreen',
                       icon: const Icon(Icons.fullscreen_exit, color: Colors.white),
-                      onPressed: () {
-                        ref
-                            .read(browserFullscreenModeControllerProvider.notifier)
-                            .exit();
-                      },
+                      onPressed: currentTabController.requestExitFullscreen,
                     ),
                   ),
                 ),
