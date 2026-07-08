@@ -78,13 +78,12 @@ class _BrowserWindowScreenState extends ConsumerState<BrowserWindowScreen> {
     ref.read(browserTabLayoutModeControllerProvider.notifier).toggle();
   }
 
-  // Asks the page to exit fullscreen. This is a platform-level exit gesture
-  // (tapping the overlay button, an Android back gesture) rather than the
-  // page exiting on its own — the engine is the source of truth for
-  // fullscreen state, so we ask it rather than flipping our own flag.
+  // A platform-level exit gesture (tapping the overlay button, an Android
+  // back gesture) rather than the page exiting on its own. Restores our own
+  // chrome/window immediately rather than waiting on the page to confirm —
+  // see BrowserFullscreenModeController.exitFromUi for why.
   void _requestExitFullscreen() {
-    final controller = ref.read(browserTabProvider(widget.viewId));
-    controller?.requestExitFullscreen();
+    ref.read(browserFullscreenModeControllerProvider.notifier).exitFromUi();
   }
 
   void _showFullscreenHintBriefly() {

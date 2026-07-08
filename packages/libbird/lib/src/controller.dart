@@ -419,6 +419,10 @@ class LadybirdController {
   }
 
   void _onFullscreenChange(int viewId, bool isFullscreen) {
+    print(
+      '[Fullscreen] native callback viewId=$viewId isFullscreen=$isFullscreen '
+      '(this._viewId=$_viewId)',
+    );
     if (viewId != _viewId) return;
     onFullscreenChange?.call(isFullscreen);
   }
@@ -427,6 +431,7 @@ class LadybirdController {
   // platform-level exit gestures (e.g. Android back) that aren't a key event
   // the engine already handles itself (like Escape).
   void requestExitFullscreen() {
+    print('[Fullscreen] requestExitFullscreen viewId=$_viewId');
     _bindings.request_exit_fullscreen(_viewId);
   }
 

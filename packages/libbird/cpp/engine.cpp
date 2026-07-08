@@ -668,6 +668,10 @@ public:
     // is responsible for actually presenting the view fullscreen (hiding its
     // own chrome, going OS-fullscreen on desktop, etc).
     on_fullscreen_window = [this]() {
+      std::fprintf(stderr,
+                   "[Fullscreen] on_fullscreen_window view=%d "
+                   "viewport_size=%dx%d\n",
+                   m_view_id, m_viewport_width, m_viewport_height);
       set_is_fullscreen(Web::ViewportIsFullscreen::Yes);
 
       FullscreenChangeCallback callback = nullptr;
@@ -681,6 +685,9 @@ public:
 
     // The page (or the user, via Escape) exited fullscreen.
     on_exit_fullscreen_window = [this]() {
+      std::fprintf(stderr,
+                   "[Fullscreen] on_exit_fullscreen_window view=%d\n",
+                   m_view_id);
       set_is_fullscreen(Web::ViewportIsFullscreen::No);
 
       FullscreenChangeCallback callback = nullptr;
@@ -1417,6 +1424,9 @@ void go_forward(int view_id) {
 
 void request_exit_fullscreen(int view_id) {
   auto it = g_web_views.find(view_id);
+  std::fprintf(stderr,
+               "[Fullscreen] request_exit_fullscreen view=%d found=%d\n",
+               view_id, it != g_web_views.end());
   if (it != g_web_views.end())
     it->second->exit_fullscreen();
 }
