@@ -590,6 +590,17 @@ class LadybirdBindings {
   late final _request_exit_fullscreen = _request_exit_fullscreenPtr
       .asFunction<void Function(int)>();
 
+  void confirm_fullscreen_state(int view_id, bool is_fullscreen) {
+    return _confirm_fullscreen_state(view_id, is_fullscreen);
+  }
+
+  late final _confirm_fullscreen_statePtr =
+      _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Int, ffi.Bool)>>(
+        'confirm_fullscreen_state',
+      );
+  late final _confirm_fullscreen_state = _confirm_fullscreen_statePtr
+      .asFunction<void Function(int, bool)>();
+
   void go_forward(int view_id) {
     return _go_forward(view_id);
   }

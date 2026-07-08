@@ -435,6 +435,19 @@ class LadybirdController {
     _bindings.request_exit_fullscreen(_viewId);
   }
 
+  // Tells the engine we've *settled* into (or out of) fullscreen — call only
+  // after the host's own platform-level transition (OS window fullscreen,
+  // immersive mode, etc) has actually finished, not immediately on
+  // [onFullscreenChange] firing. This unblocks the DOM Fullscreen API's
+  // pending enter/exit operation on the engine side.
+  void confirmFullscreenState(bool isFullscreen) {
+    print(
+      '[Fullscreen] confirmFullscreenState viewId=$_viewId '
+      'isFullscreen=$isFullscreen',
+    );
+    _bindings.confirm_fullscreen_state(_viewId, isFullscreen);
+  }
+
   void _onInputCaretRectChange(
     int viewId,
     bool hasRect,

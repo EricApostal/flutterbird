@@ -133,6 +133,13 @@ set_fullscreen_change_callback(int view_id, FullscreenChangeCallback callback);
 // what pressing Escape already does inside the engine, but lets the embedder
 // trigger it from outside a key event (e.g. Android's back gesture).
 LADYBIRD_API void request_exit_fullscreen(int view_id);
+// Tells the engine that the embedder has *settled* into (or out of)
+// fullscreen — call this only after your own platform-level transition
+// (OS window fullscreen, immersive mode, etc) has actually completed, not
+// as an immediate reaction to the fullscreen_change callback firing. This
+// unblocks the DOM Fullscreen API's pending enter/exit operation, letting
+// `document.fullscreenElement`/`fullscreenchange` resolve correctly.
+LADYBIRD_API void confirm_fullscreen_state(int view_id, bool is_fullscreen);
 LADYBIRD_API bool activate_context_menu_action(int view_id, int action_token);
 LADYBIRD_API bool is_tab_loading(int view_id);
 

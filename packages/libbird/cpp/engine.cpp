@@ -662,17 +662,21 @@ public:
     };
 
     // The page requested fullscreen (element.requestFullscreen() or a
-    // <video>'s native fullscreen control). set_is_fullscreen() confirms the
-    // visual transition back to the engine so `document.fullscreenElement`
-    // and the `:fullscreen` pseudo-class resolve correctly; the Flutter side
-    // is responsible for actually presenting the view fullscreen (hiding its
-    // own chrome, going OS-fullscreen on desktop, etc).
+    // <video>'s native fullscreen control). We deliberately do NOT call
+    // set_is_fullscreen() here: that would confirm the transition to the
+    // engine before Flutter has actually performed it, racing against the
+    // viewport updates Flutter's own window-resize handling sends as a side
+    // effect of that transition — whichever arrives at WebContent last wins,
+    // and losing that race is what silently and permanently got fullscreen
+    // stuck. Instead we just notify Flutter; it calls confirm_fullscreen_state()
+    // once its own transition has actually settled (mirrors how Ladybird's
+    // Qt frontend only calls set_is_fullscreen() from its
+    // QEvent::WindowStateChange handler, not eagerly).
     on_fullscreen_window = [this]() {
       std::fprintf(stderr,
                    "[Fullscreen] on_fullscreen_window view=%d "
                    "viewport_size=%dx%d\n",
                    m_view_id, m_viewport_width, m_viewport_height);
-      set_is_fullscreen(Web::ViewportIsFullscreen::Yes);
 
       FullscreenChangeCallback callback = nullptr;
       {
@@ -683,12 +687,12 @@ public:
         callback(m_view_id, true);
     };
 
-    // The page (or the user, via Escape) exited fullscreen.
+    // The page (or the user, via Escape) exited fullscreen. See above for
+    // why set_is_fullscreen() isn't called eagerly here either.
     on_exit_fullscreen_window = [this]() {
       std::fprintf(stderr,
                    "[Fullscreen] on_exit_fullscreen_window view=%d\n",
                    m_view_id);
-      set_is_fullscreen(Web::ViewportIsFullscreen::No);
 
       FullscreenChangeCallback callback = nullptr;
       {
@@ -1429,6 +1433,24 @@ void request_exit_fullscreen(int view_id) {
                view_id, it != g_web_views.end());
   if (it != g_web_views.end())
     it->second->exit_fullscreen();
+}
+
+// Confirms to the engine that Flutter has *settled* into (or out of)
+// fullscreen, so the DOM Fullscreen API's pending enter/exit operation can
+// proceed. Called by the embedder itself, after its own platform transition
+// (OS window fullscreen, immersive mode, etc) has actually completed — not
+// eagerly from the on_fullscreen_window/on_exit_fullscreen_window
+// notifications, to avoid racing Flutter's own in-flight viewport updates.
+void confirm_fullscreen_state(int view_id, bool is_fullscreen) {
+  auto it = g_web_views.find(view_id);
+  std::fprintf(stderr,
+               "[Fullscreen] confirm_fullscreen_state view=%d "
+               "is_fullscreen=%d found=%d\n",
+               view_id, is_fullscreen, it != g_web_views.end());
+  if (it == g_web_views.end())
+    return;
+  it->second->set_is_fullscreen(is_fullscreen ? Web::ViewportIsFullscreen::Yes
+                                              : Web::ViewportIsFullscreen::No);
 }
 
 bool can_go_back(int view_id) {
