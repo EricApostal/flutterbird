@@ -5,6 +5,7 @@ import 'package:flutterbird/features/browser/components/browser_context_menu.dar
 import 'package:flutterbird/features/browser/components/desktop/downloads/downloads_button.dart';
 import 'package:flutterbird/features/browser/components/desktop/omnibox/omnibox_bookmarks_bar.dart';
 import 'package:flutterbird/features/browser/components/desktop/omnibox/omnibox_search_field.dart';
+import 'package:flutterbird/features/browser/state/fullscreen_mode.dart';
 import 'package:flutterbird/features/browser/state/tab_actions.dart';
 import 'package:flutterbird/features/browser/state/tab_layout_mode.dart';
 import 'package:flutterbird/features/browser/state/omnibox_state.dart';
@@ -24,6 +25,7 @@ enum _ToolbarMenuAction {
   toggleBookmark,
   openBookmark,
   toggleTabLayout,
+  toggleFullscreen,
 }
 
 class _ToolbarMenuSelection {
@@ -339,6 +341,7 @@ class _BrowserOmniboxBarState extends ConsumerState<BrowserOmniboxBar> {
     final isVerticalLayout =
         ref.read(browserTabLayoutModeControllerProvider) ==
         BrowserTabLayoutMode.vertical;
+    final isFullscreen = ref.read(browserFullscreenModeControllerProvider);
     return [
       actionItem(action: _ToolbarMenuAction.newTab, label: 'New Tab'),
       actionItem(
@@ -377,6 +380,10 @@ class _BrowserOmniboxBarState extends ConsumerState<BrowserOmniboxBar> {
         label: isVerticalLayout
             ? 'Switch to Horizontal Tabs'
             : 'Switch to Vertical Tabs',
+      ),
+      actionItem(
+        action: _ToolbarMenuAction.toggleFullscreen,
+        label: isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen',
       ),
     ];
   }
@@ -462,6 +469,9 @@ class _BrowserOmniboxBarState extends ConsumerState<BrowserOmniboxBar> {
         break;
       case _ToolbarMenuAction.toggleTabLayout:
         ref.read(browserTabLayoutModeControllerProvider.notifier).toggle();
+        break;
+      case _ToolbarMenuAction.toggleFullscreen:
+        ref.read(browserFullscreenModeControllerProvider.notifier).toggle();
         break;
     }
   }

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:bird_core/bird_core.dart';
 import 'package:flutter/material.dart';
@@ -8,6 +9,7 @@ import 'package:flutterbird/features/browser/components/mobile_browser_layout.da
 import 'package:flutterbird/features/browser/components/desktop/omnibox/omnibox_bar.dart';
 import 'package:flutterbird/features/browser/components/desktop/tabs/tab_bar.dart';
 import 'package:flutterbird/features/browser/components/desktop/tabs/vertical_tab_sidebar.dart';
+import 'package:flutterbird/features/browser/state/fullscreen_mode.dart';
 import 'package:flutterbird/features/browser/state/tab_actions.dart';
 import 'package:flutterbird/features/browser/state/tab_layout_mode.dart';
 
@@ -24,6 +26,10 @@ class _BrowserWindowScreenState extends ConsumerState<BrowserWindowScreen> {
   static const Duration _kLayoutTransitionDuration = Duration(
     milliseconds: 240,
   );
+  static const Duration _kFullscreenHintDuration = Duration(seconds: 3);
+
+  bool _showFullscreenHint = false;
+  Timer? _fullscreenHintTimer;
 
   @override
   void initState() {
@@ -34,6 +40,7 @@ class _BrowserWindowScreenState extends ConsumerState<BrowserWindowScreen> {
   @override
   void dispose() {
     HardwareKeyboard.instance.removeHandler(_handleKeyEvent);
+    _fullscreenHintTimer?.cancel();
     super.dispose();
   }
 
@@ -71,8 +78,39 @@ class _BrowserWindowScreenState extends ConsumerState<BrowserWindowScreen> {
     ref.read(browserTabLayoutModeControllerProvider.notifier).toggle();
   }
 
+  void _toggleFullscreen() {
+    ref.read(browserFullscreenModeControllerProvider.notifier).toggle();
+  }
+
+  void _exitFullscreen() {
+    ref.read(browserFullscreenModeControllerProvider.notifier).exit();
+  }
+
+  void _showFullscreenHintBriefly() {
+    _fullscreenHintTimer?.cancel();
+    setState(() => _showFullscreenHint = true);
+    _fullscreenHintTimer = Timer(_kFullscreenHintDuration, () {
+      if (!mounted) return;
+      setState(() => _showFullscreenHint = false);
+    });
+  }
+
   bool _handleKeyEvent(KeyEvent event) {
     if (event is! KeyDownEvent) return false;
+
+    if (event.logicalKey == LogicalKeyboardKey.f11) {
+      _toggleFullscreen();
+      return true;
+    }
+
+    if (event.logicalKey == LogicalKeyboardKey.escape) {
+      if (ref.read(browserFullscreenModeControllerProvider)) {
+        _exitFullscreen();
+        return true;
+      }
+      return false;
+    }
+
     if (!_isPrimaryShortcutModifierPressed()) return false;
 
     if (event.logicalKey == LogicalKeyboardKey.keyT) {
@@ -100,6 +138,19 @@ class _BrowserWindowScreenState extends ConsumerState<BrowserWindowScreen> {
     final layoutMode = ref.watch(browserTabLayoutModeControllerProvider);
     final isVerticalLayout = layoutMode == BrowserTabLayoutMode.vertical;
     final currentTabController = ref.watch(browserTabProvider(viewId));
+    final isFullscreen = ref.watch(browserFullscreenModeControllerProvider);
+
+    ref.listen<bool>(browserFullscreenModeControllerProvider, (
+      previous,
+      next,
+    ) {
+      if (next) {
+        _showFullscreenHintBriefly();
+      } else if (_showFullscreenHint) {
+        _fullscreenHintTimer?.cancel();
+        setState(() => _showFullscreenHint = false);
+      }
+    });
 
     if (currentTabController == null) {
       return const SizedBox.shrink();
@@ -110,6 +161,7 @@ class _BrowserWindowScreenState extends ConsumerState<BrowserWindowScreen> {
     }
 
     final padding = MediaQuery.paddingOf(context);
+    final showSidebar = isVerticalLayout && !isFullscreen;
 
     return Scaffold(
       backgroundColor: Color.lerp(
@@ -117,78 +169,151 @@ class _BrowserWindowScreenState extends ConsumerState<BrowserWindowScreen> {
         theme.colorScheme.primaryContainer,
         0.5,
       ),
-      body: Row(
+      body: Stack(
         children: [
-          AnimatedContainer(
-            duration: _kLayoutTransitionDuration,
-            curve: Curves.easeOutCubic,
-            width: isVerticalLayout
-                ? BrowserVerticalTabSidebar.sidebarWidth
-                : 0,
-            child: IgnorePointer(
-              ignoring: !isVerticalLayout,
-              child: ClipRect(
-                child: AnimatedSlide(
-                  duration: _kLayoutTransitionDuration,
-                  curve: Curves.easeOutCubic,
-                  offset: isVerticalLayout
-                      ? Offset.zero
-                      : const Offset(-0.08, 0),
-                  child: AnimatedOpacity(
-                    duration: _kLayoutTransitionDuration,
-                    curve: Curves.easeOut,
-                    opacity: isVerticalLayout ? 1 : 0,
-                    child: BrowserVerticalTabSidebar(currentViewId: viewId),
+          Row(
+            children: [
+              AnimatedContainer(
+                duration: _kLayoutTransitionDuration,
+                curve: Curves.easeOutCubic,
+                width: showSidebar ? BrowserVerticalTabSidebar.sidebarWidth : 0,
+                child: IgnorePointer(
+                  ignoring: !showSidebar,
+                  child: ClipRect(
+                    child: AnimatedSlide(
+                      duration: _kLayoutTransitionDuration,
+                      curve: Curves.easeOutCubic,
+                      offset: showSidebar
+                          ? Offset.zero
+                          : const Offset(-0.08, 0),
+                      child: AnimatedOpacity(
+                        duration: _kLayoutTransitionDuration,
+                        curve: Curves.easeOut,
+                        opacity: showSidebar ? 1 : 0,
+                        child: BrowserVerticalTabSidebar(
+                          currentViewId: viewId,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              Expanded(
+                child: isFullscreen
+                    ? BrowserWindow(viewId: viewId)
+                    : AnimatedSwitcher(
+                        duration: _kLayoutTransitionDuration,
+                        switchInCurve: Curves.easeOutCubic,
+                        switchOutCurve: Curves.easeOutCubic,
+                        transitionBuilder: (child, animation) {
+                          final slide = Tween<Offset>(
+                            begin: const Offset(0.02, 0),
+                            end: Offset.zero,
+                          ).animate(animation);
+                          return FadeTransition(
+                            opacity: animation,
+                            child: SlideTransition(
+                              position: slide,
+                              child: child,
+                            ),
+                          );
+                        },
+                        child: isVerticalLayout
+                            ? Column(
+                                key: const ValueKey('vertical-layout'),
+                                children: [
+                                  BrowserOmniboxBar(
+                                    currentTabController: currentTabController,
+                                  ),
+                                  Expanded(
+                                    child: Container(
+                                      color: theme.colorScheme.primaryContainer,
+                                      child: ClipRRect(
+                                        borderRadius: .only(
+                                          topLeft: .circular(8),
+                                        ),
+                                        child: BrowserWindow(viewId: viewId),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              )
+                            : Column(
+                                key: const ValueKey('horizontal-layout'),
+                                children: [
+                                  SizedBox(height: padding.top),
+                                  BrowserTabBar(currentViewId: viewId),
+                                  Expanded(
+                                    child: BrowserWindow(viewId: viewId),
+                                  ),
+                                ],
+                              ),
+                      ),
+              ),
+            ],
+          ),
+          if (isFullscreen)
+            _FullscreenExitOverlay(
+              showHint: _showFullscreenHint,
+              onExit: _exitFullscreen,
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FullscreenExitOverlay extends StatelessWidget {
+  final bool showHint;
+  final VoidCallback onExit;
+
+  const _FullscreenExitOverlay({required this.showHint, required this.onExit});
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        Positioned(
+          top: 12,
+          right: 12,
+          child: Material(
+            color: Colors.black45,
+            shape: const CircleBorder(),
+            child: IconButton(
+              tooltip: 'Exit fullscreen (Esc)',
+              icon: const Icon(Icons.fullscreen_exit, color: Colors.white),
+              onPressed: onExit,
+            ),
+          ),
+        ),
+        Positioned(
+          top: 12,
+          left: 0,
+          right: 0,
+          child: IgnorePointer(
+            child: AnimatedOpacity(
+              duration: const Duration(milliseconds: 300),
+              opacity: showHint ? 1 : 0,
+              child: Center(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.black87,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Text(
+                    'Press F11 or Esc to exit fullscreen',
+                    style: TextStyle(color: Colors.white, fontSize: 13),
                   ),
                 ),
               ),
             ),
           ),
-          Expanded(
-            child: AnimatedSwitcher(
-              duration: _kLayoutTransitionDuration,
-              switchInCurve: Curves.easeOutCubic,
-              switchOutCurve: Curves.easeOutCubic,
-              transitionBuilder: (child, animation) {
-                final slide = Tween<Offset>(
-                  begin: const Offset(0.02, 0),
-                  end: Offset.zero,
-                ).animate(animation);
-                return FadeTransition(
-                  opacity: animation,
-                  child: SlideTransition(position: slide, child: child),
-                );
-              },
-              child: isVerticalLayout
-                  ? Column(
-                      key: const ValueKey('vertical-layout'),
-                      children: [
-                        BrowserOmniboxBar(
-                          currentTabController: currentTabController,
-                        ),
-                        Expanded(
-                          child: Container(
-                            color: theme.colorScheme.primaryContainer,
-                            child: ClipRRect(
-                              borderRadius: .only(topLeft: .circular(8)),
-                              child: BrowserWindow(viewId: viewId),
-                            ),
-                          ),
-                        ),
-                      ],
-                    )
-                  : Column(
-                      key: const ValueKey('horizontal-layout'),
-                      children: [
-                        SizedBox(height: padding.top),
-                        BrowserTabBar(currentViewId: viewId),
-                        Expanded(child: BrowserWindow(viewId: viewId)),
-                      ],
-                    ),
-            ),
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }

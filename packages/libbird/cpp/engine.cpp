@@ -40,9 +40,9 @@
 #include <LibMain/Main.h>
 #include <LibURL/Parser.h>
 #include <LibURL/URL.h>
+#include <LibWeb/CSS/PreferredColorScheme.h>
 #include <LibWeb/Page/InputEvent.h>
 #include <LibWeb/PixelUnits.h>
-#include <LibWeb/CSS/PreferredColorScheme.h>
 #include <LibWebView/BrowserProcess.h>
 #include <LibWebView/HistoryStore.h>
 #include <LibWebView/Menu.h>
@@ -63,16 +63,13 @@ ErrorOr<int> compositor_service_main(Main::Arguments);
 ErrorOr<int> webworker_service_main(Main::Arguments);
 
 struct RegisterMains {
-    RegisterMains() {
-        WebView::IOSServiceMains mains = {
-            webcontent_service_main,
-            request_server_service_main,
-            image_decoder_service_main,
-            compositor_service_main,
-            webworker_service_main
-        };
-        WebView::register_ios_service_mains(mains);
-    }
+  RegisterMains() {
+    WebView::IOSServiceMains mains = {
+        webcontent_service_main, request_server_service_main,
+        image_decoder_service_main, compositor_service_main,
+        webworker_service_main};
+    WebView::register_ios_service_mains(mains);
+  }
 } s_register_mains;
 #endif
 #ifndef __APPLE__
@@ -255,9 +252,7 @@ public:
 
   static int to_cursor_type_for_flutter(Gfx::Cursor const &cursor) {
     return cursor.visit(
-        [](Gfx::StandardCursor standard) {
-          return static_cast<int>(standard);
-        },
+        [](Gfx::StandardCursor standard) { return static_cast<int>(standard); },
         [](Gfx::ImageCursor const &) {
           // Flutter cannot consume custom pixel cursors via this API, so use
           // a standard fallback.
@@ -265,7 +260,8 @@ public:
         });
   }
 
-  int register_context_menu_action(NonnullRefPtr<WebView::Action> const &action) {
+  int register_context_menu_action(
+      NonnullRefPtr<WebView::Action> const &action) {
     int token = m_next_context_menu_action_token++;
     m_context_menu_actions.set(token, action->make_weak_ptr());
     return token;
@@ -369,8 +365,7 @@ public:
       free(payload);
   }
 
-  void set_context_menu_request_callback(
-      ContextMenuRequestCallback callback) {
+  void set_context_menu_request_callback(ContextMenuRequestCallback callback) {
     std::lock_guard lock(m_context_menu_mutex);
     m_context_menu_request_callback = callback;
     if (!callback)
@@ -441,7 +436,8 @@ public:
 
   void set_display_metadata(Optional<u64> display_id, double refresh_rate,
                             double maximum_frames_per_second) {
-    auto const sanitized_refresh_rate = refresh_rate > 0.0 ? refresh_rate : 60.0;
+    auto const sanitized_refresh_rate =
+        refresh_rate > 0.0 ? refresh_rate : 60.0;
     auto const sanitized_maximum_frames_per_second =
         maximum_frames_per_second > 0.0 ? maximum_frames_per_second
                                         : sanitized_refresh_rate;
@@ -486,8 +482,7 @@ public:
 #ifndef __APPLE__
 #ifdef USE_VULKAN_DMABUF_IMAGES
       auto *linux_backend = static_cast<LinuxViewBackend *>(m_backend.get());
-      if (auto const &dmabuf = shared_image_buffer->linux_dmabuf_handle();
-          dmabuf.has_value()) {
+      if (auto const &dmabuf = shared_image_buffer->linux_dmabuf_handle()) {
         linux_backend->set_linux_dmabuf_frame(
             dmabuf->file.fd(), dmabuf->size.width(), dmabuf->size.height(),
             static_cast<int>(dmabuf->pitch), dmabuf->drm_format,
@@ -521,15 +516,15 @@ public:
             m_last_mac_frame_source = MacFrameSource::IOSurface;
           }
           if ((m_debug_paint_event_count % 30) == 1) {
-            auto const &bitmap_size = m_client_state.front_bitmap.last_painted_size.to_type<int>();
+            auto const &bitmap_size =
+                m_client_state.front_bitmap.last_painted_size.to_type<int>();
             // std::fprintf(
             //     stderr,
             //     "[Ladybird][engine] view=%d paint#=%llu source=IOSurface "
-            //     "surface_size=%dx%d bitmap_size=%dx%d viewport_size=%dx%d m_zoom=%f\n",
-            //     m_view_id,
-            //     static_cast<unsigned long long>(m_debug_paint_event_count),
-            //     surface_width, surface_height,
-            //     bitmap_size.width(), bitmap_size.height(),
+            //     "surface_size=%dx%d bitmap_size=%dx%d viewport_size=%dx%d
+            //     m_zoom=%f\n", m_view_id, static_cast<unsigned long
+            //     long>(m_debug_paint_event_count), surface_width,
+            //     surface_height, bitmap_size.width(), bitmap_size.height(),
             //     m_viewport_width, m_viewport_height,
             //     m_zoom);
           }
@@ -560,12 +555,11 @@ public:
       if ((m_debug_paint_event_count % 120) == 1) {
         // std::fprintf(
         //     stderr,
-        //     "[Ladybird][engine] view=%d paint#=%llu source=Bitmap size=%dx%d "
-        //     "gen=%llu\n",
-        //     m_view_id,
-        //     static_cast<unsigned long long>(m_debug_paint_event_count),
-        //     m_backend->width(), m_backend->height(),
-        //     static_cast<unsigned long long>(m_backend->frame_generation()));
+        //     "[Ladybird][engine] view=%d paint#=%llu source=Bitmap size=%dx%d
+        //     " "gen=%llu\n", m_view_id, static_cast<unsigned long
+        //     long>(m_debug_paint_event_count), m_backend->width(),
+        //     m_backend->height(), static_cast<unsigned long
+        //     long>(m_backend->frame_generation()));
       }
 
 #ifdef __APPLE__
@@ -666,30 +660,23 @@ public:
       return handle;
     };
 
-    page_context_menu().on_activation =
-        [this](Gfx::IntPoint position) {
-          dispatch_context_menu_request("page"sv, position,
-                                        page_context_menu());
-        };
-    link_context_menu().on_activation =
-        [this](Gfx::IntPoint position) {
-          dispatch_context_menu_request("link"sv, position,
-                                        link_context_menu());
-        };
-    image_context_menu().on_activation =
-        [this](Gfx::IntPoint position) {
-          dispatch_context_menu_request("image"sv, position,
-                                        image_context_menu());
-        };
-    media_context_menu().on_activation =
-        [this](Gfx::IntPoint position) {
-          dispatch_context_menu_request("media"sv, position,
-                                        media_context_menu());
-        };
+    page_context_menu().on_activation = [this](Gfx::IntPoint position) {
+      dispatch_context_menu_request("page"sv, position, page_context_menu());
+    };
+    link_context_menu().on_activation = [this](Gfx::IntPoint position) {
+      dispatch_context_menu_request("link"sv, position, link_context_menu());
+    };
+    image_context_menu().on_activation = [this](Gfx::IntPoint position) {
+      dispatch_context_menu_request("image"sv, position, image_context_menu());
+    };
+    media_context_menu().on_activation = [this](Gfx::IntPoint position) {
+      dispatch_context_menu_request("media"sv, position, media_context_menu());
+    };
   }
 
   void resize(int width, int height) {
-    // std::fprintf(stderr, "[LibBird] resize: incoming %dx%d, m_zoom: %f\n", width, height, m_zoom);
+    // std::fprintf(stderr, "[LibBird] resize: incoming %dx%d, m_zoom: %f\n",
+    // width, height, m_zoom);
     m_viewport_width = width;
     m_viewport_height = height;
     auto size = Web::DevicePixelSize{width, height};
@@ -697,7 +684,10 @@ public:
     client().async_set_viewport(m_client_state.page_index, size,
                                 m_device_pixel_ratio, is_fullscreen());
     client().async_set_window_size(m_client_state.page_index, size);
-    WebView::Application::the().update_compositor_viewport(client().compositor_context_id_for_page(m_client_state.page_index), viewport_size().to_type<int>(), Web::Compositor::WindowResizingInProgress::Yes);
+    WebView::Application::the().update_compositor_viewport(
+        client().compositor_context_id_for_page(m_client_state.page_index),
+        viewport_size().to_type<int>(),
+        Web::Compositor::WindowResizingInProgress::Yes);
   }
 
   void update_zoom_scale() {
@@ -777,7 +767,8 @@ String FlutterViewImpl::create_child_web_view_handle(Optional<u64> page_index,
   return handle;
 }
 
-static StringView download_status_to_string(WebView::FileDownloader::DownloadStatus status) {
+static StringView
+download_status_to_string(WebView::FileDownloader::DownloadStatus status) {
   switch (status) {
   case WebView::FileDownloader::DownloadStatus::InProgress:
     return "in-progress"sv;
@@ -791,24 +782,23 @@ static StringView download_status_to_string(WebView::FileDownloader::DownloadSta
   VERIFY_NOT_REACHED();
 }
 
-static JsonObject serialize_download(WebView::FileDownloader::Download const &download) {
+static JsonObject
+serialize_download(WebView::FileDownloader::Download const &download) {
   JsonObject serialized;
   serialized.set("id"sv, download.id);
   serialized.set("url"sv, download.url.serialize());
-  serialized.set("fileName"sv,
-                 String::from_utf8_with_replacement_character(
-                     download.destination.basename(),
-                     String::WithBOMHandling::No));
-  serialized.set("destination"sv,
-                 String::from_utf8_with_replacement_character(
-                     download.destination.string().view(),
-                     String::WithBOMHandling::No));
+  serialized.set("fileName"sv, String::from_utf8_with_replacement_character(
+                                   download.destination.basename(),
+                                   String::WithBOMHandling::No));
+  serialized.set("destination"sv, String::from_utf8_with_replacement_character(
+                                      download.destination.string().view(),
+                                      String::WithBOMHandling::No));
   serialized.set("status"sv, download_status_to_string(download.status));
   serialized.set("downloadedSize"sv, download.downloaded_size);
   serialized.set("totalSize"sv, download.total_size.has_value()
-                                     ? JsonValue { *download.total_size }
-                                     : JsonValue {});
-  serialized.set("error"sv, download.error.value_or(String {}));
+                                    ? JsonValue{*download.total_size}
+                                    : JsonValue{});
+  serialized.set("error"sv, download.error.value_or(String{}));
   return serialized;
 }
 
@@ -816,12 +806,15 @@ static JsonObject serialize_download(WebView::FileDownloader::Download const &do
 // once from init_ladybird(); the FileDownloaderObserver base ctor/dtor
 // self-register with FileDownloader, so no manual add_observer call is
 // needed here.
-class FlutterFileDownloaderObserver final : public WebView::FileDownloaderObserver {
+class FlutterFileDownloaderObserver final
+    : public WebView::FileDownloaderObserver {
 public:
-  virtual void download_added(WebView::FileDownloader::Download const &download) override {
+  virtual void
+  download_added(WebView::FileDownloader::Download const &download) override {
     notify(download);
   }
-  virtual void download_updated(WebView::FileDownloader::Download const &download) override {
+  virtual void
+  download_updated(WebView::FileDownloader::Download const &download) override {
     notify(download);
   }
   virtual void download_removed(u64 id) override {
@@ -895,10 +888,9 @@ public:
   }
 
   virtual Optional<ByteString>
-  ask_user_for_download_path(ByteString const& file) const override {
+  ask_user_for_download_path(ByteString const &file) const override {
     if (g_ask_user_for_download_path_callback) {
-      char *result =
-          g_ask_user_for_download_path_callback(file.characters());
+      char *result = g_ask_user_for_download_path_callback(file.characters());
       if (result) {
         ByteString path(result);
         free(result);
@@ -1015,7 +1007,9 @@ void init_ladybird() {
 
 #if defined(__APPLE__) && TARGET_OS_IPHONE
   static char const *argv[] = {"ladybird", "--disable-sql-database", nullptr};
-  static AK::StringView string_views[] = {AK::StringView("ladybird", 8), AK::StringView("--disable-sql-database", 22)};
+  static AK::StringView string_views[] = {
+      AK::StringView("ladybird", 8),
+      AK::StringView("--disable-sql-database", 22)};
   Main::Arguments arguments = {2, (char **)argv, {string_views, 2}};
 #else
   static char const *argv[] = {"ladybird", nullptr};
@@ -1025,7 +1019,9 @@ void init_ladybird() {
 
   auto app = FlutterApplication::create(arguments, lib_path);
   if (app.is_error()) {
-    std::fprintf(stderr, "Failed to construct Ladybird Engine Application: %d\n", app.error().code());
+    std::fprintf(stderr,
+                 "Failed to construct Ladybird Engine Application: %d\n",
+                 app.error().code());
     return;
   }
   s_app = app.release_value();
@@ -1260,7 +1256,8 @@ void navigate_to(int view_id, const char *url) {
 void set_zoom(int view_id, double zoom) {
   if (zoom <= 0.0)
     return;
-  std::fprintf(stderr, "[LibBird] set_zoom: view_id=%d, zoom=%f\n", view_id, zoom);
+  std::fprintf(stderr, "[LibBird] set_zoom: view_id=%d, zoom=%f\n", view_id,
+               zoom);
   auto it = g_web_views.find(view_id);
   if (it != g_web_views.end()) {
     it->second->m_zoom = zoom;
@@ -1288,7 +1285,8 @@ void set_display_metadata(int view_id, bool has_display_id, uint64_t display_id,
     optional_display_id = display_id;
 
   std::fprintf(stderr,
-               "[LibBird] set_display_metadata: view_id=%d has_display_id=%d display_id=%llu refresh_rate=%f max_fps=%f\n",
+               "[LibBird] set_display_metadata: view_id=%d has_display_id=%d "
+               "display_id=%llu refresh_rate=%f max_fps=%f\n",
                view_id, has_display_id ? 1 : 0,
                static_cast<unsigned long long>(display_id), refresh_rate,
                maximum_frames_per_second);
@@ -1318,7 +1316,7 @@ void set_url_change_callback(int view_id, UrlChangeCallback callback) {
     {
       std::lock_guard lock(it->second->m_info_mutex);
       it->second->m_url_change_callback = callback;
-      auto const& url = it->second->url();
+      auto const &url = it->second->url();
       has_valid_initial_url = !url.scheme().is_empty();
       if (has_valid_initial_url)
         current_url = url.to_string().to_byte_string();
@@ -1464,8 +1462,9 @@ char *history_autocomplete_json(int view_id, const char *query, int limit) {
 
   size_t safe_limit = limit > 0 ? static_cast<size_t>(limit) : 8;
 
-  // A private view's own history store is disabled, but autocomplete still draws
-  // suggestions from ordinary (non-private) history regardless of view->is_private()
+  // A private view's own history store is disabled, but autocomplete still
+  // draws suggestions from ordinary (non-private) history regardless of
+  // view->is_private()
   // -- see WebView::Autocomplete::query_autocomplete_engine.
   auto entries = WebView::Application::history_store(WebView::IsPrivate::No)
                      .autocomplete_entries(query_string, safe_limit);
@@ -1553,7 +1552,8 @@ char *get_config_variable_definitions_json() {
     item.set("description"sv, variable.description);
     item.set("defaultValue"sv, variable.default_value);
     if (variable.array_element_type.has_value()) {
-      auto const *type_name = json_value_type_name(*variable.array_element_type);
+      auto const *type_name =
+          json_value_type_name(*variable.array_element_type);
       item.set("arrayElementType"sv, StringView(type_name, strlen(type_name)));
     }
     definitions.must_append(move(item));
@@ -1592,8 +1592,8 @@ bool set_config_variable_json(const char *name, const char *json_value) {
   if (parsed.is_error())
     return false;
 
-  WebView::Application::settings().set_config_variable(
-      *id, parsed.release_value());
+  WebView::Application::settings().set_config_variable(*id,
+                                                       parsed.release_value());
   return true;
 }
 
@@ -1773,7 +1773,8 @@ char *get_downloads_json() {
     return strdup("[]");
 
   JsonArray array;
-  for (auto const &download : WebView::Application::the().file_downloader().downloads())
+  for (auto const &download :
+       WebView::Application::the().file_downloader().downloads())
     array.must_append(serialize_download(download));
 
   auto bytes = array.serialized().to_byte_string();
@@ -1789,7 +1790,8 @@ void cancel_download(uint64_t id) {
 void open_download(uint64_t id) {
   if (!s_app)
     return;
-  if (auto download = WebView::Application::the().file_downloader().download(id);
+  if (auto download =
+          WebView::Application::the().file_downloader().download(id);
       download.has_value())
     WebView::Application::the().open_download(*download);
 }
@@ -1797,7 +1799,8 @@ void open_download(uint64_t id) {
 void show_download_in_folder(uint64_t id) {
   if (!s_app)
     return;
-  if (auto download = WebView::Application::the().file_downloader().download(id);
+  if (auto download =
+          WebView::Application::the().file_downloader().download(id);
       download.has_value())
     WebView::Application::the().show_download_in_folder(*download);
 }
@@ -1805,5 +1808,7 @@ void show_download_in_folder(uint64_t id) {
 void prune_inactive_downloads() {
   if (!s_app)
     return;
-  (void)WebView::Application::the().file_downloader().prune_inactive_downloads();
+  (void)WebView::Application::the()
+      .file_downloader()
+      .prune_inactive_downloads();
 }
