@@ -152,9 +152,12 @@ LADYBIRD_API void toggle_bookmark_for_view(int view_id);
 // Returns whether the current URL in the target view is bookmarked.
 LADYBIRD_API bool is_current_view_bookmarked(int view_id);
 
-// Returns a JSON array string of history autocomplete entries.
+// Returns a JSON array string of history autocomplete entries. Suggestions
+// always come from the non-private history store, matching
+// WebView::Autocomplete, regardless of whether the target view is private.
 // Caller owns returned memory and must free it.
-LADYBIRD_API char *history_autocomplete_json(const char *query, int limit);
+LADYBIRD_API char *history_autocomplete_json(int view_id, const char *query,
+                                              int limit);
 
 // Returns a JSON array string of the engine's built-in search engines, each
 // with "name" and "queryUrl" fields. Caller owns returned memory and must

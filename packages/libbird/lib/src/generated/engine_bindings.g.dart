@@ -634,22 +634,27 @@ class LadybirdBindings {
       .asFunction<bool Function(int)>(isLeaf: true);
 
   ffi.Pointer<ffi.Char> history_autocomplete_json(
+    int view_id,
     ffi.Pointer<ffi.Char> query,
     int limit,
   ) {
-    return _history_autocomplete_json(query, limit);
+    return _history_autocomplete_json(view_id, query, limit);
   }
 
   late final _history_autocomplete_jsonPtr =
       _lookup<
         ffi.NativeFunction<
-          ffi.Pointer<ffi.Char> Function(ffi.Pointer<ffi.Char>, ffi.Int)
+          ffi.Pointer<ffi.Char> Function(
+            ffi.Int,
+            ffi.Pointer<ffi.Char>,
+            ffi.Int,
+          )
         >
       >('history_autocomplete_json');
   late final _history_autocomplete_json = _history_autocomplete_jsonPtr
-      .asFunction<ffi.Pointer<ffi.Char> Function(ffi.Pointer<ffi.Char>, int)>(
-        isLeaf: true,
-      );
+      .asFunction<
+        ffi.Pointer<ffi.Char> Function(int, ffi.Pointer<ffi.Char>, int)
+      >(isLeaf: true);
 
   ffi.Pointer<ffi.Char> get_builtin_search_engines_json() {
     return _get_builtin_search_engines_json();

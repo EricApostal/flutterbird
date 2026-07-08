@@ -569,6 +569,7 @@ class LadybirdController {
   String getHistoryAutocompleteJson(String query, {int limit = 8}) {
     final queryPtr = query.toNativeUtf8();
     final ptr = _bindings.history_autocomplete_json(
+      _viewId,
       queryPtr.cast<ffi.Char>(),
       limit,
     );

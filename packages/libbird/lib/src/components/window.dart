@@ -568,6 +568,18 @@ class _LadybirdViewState extends State<LadybirdView>
     _momentumTicker?.stop();
     _lastPointerPos = details.localPosition;
     _dispatchPrimaryTap(details.localPosition);
+
+    // A tap on a field that was already focused before this tap (e.g. the
+    // user manually dismissed the platform keyboard, then tapped the same
+    // field again) doesn't produce a fresh focus-change event from the
+    // engine, so inputCaretRectNotifier never fires -- nothing would tell us
+    // to reattach. Re-request the keyboard directly off of the last-known
+    // state instead of waiting for a change notification: if the engine
+    // still considers a field focused, that's reason enough to ensure the
+    // keyboard is up.
+    if (widget.controller.inputCaretRectNotifier.value != null) {
+      _ensureTextInputConnectionAttached();
+    }
   }
 
   void _onTouchPanStart(DragStartDetails details) {

@@ -1448,8 +1448,11 @@ bool is_current_view_bookmarked(int view_id) {
       it->second->url());
 }
 
-char *history_autocomplete_json(const char *query, int limit) {
+char *history_autocomplete_json(int view_id, const char *query, int limit) {
   if (!s_app)
+    return nullptr;
+
+  if (g_web_views.find(view_id) == g_web_views.end())
     return nullptr;
 
   String query_string;
@@ -1460,8 +1463,12 @@ char *history_autocomplete_json(const char *query, int limit) {
   }
 
   size_t safe_limit = limit > 0 ? static_cast<size_t>(limit) : 8;
-  auto entries = WebView::Application::history_store().autocomplete_entries(
-      query_string, safe_limit);
+
+  // A private view's own history store is disabled, but autocomplete still draws
+  // suggestions from ordinary (non-private) history regardless of view->is_private()
+  // -- see WebView::Autocomplete::query_autocomplete_engine.
+  auto entries = WebView::Application::history_store(WebView::IsPrivate::No)
+                     .autocomplete_entries(query_string, safe_limit);
 
   JsonArray suggestions;
   suggestions.ensure_capacity(entries.size());
