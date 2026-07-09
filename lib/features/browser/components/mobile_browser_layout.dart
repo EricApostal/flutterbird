@@ -20,36 +20,11 @@ class MobileBrowserLayout extends ConsumerWidget {
     }
 
     return Scaffold(
-      body: Stack(
+      body: Column(
         children: [
-          Column(
-            children: [
-              if (!isFullscreen)
-                MobileOmniboxBar(currentTabController: currentTabController),
-              Expanded(child: TabSwipeBackStack(viewId: viewId)),
-            ],
-          ),
-          if (isFullscreen)
-            Positioned(
-              top: 0,
-              right: 0,
-              child: SafeArea(
-                child: Padding(
-                  padding: const EdgeInsets.all(8),
-                  child: Material(
-                    color: Colors.black45,
-                    shape: const CircleBorder(),
-                    child: IconButton(
-                      tooltip: 'Exit fullscreen',
-                      icon: const Icon(Icons.fullscreen_exit, color: Colors.white),
-                      onPressed: () => ref
-                          .read(browserFullscreenModeControllerProvider.notifier)
-                          .exitFromUi(),
-                    ),
-                  ),
-                ),
-              ),
-            ),
+          if (!isFullscreen)
+            MobileOmniboxBar(currentTabController: currentTabController),
+          Expanded(child: TabSwipeBackStack(viewId: viewId)),
         ],
       ),
     );

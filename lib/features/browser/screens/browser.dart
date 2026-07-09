@@ -126,10 +126,7 @@ class _BrowserWindowScreenState extends ConsumerState<BrowserWindowScreen> {
     final currentTabController = ref.watch(browserTabProvider(viewId));
     final isFullscreen = ref.watch(browserFullscreenModeControllerProvider);
 
-    ref.listen<bool>(browserFullscreenModeControllerProvider, (
-      previous,
-      next,
-    ) {
+    ref.listen<bool>(browserFullscreenModeControllerProvider, (previous, next) {
       if (next) {
         _showFullscreenHintBriefly();
       } else if (_showFullscreenHint) {
@@ -241,9 +238,10 @@ class _BrowserWindowScreenState extends ConsumerState<BrowserWindowScreen> {
                                             topLeft: .circular(8),
                                           ),
                                           child: BrowserWindow(
-                                            key: GlobalObjectKey<
-                                              State<BrowserWindow>
-                                            >(viewId),
+                                            key:
+                                                GlobalObjectKey<
+                                                  State<BrowserWindow>
+                                                >(viewId),
                                             viewId: viewId,
                                           ),
                                         ),
@@ -258,9 +256,10 @@ class _BrowserWindowScreenState extends ConsumerState<BrowserWindowScreen> {
                                     BrowserTabBar(currentViewId: viewId),
                                     Expanded(
                                       child: BrowserWindow(
-                                        key: GlobalObjectKey<
-                                          State<BrowserWindow>
-                                        >(viewId),
+                                        key:
+                                            GlobalObjectKey<
+                                              State<BrowserWindow>
+                                            >(viewId),
                                         viewId: viewId,
                                       ),
                                     ),
@@ -270,11 +269,6 @@ class _BrowserWindowScreenState extends ConsumerState<BrowserWindowScreen> {
                 ),
               ],
             ),
-            if (isFullscreen)
-              _FullscreenExitOverlay(
-                showHint: _showFullscreenHint,
-                onExit: _requestExitFullscreen,
-              ),
           ],
         ),
       ),
