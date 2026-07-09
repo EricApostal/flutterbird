@@ -111,6 +111,16 @@ class _LadybirdViewState extends State<LadybirdView>
       return;
     }
 
+    // The engine reports a focused editable element any time the page
+    // focuses one -- including a page autofocusing an <input> the moment
+    // it finishes loading (e.g. a search engine's homepage in a new tab).
+    // Don't let that steal the platform text input connection away from
+    // some other widget (like the omnibox) that currently holds Flutter
+    // focus: only attach here if the webview itself is focused. When the
+    // user actually taps into the page, _onTouchTapUp already requests
+    // focus and reattaches explicitly.
+    if (!_focusNode.hasFocus) return;
+
     _ensureTextInputConnectionAttached();
 
     final density = MediaQuery.devicePixelRatioOf(context);

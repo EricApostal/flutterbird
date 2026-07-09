@@ -103,6 +103,14 @@ typedef void (*InputCaretRectChangeCallback)(int view_id, bool has_rect, int x,
 // <video>'s native fullscreen control). The embedder should present its own
 // chrome accordingly (hide toolbars, go OS-fullscreen on desktop, etc).
 typedef void (*FullscreenChangeCallback)(int view_id, bool is_fullscreen);
+// Fired whenever the tab's real session history changes for any reason (new
+// navigation, pushState/replaceState, back/forward traversal, reload, or
+// crash-recovery reseed). history_json is a JSON array of
+// {step, url, current, ...} objects straight from Ladybird's own session
+// history mirror -- the authoritative back/forward stack, not a
+// reconstruction. Caller owns returned memory and must free it.
+typedef void (*NavigationHistoryChangeCallback)(int view_id,
+                                                 char *history_json);
 
 LADYBIRD_API void set_url_change_callback(int view_id,
                                           UrlChangeCallback callback);
@@ -127,6 +135,10 @@ set_input_caret_rect_change_callback(int view_id,
                                      InputCaretRectChangeCallback callback);
 LADYBIRD_API void
 set_fullscreen_change_callback(int view_id, FullscreenChangeCallback callback);
+// Registers callback and immediately invokes it once with the view's current
+// session history, matching set_url_change_callback's convention.
+LADYBIRD_API void set_navigation_history_change_callback(
+  int view_id, NavigationHistoryChangeCallback callback);
 // Asks the page's current fullscreen element (if any) to exit fullscreen,
 // e.g. in response to a platform back gesture/button while a page or video
 // is fullscreen. No-op if the page isn't currently fullscreen. This mirrors

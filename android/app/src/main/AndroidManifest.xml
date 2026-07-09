@@ -4,7 +4,8 @@
         android:label="flutterbird"
         android:name="${applicationName}"
         android:extractNativeLibs="true"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:enableOnBackInvokedCallback="true">
         <activity
             android:name=".MainActivity"
             android:exported="true"

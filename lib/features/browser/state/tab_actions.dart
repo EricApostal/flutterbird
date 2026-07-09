@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:bird_core/bird_core.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutterbird/features/browser/state/history_bitmap_cache.dart';
 import 'package:go_router/go_router.dart';
 import 'package:ladybird/ladybird.dart';
 
@@ -51,6 +52,7 @@ class BrowserTabActions {
 
   static void commitCloseTab(WidgetRef ref, int viewId) {
     ref.read(browserTabControllerProvider.notifier).remove(viewId);
+    HistoryBitmapCache.instance.evictTab(viewId);
   }
 
   static void closeTabImmediately(

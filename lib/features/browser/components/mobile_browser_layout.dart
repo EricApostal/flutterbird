@@ -1,8 +1,8 @@
 import 'package:bird_core/bird_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutterbird/features/browser/components/browser_window.dart';
 import 'package:flutterbird/features/browser/components/mobile_omnibox_bar.dart';
+import 'package:flutterbird/features/browser/components/tab_swipe_back_stack.dart';
 import 'package:flutterbird/features/browser/state/fullscreen_mode.dart';
 
 class MobileBrowserLayout extends ConsumerWidget {
@@ -26,12 +26,7 @@ class MobileBrowserLayout extends ConsumerWidget {
             children: [
               if (!isFullscreen)
                 MobileOmniboxBar(currentTabController: currentTabController),
-              Expanded(
-                child: BrowserWindow(
-                  key: GlobalObjectKey<State<BrowserWindow>>(viewId),
-                  viewId: viewId,
-                ),
-              ),
+              Expanded(child: TabSwipeBackStack(viewId: viewId)),
             ],
           ),
           if (isFullscreen)

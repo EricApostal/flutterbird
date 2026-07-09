@@ -44,6 +44,7 @@
 #include <LibWeb/Page/InputEvent.h>
 #include <LibWeb/PixelUnits.h>
 #include <LibWebView/BrowserProcess.h>
+#include <LibWebView/HistoryDebug.h>
 #include <LibWebView/HistoryStore.h>
 #include <LibWebView/Menu.h>
 #include <LibWebView/SearchEngine.h>
@@ -245,6 +246,8 @@ public:
   NewWebViewCallback m_new_web_view_callback = nullptr;
   InputCaretRectChangeCallback m_input_caret_rect_change_callback = nullptr;
   FullscreenChangeCallback m_fullscreen_change_callback = nullptr;
+  NavigationHistoryChangeCallback m_navigation_history_change_callback =
+      nullptr;
   bool m_is_loading{false};
 
   std::mutex m_context_menu_mutex;
@@ -607,6 +610,17 @@ public:
       if (m_title_change_callback) {
         auto title_string = title.to_utf8().to_byte_string();
         m_title_change_callback(strdup(title_string.characters()));
+      }
+    };
+
+    on_navigation_history_change = [this]() {
+      std::lock_guard lock(m_info_mutex);
+      if (m_navigation_history_change_callback) {
+        auto json = WebView::history_json_entries(traversable().session_history())
+                        .serialized()
+                        .to_byte_string();
+        m_navigation_history_change_callback(m_view_id,
+                                             strdup(json.characters()));
       }
     };
 
@@ -1383,6 +1397,26 @@ void set_title_change_callback(int view_id, TitleChangeCallback callback) {
     if (callback)
       callback(strdup(current_title.characters()));
   }
+}
+
+void set_navigation_history_change_callback(
+    int view_id, NavigationHistoryChangeCallback callback) {
+  auto it = g_web_views.find(view_id);
+  if (it == g_web_views.end())
+    return;
+
+  ByteString current_json;
+  {
+    std::lock_guard lock(it->second->m_info_mutex);
+    it->second->m_navigation_history_change_callback = callback;
+    current_json = WebView::history_json_entries(
+                       it->second->traversable().session_history())
+                       .serialized()
+                       .to_byte_string();
+  }
+
+  if (callback)
+    callback(view_id, strdup(current_json.characters()));
 }
 
 void set_favicon_change_callback(int view_id, FaviconChangeCallback callback) {

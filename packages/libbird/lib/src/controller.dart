@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:ladybird/src/generated/engine_bindings.g.dart';
 import 'package:ladybird/src/models/context_menu.dart';
 import 'package:ladybird/src/models/download.dart';
+import 'package:ladybird/src/models/session_history.dart';
 import 'package:ladybird/src/models/settings.dart';
 import 'dart:ui' as ui;
 
@@ -60,6 +61,10 @@ class LadybirdController {
   _inputCaretRectChangeCallback;
   late final ffi.NativeCallable<ffi.Void Function(ffi.Int, ffi.Bool)>
   _fullscreenChangeCallback;
+  late final ffi.NativeCallable<
+    ffi.Void Function(ffi.Int, ffi.Pointer<ffi.Char>)
+  >
+  _navigationHistoryChangeCallback;
 
   static ffi.NativeCallable<DisplayDownloadConfirmationDialogCallbackFunction>?
   _displayDownloadConfirmationDialogCallback;
@@ -104,6 +109,12 @@ class LadybirdController {
   final ValueNotifier<bool> isLoadingNotifier = ValueNotifier(false);
   final ValueNotifier<bool> canGoBackNotifier = ValueNotifier(false);
   final ValueNotifier<bool> canGoForwardNotifier = ValueNotifier(false);
+  // Ladybird's own session history mirror for this tab -- the authoritative
+  // back/forward stack, refreshed for any cause of change (link tap, typed
+  // URL, JS navigation, pushState/replaceState, back/forward traversal,
+  // reload). Never reconstructed client-side.
+  final ValueNotifier<List<LadybirdSessionHistoryEntry>>
+  sessionHistoryNotifier = ValueNotifier(const []);
   final ValueNotifier<MouseCursor> mouseCursorNotifier = ValueNotifier(
     SystemMouseCursors.basic,
   );
@@ -307,6 +318,15 @@ class LadybirdController {
       _fullscreenChangeCallback.nativeFunction,
     );
 
+    _navigationHistoryChangeCallback =
+        ffi.NativeCallable<
+          ffi.Void Function(ffi.Int, ffi.Pointer<ffi.Char>)
+        >.listener(_onNavigationHistoryChange);
+    _bindings.set_navigation_history_change_callback(
+      _viewId,
+      _navigationHistoryChangeCallback.nativeFunction,
+    );
+
     if (existingViewId != null) {
       syncUrlFromEngine();
     }
@@ -416,6 +436,28 @@ class LadybirdController {
   void _onNewWebView(int newViewId, bool activateTab) {
     if (newViewId <= 0) return;
     onNewWebView?.call(newViewId, activateTab);
+  }
+
+  void _onNavigationHistoryChange(
+    int viewId,
+    ffi.Pointer<ffi.Char> historyJson,
+  ) {
+    if (historyJson == ffi.nullptr) return;
+
+    try {
+      if (viewId != _viewId) return;
+
+      final jsonString = historyJson.cast<Utf8>().toDartString();
+      final decoded = jsonDecode(jsonString);
+      if (decoded is! List) return;
+
+      sessionHistoryNotifier.value = decoded
+          .whereType<Map<String, dynamic>>()
+          .map(LadybirdSessionHistoryEntryMapper.fromMap)
+          .toList();
+    } finally {
+      malloc.free(historyJson);
+    }
   }
 
   void _onFullscreenChange(int viewId, bool isFullscreen) {
@@ -953,12 +995,14 @@ class LadybirdController {
     _bindings.set_loading_state_change_callback(_viewId, ffi.nullptr);
     _bindings.set_input_caret_rect_change_callback(_viewId, ffi.nullptr);
     _bindings.set_fullscreen_change_callback(_viewId, ffi.nullptr);
+    _bindings.set_navigation_history_change_callback(_viewId, ffi.nullptr);
     urlNotifier.dispose();
     titleNotifier.dispose();
     faviconNotifier.dispose();
     isLoadingNotifier.dispose();
     canGoBackNotifier.dispose();
     canGoForwardNotifier.dispose();
+    sessionHistoryNotifier.dispose();
     mouseCursorNotifier.dispose();
     inputCaretRectNotifier.dispose();
     _resizeCallback.close();
@@ -972,6 +1016,7 @@ class LadybirdController {
     _newWebViewCallback.close();
     _inputCaretRectChangeCallback.close();
     _fullscreenChangeCallback.close();
+    _navigationHistoryChangeCallback.close();
     _bindings.destroy_web_view(_viewId);
   }
 }

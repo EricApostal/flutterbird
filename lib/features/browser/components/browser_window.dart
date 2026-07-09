@@ -1,5 +1,8 @@
+import 'dart:ui' as ui;
+
 import 'package:bird_core/bird_core.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutterbird/features/browser/components/browser_context_menu.dart';
 import 'package:flutterbird/features/browser/state/fullscreen_mode.dart';
@@ -10,14 +13,44 @@ class BrowserWindow extends ConsumerStatefulWidget {
   final int viewId;
   const BrowserWindow({super.key, required this.viewId});
 
+  // Captures a snapshot of the live web content currently shown for
+  // [viewId], if that tab's BrowserWindow is mounted anywhere in the tree --
+  // resolved via the same GlobalObjectKey<State<BrowserWindow>>(viewId)
+  // convention already used at every BrowserWindow(...) call site. Returns
+  // null if the tab isn't mounted or the capture fails (first frame not yet
+  // painted, etc); callers should fall back to a placeholder.
+  static Future<ui.Image?> captureSnapshotFor(int viewId) {
+    final state = GlobalObjectKey<State<BrowserWindow>>(viewId).currentState;
+    if (state is! _BrowserWindowState) return Future.value(null);
+    return state._captureSnapshot();
+  }
+
   @override
   ConsumerState<BrowserWindow> createState() => _BrowserWindowState();
 }
 
 class _BrowserWindowState extends ConsumerState<BrowserWindow> {
   final GlobalKey _viewKey = GlobalKey();
+  final GlobalKey _repaintBoundaryKey = GlobalKey();
   bool _contextMenuVisible = false;
   LadybirdController? _boundController;
+
+  Future<ui.Image?> _captureSnapshot() async {
+    final renderObject = _repaintBoundaryKey.currentContext
+        ?.findRenderObject();
+    if (renderObject is! RenderRepaintBoundary) return null;
+    if (!renderObject.attached || renderObject.debugNeedsPaint) return null;
+
+    try {
+      final density =
+          _repaintBoundaryKey.currentContext != null
+              ? MediaQuery.devicePixelRatioOf(_repaintBoundaryKey.currentContext!)
+              : 1.0;
+      return await renderObject.toImage(pixelRatio: density);
+    } catch (_) {
+      return null;
+    }
+  }
 
   late final void Function(LadybirdContextMenuRequest)
   _onContextMenuRequestCallback = _onContextMenuRequest;
@@ -158,9 +191,12 @@ class _BrowserWindowState extends ConsumerState<BrowserWindow> {
     _bindController(controller);
     controller.updateColorScheme(Theme.of(context).brightness);
 
-    return KeyedSubtree(
-      key: _viewKey,
-      child: LadybirdView(controller: controller),
+    return RepaintBoundary(
+      key: _repaintBoundaryKey,
+      child: KeyedSubtree(
+        key: _viewKey,
+        child: LadybirdView(controller: controller),
+      ),
     );
   }
 }

@@ -27,13 +27,11 @@ final class BrowserFullscreenModeControllerProvider
       );
 
   @override
-  String debugGetCreateSourceHash() =>
-      _$browserFullscreenModeControllerHash();
+  String debugGetCreateSourceHash() => _$browserFullscreenModeControllerHash();
 
   @$internal
   @override
-  BrowserFullscreenModeController create() =>
-      BrowserFullscreenModeController();
+  BrowserFullscreenModeController create() => BrowserFullscreenModeController();
 
   /// {@macro riverpod.override_with_value}
   Override overrideWithValue(bool value) {
@@ -45,7 +43,7 @@ final class BrowserFullscreenModeControllerProvider
 }
 
 String _$browserFullscreenModeControllerHash() =>
-    r'8f2b6a0c3e7d4f1a9b5c6d2e8f4a1b7c9d3e5f60';
+    r'3c4cd9928c9cecdebc8a7dba1d0c4508efc93f2f';
 
 abstract class _$BrowserFullscreenModeController extends $Notifier<bool> {
   bool build();
