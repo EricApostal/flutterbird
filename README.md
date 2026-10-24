@@ -32,9 +32,14 @@ On Linux the engine also builds Ladybird's Vulkan dmabuf path when the Ladybird 
 it falls back to copying the presented bitmap.
 
 On Android the helper processes are packaged as `lib<Name>.so` in the app's native library
-directory, so the fork's helper lookup knows to look for them there, and frames reach Flutter as
-`AHardwareBuffer`s that `libbird` allocates and fills itself (Ladybird no longer produces
-hardware buffers of its own).
+directory, so the fork's helper lookup knows to look for them there. Frames reach Flutter as the
+`AHardwareBuffer`s the compositor itself rendered into, zero-copy: the fork carries
+`USE_VULKAN_AHB_IMAGES`, the Android counterpart of Ladybird's Linux dma-buf sharable-image path,
+which upstream enables for Linux/BSD only. `libbird` falls back to copying the presented bitmap
+into a buffer of its own for frames that have no hardware buffer (e.g. an Android build without
+Vulkan). Page audio plays through the same fork branch: `AudioServer` ships as `libAudioServer.so`
+and opens the device with AAudio, since upstream's audio backend selection has no Android case and
+Android would otherwise mix into `NullPlaybackStream`.
 
 ### MacOS
 Due to the aforementioned bug in xcode beta, make sure you are targeting the stable version of xcode
