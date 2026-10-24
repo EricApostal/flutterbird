@@ -29,6 +29,8 @@ class LadybirdDownloadStatusMapper extends EnumMapper<LadybirdDownloadStatus> {
     switch (value) {
       case 'in-progress':
         return LadybirdDownloadStatus.inProgress;
+      case r'paused':
+        return LadybirdDownloadStatus.paused;
       case r'completed':
         return LadybirdDownloadStatus.completed;
       case r'canceled':
@@ -45,6 +47,8 @@ class LadybirdDownloadStatusMapper extends EnumMapper<LadybirdDownloadStatus> {
     switch (self) {
       case LadybirdDownloadStatus.inProgress:
         return 'in-progress';
+      case LadybirdDownloadStatus.paused:
+        return r'paused';
       case LadybirdDownloadStatus.completed:
         return r'completed';
       case LadybirdDownloadStatus.canceled:

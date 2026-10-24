@@ -6,6 +6,7 @@ part 'download.mapper.dart';
 enum LadybirdDownloadStatus {
   @MappableValue('in-progress')
   inProgress,
+  paused,
   completed,
   canceled,
   failed,
@@ -34,6 +35,7 @@ class LadybirdDownload with LadybirdDownloadMappable {
   final String? error;
 
   bool get isInProgress => status == LadybirdDownloadStatus.inProgress;
+  bool get isPaused => status == LadybirdDownloadStatus.paused;
   bool get isCompleted => status == LadybirdDownloadStatus.completed;
   bool get isFailed => status == LadybirdDownloadStatus.failed;
   bool get isCanceled => status == LadybirdDownloadStatus.canceled;

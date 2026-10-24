@@ -943,6 +943,17 @@ class LadybirdController {
     return _bindings.get_iosurface_height(_viewId);
   }
 
+  // FlutterBird's own ABI values for dispatchMouseEvent's `type`, mirrored from
+  // LadybirdMouseEventType in cpp/engine.h. They are deliberately not the
+  // engine's Web::MouseEvent::Type values: the engine inserted MouseCancel
+  // before MouseWheel, which is exactly the kind of shift these names exist to
+  // absorb.
+  static const int mouseDown = 0;
+  static const int mouseUp = 1;
+  static const int mouseMove = 2;
+  static const int mouseLeave = 3;
+  static const int mouseWheel = 4;
+
   void dispatchMouseEvent({
     required int type,
     required int x,

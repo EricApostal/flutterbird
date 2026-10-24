@@ -22,6 +22,8 @@ class DownloadRow extends StatelessWidget {
     switch (download.status) {
       case LadybirdDownloadStatus.inProgress:
         return sizeLabel;
+      case LadybirdDownloadStatus.paused:
+        return 'Paused · $sizeLabel';
       case LadybirdDownloadStatus.completed:
         return 'Completed · $sizeLabel';
       case LadybirdDownloadStatus.canceled:
@@ -84,7 +86,7 @@ class DownloadRow extends StatelessWidget {
               ),
             ],
           ),
-          if (download.isInProgress) ...[
+          if (download.isInProgress || download.isPaused) ...[
             const SizedBox(height: 6),
             _AnimatedDownloadProgressBar(progress: download.progress),
           ],
@@ -97,6 +99,8 @@ class DownloadRow extends StatelessWidget {
     switch (status) {
       case LadybirdDownloadStatus.inProgress:
         return Icons.file_download_outlined;
+      case LadybirdDownloadStatus.paused:
+        return Icons.pause_circle_outline;
       case LadybirdDownloadStatus.completed:
         return Icons.check_circle_outline;
       case LadybirdDownloadStatus.canceled:

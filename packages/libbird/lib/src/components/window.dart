@@ -454,7 +454,7 @@ class _LadybirdViewState extends State<LadybirdView>
     _accumulatedWheelY -= wheelY;
 
     widget.controller.dispatchMouseEvent(
-      type: 4, // MouseWheel
+      type: LadybirdController.mouseWheel,
       x: (localPosition.dx * density).toInt(),
       y: (localPosition.dy * density).toInt(),
       button: 0,
