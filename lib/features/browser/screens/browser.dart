@@ -153,7 +153,7 @@ class _BrowserWindowScreenState extends ConsumerState<BrowserWindowScreen> {
       );
     }
 
-    if (Platform.isAndroid || Platform.isIOS) {
+    if (Platform.isAndroid) {
       return withFullscreenBackHandling(MobileBrowserLayout(viewId: viewId));
     }
 

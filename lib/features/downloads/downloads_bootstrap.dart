@@ -21,9 +21,9 @@ Future<void> initializeDownloads() async {
 }
 
 Future<String> _resolveDownloadsDirectory() async {
-  // getDownloadsDirectory() only has a real answer on desktop platforms; iOS
-  // and Android have no shared "Downloads" folder concept, so fall back to
-  // the app's own documents directory there.
+  // getDownloadsDirectory() only has a real answer on desktop platforms;
+  // Android has no shared "Downloads" folder concept, so fall back to the
+  // app's own documents directory there.
   try {
     final dir = await getDownloadsDirectory();
     if (dir != null) return dir.path;

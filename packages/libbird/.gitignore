@@ -34,9 +34,6 @@ migrate_working_dir/
 /macos/LadybirdResources
 /macos/Bundled
 /cpp/build
-/cpp/build_ios
-/cpp/build_iphoneos
-/cpp/build_iphonesimulator
 /cpp/.cache
 /third_party/ladybird/
 /.vscode

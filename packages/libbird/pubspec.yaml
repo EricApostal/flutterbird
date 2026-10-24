@@ -45,8 +45,6 @@ flutter:
         pluginClass: LadybirdPlugin
       macos:
         pluginClass: LadybirdPlugin
-      ios:
-        pluginClass: LadybirdPlugin
   
 ffigen:
   name: LadybirdBindings

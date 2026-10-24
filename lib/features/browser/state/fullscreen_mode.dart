@@ -11,7 +11,7 @@ part 'fullscreen_mode.g.dart';
 bool get _isDesktopPlatform =>
     Platform.isMacOS || Platform.isLinux || Platform.isWindows;
 
-bool get _isMobilePlatform => Platform.isAndroid || Platform.isIOS;
+bool get _isMobilePlatform => Platform.isAndroid;
 
 // Reflects whether the page currently occupying the screen is showing a DOM
 // Fullscreen API element (e.g. a <video>'s native fullscreen button, or

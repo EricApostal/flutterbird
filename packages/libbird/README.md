@@ -14,7 +14,24 @@ This project is ***very*** early.
 Note: This clones Ladybird into `third_party/ladybird`, pins it to the revision in `third_party/ladybird.version`, and then builds it locally with the official `ladybird.py` script. I recommend navigating to the `macos` folder in your app, and running `pod install`,
 as when flutter runs `pod install` automatically you cannot see build process. This will take a while! Compiling a web browser takes a lot of time.
 
-To update Ladybird to a newer upstream commit, change `LADYBIRD_REVISION` in `third_party/ladybird.version` and rerun your build. `libbird` will fetch the repository and move the checkout to the new pinned revision automatically.
+To update Ladybird to a newer upstream commit, rebase `LADYBIRD_REF` in `third_party/ladybird.version` (the fork's `feat/flutterbird` branch, which is upstream master plus libbird's embedding hooks) onto upstream master, then set `LADYBIRD_REVISION` to the resulting commit and rerun your build. `libbird` will fetch the repository and move the checkout to the new pinned revision automatically.
+
+## Checking the embedding after moving the Ladybird pin
+`tool/engine_smoke_check.dart` drives the engine's C ABI directly (no Flutter, no window) and
+checks that navigation, painting and wheel input still reach the page:
+
+```sh
+flutter build macos --debug
+APP=build/macos/Build/Products/Debug/flutterbird.app
+mkdir -p /tmp/libbird-home && ln -sfn "$PWD/packages/libbird/third_party/ladybird/Base/res" /tmp/libbird-home/.lagom
+(cd "$APP/Contents/MacOS" && HOME=/tmp/libbird-home dart run \
+    ../../../packages/libbird/tool/engine_smoke_check.dart "$APP/Contents/Resources/libengine.dylib")
+```
+
+The ABI is positional, so an engine change that renumbers an event type (Ladybird inserted
+`MouseCancel` before `MouseWheel`, which silently turned every wheel event into a cancel) breaks
+scrolling with no compile error. `engine.h` therefore defines its own event-type names and
+`engine.cpp` maps them onto the engine's, and this check catches the rest.
 
 ## What is supported
 - Launching a browser window on MacOS

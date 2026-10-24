@@ -1,7 +1,6 @@
 import 'dart:io';
 import 'dart:ui' as ui;
 
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutterbird/features/browser/components/browser_window.dart';
@@ -18,9 +17,8 @@ import 'package:ladybird/ladybird.dart';
 // GlobalObjectKey<State<BrowserWindow>>(viewId) used everywhere else in the
 // app, so it reparents between page slots instead of being recreated.
 //
-// Using CupertinoPage/MaterialPage (rather than a hand-rolled transition)
-// means iOS gets its real interactive edge-swipe-to-pop and Android gets
-// real OS predictive-back preview for free.
+// Using Navigator pages (rather than a hand-rolled transition) means Android
+// gets real OS predictive-back preview for free.
 class TabSwipeBackStack extends ConsumerWidget {
   final int viewId;
 
@@ -88,9 +86,6 @@ class TabSwipeBackStack extends ConsumerWidget {
     required bool canPop,
     required Widget child,
   }) {
-    if (Platform.isIOS) {
-      return CupertinoPage<void>(key: key, canPop: canPop, child: child);
-    }
     return MaterialPage<void>(key: key, canPop: canPop, child: child);
   }
 }
