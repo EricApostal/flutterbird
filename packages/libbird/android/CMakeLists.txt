@@ -112,7 +112,7 @@ add_custom_target(ladybird_generated_file_mirrors
     DEPENDS ${LADYBIRD_MIRRORED_GENERATED_FILES}
 )
 
-foreach(mirror_consumer_target IN ITEMS compositorservice webcontentservice webworkerservice)
+foreach(mirror_consumer_target IN ITEMS audioserverservice compositorservice webcontentservice webworkerservice)
     if (TARGET ${mirror_consumer_target})
         add_dependencies(${mirror_consumer_target} ladybird_generated_file_mirrors)
     endif()
@@ -121,7 +121,7 @@ endforeach()
 # TODO: This is a workaround for a bug in ladybird. This is actually handled,
 # but android is not included in that check
 if (ANDROID AND NOT BUILD_SHARED_LIBS)
-    foreach(helper_process IN ITEMS Compositor ImageDecoder RequestServer WebContent WebWorker)
+    foreach(helper_process IN ITEMS AudioServer Compositor ImageDecoder RequestServer WebContent WebWorker)
         if (TARGET ${helper_process})
             target_link_options(${helper_process} PRIVATE LINKER:--allow-multiple-definition)
         endif()
@@ -139,6 +139,10 @@ add_library(engine SHARED
 )
 
 if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    # The engine's headers and the Ladybird libraries it links were built with the
+    # AHardwareBuffer shared-image backend enabled (check_for_dependencies.cmake
+    # turns it on for Android), so the wrapper has to agree.
+    target_compile_definitions(engine PRIVATE USE_VULKAN_AHB_IMAGES=1)
     target_compile_options(engine PRIVATE
         -Wno-unqualified-std-cast-call
         -Wno-user-defined-literals

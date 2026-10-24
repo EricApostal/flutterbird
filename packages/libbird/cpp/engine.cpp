@@ -284,13 +284,20 @@ public:
   }
 
   // Android hands the current frame to the platform as an AHardwareBuffer, which
-  // the Java side wraps in a Bitmap and blits into the Flutter texture's
-  // Surface. Ladybird stopped producing hardware buffers of its own (the fork's
-  // USE_VULKAN_AHB_IMAGES shared-image backend is gone), so the plugin owns the
-  // buffer here: allocate one per size, lock it, copy the presented bitmap into
-  // it, unlock it.
+  // the Java side wraps in a Bitmap and blits into the Flutter texture's Surface.
+  //
+  // Normally that is the very buffer the compositor rendered into, exported from
+  // its Vulkan image (USE_VULKAN_AHB_IMAGES, the Android counterpart of the Linux
+  // dma-buf path): zero copies per frame. Only when the engine has no hardware
+  // buffer for the frame does the plugin fall back to owning one and copying the
+  // presented bitmap into it (refresh_android_hardware_buffer).
   void *front_ahb() {
 #ifdef __ANDROID__
+    if (m_front_bitmap.shared_image_buffer) {
+      if (auto *engine_buffer =
+              m_front_bitmap.shared_image_buffer->native_buffer())
+        return engine_buffer;
+    }
     if (!m_android_frame_buffer)
       return nullptr;
     return m_android_frame_buffer->buffer();
@@ -575,6 +582,15 @@ public:
       auto *shared_image_buffer =
           m_front_bitmap.shared_image_buffer.ptr();
 
+      // A hardware buffer the compositor rendered into is presented as-is; the
+      // plugin reads it through get_android_hardware_buffer.
+      if (front_ahb() != nullptr) {
+        auto frame_size = m_front_bitmap.last_painted_size.to_type<int>();
+        m_backend->on_hardware_frame_ready(frame_size.width(),
+                                           frame_size.height());
+        return;
+      }
+
 #ifndef __APPLE__
 #ifdef USE_VULKAN_DMABUF_IMAGES
       auto *linux_backend = static_cast<LinuxViewBackend *>(m_backend.get());
@@ -620,10 +636,12 @@ public:
           AK::RefPtr<Gfx::Bitmap const>(shared_image_buffer->bitmap());
       m_backend->on_bitmap_ready(bitmap);
 #ifdef __ANDROID__
-      // Android's texture path reads the frame back out as an AHardwareBuffer
-      // (see get_android_hardware_buffer), so fill that here, on the thread
-      // that already owns this frame.
-      refresh_android_hardware_buffer();
+      // A frame the compositor exported as an AHardwareBuffer never needs the
+      // copied one; only fall back to it for frames that have none.
+      if (front_ahb() != nullptr)
+        m_android_frame_buffer = nullptr;
+      else
+        refresh_android_hardware_buffer();
 #endif
 
 #ifdef __APPLE__

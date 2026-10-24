@@ -29,6 +29,19 @@ void LinuxViewBackend::on_bitmap_ready(AK::RefPtr<Gfx::Bitmap const> bitmap) {
   fire_frame_ready(size_changed);
 }
 
+void LinuxViewBackend::on_hardware_frame_ready(int width, int height) {
+  bool size_changed = false;
+  {
+    std::lock_guard lock(m_bitmap_mutex);
+    size_changed = (width != m_width || height != m_height);
+    m_width = width;
+    m_height = height;
+    ++m_frame_generation;
+  }
+  // Fire callbacks outside the bitmap lock to prevent re-entrance deadlocks.
+  fire_frame_ready(size_changed);
+}
+
 void *LinuxViewBackend::pixel_data() {
   std::lock_guard lock(m_bitmap_mutex);
   if (!m_bitmap)

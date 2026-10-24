@@ -68,6 +68,14 @@ public:
     (void)bitmap;
   }
 
+  // Called when the engine presented a frame the plugin does not copy: the
+  // buffer it rendered into is handed to the platform directly. Sets the
+  // reported size and counts as a presented frame, without pixel data.
+  virtual void on_hardware_frame_ready(int width, int height) {
+    (void)width;
+    (void)height;
+  }
+
   // ── Output ───────────────────────────────────────────────────────────
   //
   // Returns a pointer to the current frame's pixel data, or nullptr
