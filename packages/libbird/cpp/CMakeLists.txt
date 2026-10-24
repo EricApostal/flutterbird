@@ -30,8 +30,6 @@ endif()
 
 if (ANDROID)
     message(FATAL_ERROR "Android builds moved to packages/libbird/android/CMakeLists.txt")
-elseif (IOS)
-    message(FATAL_ERROR "iOS builds moved to packages/libbird/ios/CMakeLists.txt")
 else()
     set(LADYBIRD_OUT_DIR "${LADYBIRD_DIR}/Build/release")
     set(_ladybird_build_env
@@ -67,13 +65,7 @@ if (EXISTS "${LADYBIRD_CACHE_FILE}")
     endif()
 endif()
 
-if (IOS)
-    if (CMAKE_OSX_SYSROOT MATCHES "iphonesimulator")
-        set(VCPKG_TRIPLET "arm64-ios-sim-dynamic")
-    else()
-        set(VCPKG_TRIPLET "arm64-ios-dynamic")
-    endif()
-elseif (APPLE)
+if (APPLE)
     set(VCPKG_TRIPLET "arm64-osx-dynamic")
 elseif (ANDROID)
     set(VCPKG_TRIPLET "arm64-android")
@@ -143,8 +135,10 @@ file(GLOB LADYBIRD_LIBS_SO
 target_link_libraries(engine PRIVATE
     ${LADYBIRD_LIBS_SO}
     lagom-webview
+    lagom-webcommon
     lagom-web
-    lagom-js
+    # LibJS is folded into LibWeb now (Libraries/CMakeLists.txt:
+    # LIBJS_FOLDED_INTO_LIBWEB), so there is no lagom-js to link.
     lagom-requests
     lagom-url
     lagom-ipc
@@ -172,24 +166,44 @@ if (APPLE)
     )
 
     set(BUNDLE_DIR "${CMAKE_BINARY_DIR}/LadybirdBundle")
+    set(BUNDLE_STAMP "${CMAKE_BINARY_DIR}/LadybirdBundle.stamp")
 
-    add_custom_command(TARGET engine POST_BUILD
+    # The engine's own copy rides on its link, but everything else in the bundle
+    # comes out of the Ladybird build tree: hashing it means a rebuilt Ladybird
+    # (a new pinned revision, an upstream change) reaches the app even when no
+    # line of engine.cpp moved and the engine therefore never relinks.
+    file(GLOB LADYBIRD_BUNDLE_INPUTS
+        "${LADYBIRD_OUT_DIR}/lib/*"
+        "${LADYBIRD_OUT_DIR}/vcpkg_installed/${VCPKG_TRIPLET}/lib/*"
+        "${LADYBIRD_OUT_DIR}/bin/Ladybird.app/Contents/MacOS/*"
+        "${LADYBIRD_DIR}/Base/res/*"
+    )
+
+    add_custom_command(
+        OUTPUT "${BUNDLE_STAMP}"
         COMMAND ${CMAKE_COMMAND} -E make_directory "${BUNDLE_DIR}/libraries"
         COMMAND ${CMAKE_COMMAND} -E make_directory "${BUNDLE_DIR}/binaries"
-        
-        COMMAND ${CMAKE_COMMAND} -E copy "$<TARGET_FILE:engine>" "${BUNDLE_DIR}/"
-
         COMMAND ${CMAKE_COMMAND} -E copy_directory "${LADYBIRD_OUT_DIR}/lib" "${BUNDLE_DIR}/libraries"
         COMMAND ${CMAKE_COMMAND} -E copy_directory "${LADYBIRD_OUT_DIR}/vcpkg_installed/${VCPKG_TRIPLET}/lib" "${BUNDLE_DIR}/libraries"
-
-        COMMAND ${CMAKE_COMMAND} -E copy "${LADYBIRD_OUT_DIR}/bin/Ladybird.app/Contents/MacOS/WebContent" "${BUNDLE_DIR}/binaries/"
-        COMMAND ${CMAKE_COMMAND} -E copy "${LADYBIRD_OUT_DIR}/bin/Ladybird.app/Contents/MacOS/RequestServer" "${BUNDLE_DIR}/binaries/"
-        COMMAND ${CMAKE_COMMAND} -E copy "${LADYBIRD_OUT_DIR}/bin/Ladybird.app/Contents/MacOS/ImageDecoder" "${BUNDLE_DIR}/binaries/"
-        COMMAND ${CMAKE_COMMAND} -E copy "${LADYBIRD_OUT_DIR}/bin/Ladybird.app/Contents/MacOS/WebWorker" "${BUNDLE_DIR}/binaries/"
-        COMMAND ${CMAKE_COMMAND} -E copy "${LADYBIRD_OUT_DIR}/bin/Ladybird.app/Contents/MacOS/Compositor" "${BUNDLE_DIR}/binaries/"
-        COMMAND ${CMAKE_COMMAND} -E copy "${LADYBIRD_OUT_DIR}/bin/Ladybird.app/Contents/MacOS/Ladybird" "${BUNDLE_DIR}/binaries/"
-
+        # Every executable Ladybird puts in its own bundle's MacOS directory is a
+        # helper the UI process may spawn (WebContent, RequestServer, ImageDecoder,
+        # WebWorker, Compositor, AudioServer, MediaServer, VideoDecoderServer,
+        # ProcessReaper, ...) plus the ladybird binary itself. Copying the whole
+        # directory keeps up with upstream gaining or renaming helpers, which
+        # enumerating them here silently did not.
+        COMMAND ${CMAKE_COMMAND} -E copy_directory "${LADYBIRD_OUT_DIR}/bin/Ladybird.app/Contents/MacOS" "${BUNDLE_DIR}/binaries"
         COMMAND ${CMAKE_COMMAND} -E copy_directory "${LADYBIRD_DIR}/Base/res" "${BUNDLE_DIR}/res"
+        COMMAND ${CMAKE_COMMAND} -E touch "${BUNDLE_STAMP}"
+        DEPENDS ${LADYBIRD_BUNDLE_INPUTS}
+        COMMENT "Refreshing LadybirdBundle from the Ladybird build tree"
+    )
+
+    add_custom_target(ladybird_bundle ALL DEPENDS "${BUNDLE_STAMP}")
+    add_dependencies(ladybird_bundle engine)
+
+    add_custom_command(TARGET engine POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${BUNDLE_DIR}"
+        COMMAND ${CMAKE_COMMAND} -E copy "$<TARGET_FILE:engine>" "${BUNDLE_DIR}/"
     )
 else()
     set_target_properties(engine PROPERTIES

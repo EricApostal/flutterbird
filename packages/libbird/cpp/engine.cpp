@@ -11,16 +11,16 @@
 // in the on_ready_to_paint lambda — nowhere else in this file.
 #ifdef __APPLE__
 #include "platform/macos_view_backend.h"
-#include <TargetConditionals.h>
-#if TARGET_OS_IPHONE
-#include <IOSurface/IOSurfaceRef.h>
-#else
 #include <IOSurface/IOSurface.h>
-#endif
 #else
 #include "platform/linux_view_backend.h"
 #endif
 
+#ifdef __ANDROID__
+#include <android/hardware_buffer.h>
+#endif
+
+#include <AK/Base64.h>
 #include <AK/BitCast.h>
 #include <AK/HashMap.h>
 #include <AK/JsonArray.h>
@@ -30,6 +30,7 @@
 #include <AK/StringView.h>
 #include <LibCore/Environment.h>
 #include <LibCore/EventLoop.h>
+#include <LibCore/Promise.h>
 #include <LibCore/ResourceImplementation.h>
 #include <LibCore/ResourceImplementationFile.h>
 #include <LibCore/System.h>
@@ -40,56 +41,41 @@
 #include <LibMain/Main.h>
 #include <LibURL/Parser.h>
 #include <LibURL/URL.h>
-#include <LibWeb/CSS/PreferredColorScheme.h>
-#include <LibWeb/Page/InputEvent.h>
-#include <LibWeb/PixelUnits.h>
-#include <LibWebView/BrowserProcess.h>
+#include <LibWebCommon/CSS/PreferredColorScheme.h>
+#include <LibWebCommon/HTML/ActivateTab.h>
+#include <LibWebCommon/HTML/VisibilityState.h>
+#include <LibWebCommon/HTML/WebViewHints.h>
+#include <LibWebCommon/Page/InputEvent.h>
+#include <LibWebCommon/Page/ViewportIsFullscreen.h>
+#include <LibWebCommon/PixelUnits.h>
+#include <LibWebCommon/WebView/Utilities.h>
+#include <LibWebView/Application.h>
+#include <LibWebView/BookmarkStore.h>
+#include <LibWebView/BrowsingSession.h>
+#include <LibWebView/FileDownloader.h>
 #include <LibWebView/HistoryDebug.h>
 #include <LibWebView/HistoryStore.h>
 #include <LibWebView/Menu.h>
+#include <LibWebView/Options.h>
 #include <LibWebView/SearchEngine.h>
 #include <LibWebView/Settings.h>
-#include <LibWebView/Utilities.h>
 #include <LibWebView/ViewImplementation.h>
+#include <LibWebView/WebContentPage.h>
 #ifndef __APPLE__
 #include <unistd.h>
 #endif
-#include <LibWebView/Process.h>
 
-#if defined(AK_OS_IOS)
-ErrorOr<int> webcontent_service_main(Main::Arguments);
-ErrorOr<int> request_server_service_main(Main::Arguments);
-ErrorOr<int> image_decoder_service_main(Main::Arguments);
-ErrorOr<int> compositor_service_main(Main::Arguments);
-ErrorOr<int> webworker_service_main(Main::Arguments);
-
-struct RegisterMains {
-  RegisterMains() {
-    WebView::IOSServiceMains mains = {
-        webcontent_service_main, request_server_service_main,
-        image_decoder_service_main, compositor_service_main,
-        webworker_service_main};
-    WebView::register_ios_service_mains(mains);
-  }
-} s_register_mains;
-#endif
-#ifndef __APPLE__
-
-namespace IPC {
-
-template <> ErrorOr<void> encode(Encoder &encoder, float const &value) {
-  return encoder.encode(AK::bit_cast<u32>(value));
+namespace WebView {
+// The resource root the engine resolves `res/` out of; declared in
+// LibWebCommon/WebView/Utilities.h.
 }
-
-template <> ErrorOr<void> encode(Encoder &encoder, double const &value) {
-  return encoder.encode(AK::bit_cast<u64>(value));
-}
-
-} // namespace IPC
-#endif
 
 int g_next_view_id = 1;
 int g_active_view_id = -1;
+// False until init_ladybird() has a fully initialized WebView::Application;
+// every entry point that touches the engine checks it, so a failed or absent
+// initialization degrades to no-ops instead of a null-application crash.
+static bool g_engine_ready = false;
 
 AskUserForDownloadPathCallback g_ask_user_for_download_path_callback = nullptr;
 DisplayDownloadConfirmationDialogCallback
@@ -196,11 +182,38 @@ static std::unique_ptr<ViewBackend> create_view_backend() {
 #endif
 }
 
+#ifdef __ANDROID__
+// An AHardwareBuffer the plugin owns and refills with each presented frame,
+// replaced whenever the frame size changes.
+class AndroidFrameBuffer {
+public:
+  AndroidFrameBuffer(AHardwareBuffer *buffer, Gfx::IntSize size)
+      : m_buffer(buffer), m_size(size) {}
+  ~AndroidFrameBuffer() {
+    if (m_buffer)
+      AHardwareBuffer_release(m_buffer);
+  }
+  AK_MAKE_NONCOPYABLE(AndroidFrameBuffer);
+  AK_MAKE_NONMOVABLE(AndroidFrameBuffer);
+  AK_ALLOC_WITH_KMALLOC;
+
+public:
+  AHardwareBuffer *buffer() const { return m_buffer; }
+  Gfx::IntSize size() const { return m_size; }
+
+private:
+  AHardwareBuffer *m_buffer{nullptr};
+  Gfx::IntSize m_size;
+};
+#endif
+
 // ---------------------------------------------------------------------------
 // FlutterViewImpl
 // ---------------------------------------------------------------------------
 
 class FlutterViewImpl final : public WebView::ViewImplementation {
+  AK_ALLOC_WITH_KMALLOC;
+
 public:
   static constexpr double kDefaultRefreshRate = 60.0;
 
@@ -248,7 +261,6 @@ public:
   FullscreenChangeCallback m_fullscreen_change_callback = nullptr;
   NavigationHistoryChangeCallback m_navigation_history_change_callback =
       nullptr;
-  bool m_is_loading{false};
 
   std::mutex m_context_menu_mutex;
   HashMap<int, WeakPtr<WebView::Action>> m_context_menu_actions;
@@ -271,33 +283,123 @@ public:
     return token;
   }
 
-  void *front_ahb() const {
-#ifdef USE_VULKAN_AHB_IMAGES
-    if (!m_client_state.has_usable_bitmap) {
-      dbgln("flutterbird front_ahb: returning nullptr because "
-            "has_usable_bitmap is false");
+  // Android hands the current frame to the platform as an AHardwareBuffer, which
+  // the Java side wraps in a Bitmap and blits into the Flutter texture's
+  // Surface. Ladybird stopped producing hardware buffers of its own (the fork's
+  // USE_VULKAN_AHB_IMAGES shared-image backend is gone), so the plugin owns the
+  // buffer here: allocate one per size, lock it, copy the presented bitmap into
+  // it, unlock it.
+  void *front_ahb() {
+#ifdef __ANDROID__
+    if (!m_android_frame_buffer)
       return nullptr;
-    }
-    if (!m_client_state.front_bitmap.shared_image_buffer) {
-      dbgln("flutterbird front_ahb: returning nullptr because "
-            "shared_image_buffer is null");
-      return nullptr;
-    }
-    auto *ahb =
-        m_client_state.front_bitmap.shared_image_buffer->native_buffer();
-    if (!ahb) {
-      dbgln("flutterbird front_ahb: returning nullptr because native_buffer() "
-            "returned null");
-    } else {
-      // dbgln("flutterbird front_ahb: returning valid ahb");
-    }
-    return ahb;
+    return m_android_frame_buffer->buffer();
 #else
-    dbgln("flutterbird front_ahb: returning nullptr because "
-          "USE_VULKAN_AHB_IMAGES is not defined");
     return nullptr;
 #endif
   }
+
+#ifdef __ANDROID__
+  void refresh_android_hardware_buffer() {
+    if (!m_has_usable_bitmap || !m_front_bitmap.shared_image_buffer)
+      return;
+
+    auto const &bitmap = m_front_bitmap.shared_image_buffer->bitmap();
+    auto const bitmap_size =
+        m_front_bitmap.last_painted_size.to_type<int>();
+
+    // AHardwareBuffer only offers R8G8B8A8; an engine BGRA bitmap has to be
+    // swizzled on the way in. Anything else has no representable layout.
+    auto const bitmap_format = bitmap->format();
+    bool needs_swizzle = false;
+    if (bitmap_format == Gfx::BitmapFormat::RGBA8888) {
+      needs_swizzle = false;
+    } else if (bitmap_format == Gfx::BitmapFormat::BGRA8888) {
+      needs_swizzle = true;
+    } else {
+      if (!m_logged_unsupported_ahb_format) {
+        m_logged_unsupported_ahb_format = true;
+        std::fprintf(stderr,
+                     "[Ladybird][Android] Unsupported frame format %s; "
+                     "hardware-buffer frame export disabled\n",
+                     Gfx::bitmap_format_name(bitmap_format)
+                         .to_byte_string()
+                         .characters());
+      }
+      return;
+    }
+
+    if (!m_android_frame_buffer ||
+        m_android_frame_buffer->size() != bitmap_size) {
+      m_android_frame_buffer = nullptr;
+
+      AHardwareBuffer_Desc description {};
+      description.width = static_cast<uint32_t>(bitmap_size.width());
+      description.height = static_cast<uint32_t>(bitmap_size.height());
+      description.layers = 1;
+      description.format = AHARDWAREBUFFER_FORMAT_R8G8B8A8_UNORM;
+      description.usage = AHARDWAREBUFFER_USAGE_CPU_WRITE_OFTEN |
+                          AHARDWAREBUFFER_USAGE_GPU_SAMPLED_IMAGE;
+
+      AHardwareBuffer *buffer = nullptr;
+      if (AHardwareBuffer_allocate(&description, &buffer) != 0 || !buffer) {
+        if (!m_logged_unsupported_ahb_format) {
+          m_logged_unsupported_ahb_format = true;
+          std::fprintf(stderr,
+                       "[Ladybird][Android] AHardwareBuffer_allocate failed "
+                       "for %dx%d\n",
+                       bitmap_size.width(), bitmap_size.height());
+        }
+        return;
+      }
+      m_android_frame_buffer =
+          adopt_own_if_nonnull(new (std::nothrow)
+                                   AndroidFrameBuffer(buffer, bitmap_size));
+      if (!m_android_frame_buffer) {
+        AHardwareBuffer_release(buffer);
+        return;
+      }
+    }
+
+    auto *buffer = m_android_frame_buffer->buffer();
+    void *pixels = nullptr;
+    int32_t row_stride = 0;
+    if (AHardwareBuffer_lock(buffer, AHARDWAREBUFFER_USAGE_CPU_WRITE_OFTEN, -1,
+                             nullptr, &pixels) != 0 ||
+        !pixels)
+      return;
+
+    AHardwareBuffer_Desc locked_description {};
+    AHardwareBuffer_describe(buffer, &locked_description);
+    row_stride = static_cast<int32_t>(locked_description.stride) * 4;
+
+    auto const *source = bitmap->scanline_u8(0);
+    auto const source_stride = bitmap->pitch();
+    auto const width = static_cast<size_t>(bitmap_size.width());
+    auto const height = static_cast<size_t>(bitmap_size.height());
+
+    for (size_t y = 0; y < height; ++y) {
+      auto *destination_row =
+          static_cast<uint8_t *>(pixels) + (y * static_cast<size_t>(row_stride));
+      auto const *source_row = source + (y * static_cast<size_t>(source_stride));
+      if (!needs_swizzle) {
+        memcpy(destination_row, source_row, width * 4);
+        continue;
+      }
+      for (size_t x = 0; x < width; ++x) {
+        auto const *source_pixel = source_row + (x * 4);
+        auto *destination_pixel = destination_row + (x * 4);
+        destination_pixel[0] = source_pixel[2];
+        destination_pixel[1] = source_pixel[1];
+        destination_pixel[2] = source_pixel[0];
+        destination_pixel[3] = source_pixel[3];
+      }
+    }
+
+    AHardwareBuffer_unlock(buffer, nullptr);
+  }
+
+#endif
 
   JsonArray serialize_context_menu_items(WebView::Menu const &menu) {
     JsonArray items;
@@ -369,15 +471,15 @@ public:
       free(payload);
   }
 
+  String create_child_web_view_handle(WebView::CanonicalTraversable &traversable,
+                                      int &new_view_id);
+
   void set_context_menu_request_callback(ContextMenuRequestCallback callback) {
     std::lock_guard lock(m_context_menu_mutex);
     m_context_menu_request_callback = callback;
     if (!callback)
       m_context_menu_actions.clear();
   }
-
-  String create_child_web_view_handle(Optional<u64> page_index,
-                                      int &new_view_id);
 
   bool activate_context_menu_action(int action_token) {
     WeakPtr<WebView::Action> weak_action;
@@ -401,47 +503,21 @@ public:
     return true;
   }
 
-  void update_loading_state(bool is_loading) {
-    if (m_is_loading == is_loading)
-      return;
-
-    m_is_loading = is_loading;
-
-    std::lock_guard lock(m_info_mutex);
-    if (m_loading_state_change_callback)
-      m_loading_state_change_callback(m_is_loading);
+  // Pushes the engine's viewport/window geometry for the currently-requested
+  // render size. Ladybird 2026-10 moved viewport pushes behind
+  // ViewImplementation::handle_resize()/set_window_size(); the device pixel
+  // ratio still comes from Flutter, which is what libbird's set_zoom() sets.
+  void push_viewport() {
+    set_window_size(Gfx::IntSize{m_viewport_width, m_viewport_height});
+    handle_resize();
   }
 
   void sync_device_pixel_ratio() { m_device_pixel_ratio = m_zoom; }
 
-  void configure_client_process() {
-    auto theme_path = LexicalPath::join(WebView::s_ladybird_resource_root,
-                                        "themes"sv, "Default.ini"sv);
-    auto theme = Gfx::load_system_theme(theme_path.string())
-                     .release_value_but_fixme_should_propagate_errors();
-
-    sync_device_pixel_ratio();
-    client().async_update_system_theme(m_client_state.page_index, theme);
-    client().async_set_viewport(m_client_state.page_index, viewport_size(),
-                                m_device_pixel_ratio, is_fullscreen());
-    client().async_set_window_size(m_client_state.page_index, viewport_size());
-    client().async_set_maximum_frames_per_second(m_client_state.page_index,
-                                                 m_maximum_frames_per_second);
-
-    auto compositor_context_id =
-        client().compositor_context_id_for_page(m_client_state.page_index);
-    WebView::Application::the().update_compositor_display_metadata(
-        compositor_context_id, m_display_id, m_display_refresh_rate);
-
-    Web::DevicePixelRect screen_rect{0, 0, 1920, 1080};
-    client().async_update_screen_rects(m_client_state.page_index,
-                                       {{screen_rect}}, 0);
-  }
-
   void set_display_metadata(Optional<u64> display_id, double refresh_rate,
                             double maximum_frames_per_second) {
     auto const sanitized_refresh_rate =
-        refresh_rate > 0.0 ? refresh_rate : 60.0;
+        refresh_rate > 0.0 ? refresh_rate : kDefaultRefreshRate;
     auto const sanitized_maximum_frames_per_second =
         maximum_frames_per_second > 0.0 ? maximum_frames_per_second
                                         : sanitized_refresh_rate;
@@ -450,21 +526,38 @@ public:
     m_display_refresh_rate = sanitized_refresh_rate;
     m_maximum_frames_per_second = sanitized_maximum_frames_per_second;
 
-    if (!m_client_state.client)
-      return;
-
-    client().async_set_maximum_frames_per_second(m_client_state.page_index,
-                                                 m_maximum_frames_per_second);
-    WebView::Application::the().update_compositor_display_metadata(
-        client().compositor_context_id_for_page(m_client_state.page_index),
-        m_display_id, m_display_refresh_rate);
+    if (has_traversable())
+      ViewImplementation::set_display_metadata(m_display_id,
+                                               m_maximum_frames_per_second);
   }
 
-  virtual void initialize_client(
-      CreateNewClient create_new_client = CreateNewClient::Yes) override {
+  // The engine asks for the system theme when a page starts hosting the tab.
+  // FlutterBird has no native theme plumbing, so serve Ladybird's default
+  // theme out of res/themes/Default.ini.
+  virtual Core::AnonymousBuffer system_theme() override {
+    if (!m_system_theme_buffer.is_valid()) {
+      auto theme_path = LexicalPath::join(WebView::s_ladybird_resource_root,
+                                          "themes"sv, "Default.ini"sv);
+      if (auto theme = Gfx::load_system_theme(theme_path.string());
+          !theme.is_error())
+        m_system_theme_buffer = theme.release_value();
+    }
+    return m_system_theme_buffer;
+  }
 
-    ViewImplementation::initialize_client(create_new_client);
-    configure_client_process();
+  // Starts a tab: creates a page for it on the engine side, then attaches the
+  // signals. Mirrors what the Qt frontend's Tab does with initialize_tab(),
+  // which is how Ladybird 2026-10 set up views (replacing the old
+  // initialize_client()).
+  void start_tab() {
+    // With no traversable to adopt, initialize_tab() asks the application for a
+    // page of its own, which launches WebContent for it (or reuses a spare one).
+    initialize_tab(Web::HTML::VisibilityState::Visible);
+    attach_signals();
+  }
+
+  void attach_signals() {
+    push_viewport();
     set_system_visibility_state(Web::HTML::VisibilityState::Visible);
 
     // -----------------------------------------------------------------------
@@ -474,19 +567,18 @@ public:
     // zero-copy external-texture path, then falls back to bitmap conversion.
     // -----------------------------------------------------------------------
     on_ready_to_paint = [this]() {
-      if (!m_client_state.has_usable_bitmap ||
-          !m_client_state.front_bitmap.shared_image_buffer)
+      if (!m_has_usable_bitmap || !m_front_bitmap.shared_image_buffer)
         return;
 
       ++m_debug_paint_event_count;
 
       auto *shared_image_buffer =
-          m_client_state.front_bitmap.shared_image_buffer.ptr();
+          m_front_bitmap.shared_image_buffer.ptr();
 
 #ifndef __APPLE__
 #ifdef USE_VULKAN_DMABUF_IMAGES
       auto *linux_backend = static_cast<LinuxViewBackend *>(m_backend.get());
-      if (auto const &dmabuf = shared_image_buffer->linux_dmabuf_handle()) {
+      if (auto const *dmabuf = shared_image_buffer->linux_dmabuf_handle()) {
         linux_backend->set_linux_dmabuf_frame(
             dmabuf->file.fd(), dmabuf->size.width(), dmabuf->size.height(),
             static_cast<int>(dmabuf->pitch), dmabuf->drm_format,
@@ -505,7 +597,7 @@ public:
         auto surface_height = static_cast<int>(IOSurfaceGetHeight(surface));
         if (surface_width <= 0 || surface_height <= 0) {
           auto bitmap_size =
-              m_client_state.front_bitmap.last_painted_size.to_type<int>();
+              m_front_bitmap.last_painted_size.to_type<int>();
           surface_width = bitmap_size.width();
           surface_height = bitmap_size.height();
         }
@@ -519,52 +611,20 @@ public:
                 m_view_id);
             m_last_mac_frame_source = MacFrameSource::IOSurface;
           }
-          if ((m_debug_paint_event_count % 30) == 1) {
-            auto const &bitmap_size =
-                m_client_state.front_bitmap.last_painted_size.to_type<int>();
-            // std::fprintf(
-            //     stderr,
-            //     "[Ladybird][engine] view=%d paint#=%llu source=IOSurface "
-            //     "surface_size=%dx%d bitmap_size=%dx%d viewport_size=%dx%d
-            //     m_zoom=%f\n", m_view_id, static_cast<unsigned long
-            //     long>(m_debug_paint_event_count), surface_width,
-            //     surface_height, bitmap_size.width(), bitmap_size.height(),
-            //     m_viewport_width, m_viewport_height,
-            //     m_zoom);
-          }
           return;
         }
       }
 #endif
 
-#ifdef USE_VULKAN_AHB_IMAGES
-      if (front_ahb()) {
-        auto bitmap_size =
-            m_client_state.front_bitmap.last_painted_size.to_type<int>();
-        m_backend->on_hardware_frame_ready(bitmap_size.width(),
-                                           bitmap_size.height());
-        return;
-      }
-#endif
-
-      // hmm
-      //
-      if (!shared_image_buffer) {
-        return;
-      }
       auto bitmap =
           AK::RefPtr<Gfx::Bitmap const>(shared_image_buffer->bitmap());
-      m_backend->on_bitmap_ready(std::move(bitmap));
-
-      if ((m_debug_paint_event_count % 120) == 1) {
-        // std::fprintf(
-        //     stderr,
-        //     "[Ladybird][engine] view=%d paint#=%llu source=Bitmap size=%dx%d
-        //     " "gen=%llu\n", m_view_id, static_cast<unsigned long
-        //     long>(m_debug_paint_event_count), m_backend->width(),
-        //     m_backend->height(), static_cast<unsigned long
-        //     long>(m_backend->frame_generation()));
-      }
+      m_backend->on_bitmap_ready(bitmap);
+#ifdef __ANDROID__
+      // Android's texture path reads the frame back out as an AHardwareBuffer
+      // (see get_android_hardware_buffer), so fill that here, on the thread
+      // that already owns this frame.
+      refresh_android_hardware_buffer();
+#endif
 
 #ifdef __APPLE__
       if (m_last_mac_frame_source != MacFrameSource::BitmapFallback) {
@@ -580,22 +640,24 @@ public:
     on_web_content_process_change_for_cross_site_navigation = [this]() {
       std::fprintf(stderr,
                    "WebContent process changed for cross site navigation.\n");
-      configure_client_process();
+      // The engine re-pushes the viewport to the new page itself when it moves
+      // the display page, so only FlutterBird's own bookkeeping happens here.
       std::lock_guard lock(m_info_mutex);
       if (m_cross_site_navigation_callback)
         m_cross_site_navigation_callback(m_view_id);
     };
 
-    on_web_content_crashed = [this]() {
-      std::fprintf(stderr, "WebContent process crashed.\n");
-      update_loading_state(false);
+    on_web_content_crashed = [this](WebContentCrashReason reason) {
+      std::fprintf(stderr, "WebContent process crashed (reason %d).\n",
+                   static_cast<int>(reason));
+      notify_loading_state(false);
     };
 
-    on_load_start = [this](URL::URL const &, bool) {
-      update_loading_state(true);
+    // The engine funnels every load start/finish into this one signal, so it is
+    // the only loading state FlutterBird has to follow.
+    on_loading_state_change = [this](bool is_loading) {
+      notify_loading_state(is_loading);
     };
-
-    on_load_finish = [this](URL::URL const &) { update_loading_state(false); };
 
     on_url_change = [this](URL::URL const &url) {
       std::lock_guard lock(m_info_mutex);
@@ -614,19 +676,32 @@ public:
     };
 
     on_navigation_history_change = [this]() {
-      std::lock_guard lock(m_info_mutex);
-      if (m_navigation_history_change_callback) {
-        auto json = WebView::history_json_entries(traversable().session_history())
-                        .serialized()
-                        .to_byte_string();
-        m_navigation_history_change_callback(m_view_id,
-                                             strdup(json.characters()));
+      NavigationHistoryChangeCallback callback = nullptr;
+      char *payload = nullptr;
+
+      {
+        std::lock_guard lock(m_info_mutex);
+        callback = m_navigation_history_change_callback;
+        if (callback) {
+          auto json = WebView::history_json_entries(
+                          traversable().session_history())
+                          .serialized()
+                          .to_byte_string();
+          payload = strdup(json.characters());
+        }
       }
+
+      if (callback && payload)
+        callback(m_view_id, payload);
     };
 
-    on_favicon_change = [this](Gfx::Bitmap const &bitmap) {
+    on_favicon_change = [this](Optional<Gfx::Bitmap const &> favicon) {
+      if (!favicon.has_value())
+        return;
+
       std::lock_guard lock(m_info_mutex);
       if (m_favicon_change_callback) {
+        auto const &bitmap = *favicon;
         size_t length = bitmap.width() * bitmap.height() * 4;
         uint8_t *buffer = (uint8_t *)malloc(length);
         memcpy(buffer, reinterpret_cast<const uint8_t *>(bitmap.begin()),
@@ -641,25 +716,30 @@ public:
         m_cursor_change_callback(to_cursor_type_for_flutter(cursor));
     };
 
-    on_input_caret_rect_change =
-        [this](Optional<Web::DevicePixelRect> const &rect) {
-          std::lock_guard lock(m_info_mutex);
-          if (!m_input_caret_rect_change_callback)
-            return;
-          if (rect.has_value()) {
-            m_input_caret_rect_change_callback(
-                m_view_id, true, rect->x().value(), rect->y().value(),
-                rect->width().value(), rect->height().value());
-          } else {
-            m_input_caret_rect_change_callback(m_view_id, false, 0, 0, 0, 0);
-          }
-        };
+    on_input_method_state_change = [this]() {
+      std::lock_guard lock(m_info_mutex);
+      if (!m_input_caret_rect_change_callback)
+        return;
+      auto const &rect = input_method_state().caret_rect;
+      if (rect.has_value()) {
+        m_input_caret_rect_change_callback(m_view_id, true, rect->x().value(),
+                                           rect->y().value(),
+                                           rect->width().value(),
+                                           rect->height().value());
+      } else {
+        m_input_caret_rect_change_callback(m_view_id, false, 0, 0, 0, 0);
+      }
+    };
 
+    // A page opened a tab or a popup window: create a Flutter view bound to the
+    // traversable the engine already prepared for it, and hand back its handle
+    // so the engine can name the new tab.
     on_new_web_view = [this](Web::HTML::ActivateTab activate_tab,
                              Web::HTML::WebViewHints,
-                             Optional<u64> page_index) -> String {
+                             WebView::CanonicalTraversable &traversable)
+        -> String {
       int new_view_id = -1;
-      auto handle = create_child_web_view_handle(page_index, new_view_id);
+      auto handle = create_child_web_view_handle(traversable, new_view_id);
       if (handle.is_empty())
         return {};
 
@@ -731,42 +811,90 @@ public:
     };
   }
 
+  void notify_loading_state(bool is_loading) {
+    LoadingStateChangeCallback callback = nullptr;
+    {
+      std::lock_guard lock(m_info_mutex);
+      callback = m_loading_state_change_callback;
+    }
+    if (callback)
+      callback(is_loading);
+  }
+
   void resize(int width, int height) {
-    // std::fprintf(stderr, "[LibBird] resize: incoming %dx%d, m_zoom: %f\n",
-    // width, height, m_zoom);
     m_viewport_width = width;
     m_viewport_height = height;
-    auto size = Web::DevicePixelSize{width, height};
     sync_device_pixel_ratio();
-    client().async_set_viewport(m_client_state.page_index, size,
-                                m_device_pixel_ratio, is_fullscreen());
-    client().async_set_window_size(m_client_state.page_index, size);
-    WebView::Application::the().update_compositor_viewport(
-        client().compositor_context_id_for_page(m_client_state.page_index),
-        viewport_size().to_type<int>(),
-        Web::Compositor::WindowResizingInProgress::Yes);
+    push_viewport();
   }
 
   void update_zoom_scale() {
-    std::fprintf(stderr, "[LibBird] update_zoom_scale: m_zoom: %f\n", m_zoom);
     sync_device_pixel_ratio();
-    client().async_set_viewport(m_client_state.page_index, viewport_size(),
-                                m_device_pixel_ratio, is_fullscreen());
+    push_viewport();
   }
 
-  void dispatch_mouse_event(Web::MouseEvent::Type type, int x, int y,
-                            int button, int buttons, int modifiers,
-                            double wheel_delta_x, double wheel_delta_y) {
+  // Maps FlutterBird's own ABI event type onto the engine's. Returns nullopt
+  // for a value the ABI does not define.
+  static Optional<Web::MouseEvent::Type> to_engine_mouse_event_type(int type) {
+    switch (type) {
+    case LADYBIRD_MOUSE_DOWN:
+      return Web::MouseEvent::Type::MouseDown;
+    case LADYBIRD_MOUSE_UP:
+      return Web::MouseEvent::Type::MouseUp;
+    case LADYBIRD_MOUSE_MOVE:
+      return Web::MouseEvent::Type::MouseMove;
+    case LADYBIRD_MOUSE_LEAVE:
+      return Web::MouseEvent::Type::MouseLeave;
+    case LADYBIRD_MOUSE_WHEEL:
+      return Web::MouseEvent::Type::MouseWheel;
+    }
+    return {};
+  }
+
+  void dispatch_mouse_event(int abi_type, int x, int y, int button, int buttons,
+                            int modifiers, double wheel_delta_x,
+                            double wheel_delta_y) {
+    auto type = to_engine_mouse_event_type(abi_type);
+    if (!type.has_value()) {
+      std::fprintf(stderr,
+                   "dispatch_mouse_event: unknown event type %d\n", abi_type);
+      return;
+    }
+
     Web::DevicePixelPoint position = {x, y};
     Web::DevicePixelPoint screen_position = {x, y};
+
+    // Flutter hands over continuous pixel deltas (trackpad pans and wheel
+    // notches alike) and has no notion of the engine's gesture phases, so:
+    //   - the deltas are precise ones, and the legacy 120ths-of-a-tick count is
+    //     derived from them with the engine's own rule;
+    //   - the gesture stays phase-less. Claiming Ongoing for input we can never
+    //     End would latch a phased gesture for good, and FlutterBird's Dart
+    //     layer runs its own momentum anyway.
+    auto wheel_delta_precision = Web::WheelDeltaPrecision::Precise;
+    auto scroll_gesture_phase = Web::ScrollGesturePhase::None;
+    auto wheel_tick_120ths_x =
+        Web::wheel_tick_120ths_from_pixel_delta(wheel_delta_x,
+                                                wheel_delta_precision);
+    auto wheel_tick_120ths_y =
+        Web::wheel_tick_120ths_from_pixel_delta(wheel_delta_y,
+                                                wheel_delta_precision);
+
     enqueue_input_event(
-        Web::MouseEvent{type, position, screen_position,
+        Web::MouseEvent{*type,
+                        position,
+                        screen_position,
                         static_cast<Web::UIEvents::MouseButton>(button),
                         static_cast<Web::UIEvents::MouseButton>(buttons),
                         static_cast<Web::UIEvents::KeyModifier>(modifiers),
-                        wheel_delta_x, wheel_delta_y,
-                        type == Web::MouseEvent::Type::MouseDown ||
-                                type == Web::MouseEvent::Type::MouseUp
+                        wheel_delta_x,
+                        wheel_delta_y,
+                        wheel_tick_120ths_x,
+                        wheel_tick_120ths_y,
+                        wheel_delta_precision,
+                        scroll_gesture_phase,
+                        *type == Web::MouseEvent::Type::MouseDown ||
+                                *type == Web::MouseEvent::Type::MouseUp
                             ? 1
                             : 0,
                         nullptr});
@@ -777,14 +905,16 @@ public:
     enqueue_input_event(
         Web::KeyEvent{type, static_cast<Web::UIEvents::KeyCode>(keycode),
                       static_cast<Web::UIEvents::KeyModifier>(modifiers),
-                      // TODO: implement should_insert_text
-                      code_point, repeat, false});
+                      code_point, repeat,
+                      type == Web::KeyEvent::Type::KeyDown &&
+                          code_point != 0});
   }
 
   virtual ~FlutterViewImpl() = default;
 
 private:
-  explicit FlutterViewImpl(int view_id) : m_view_id(view_id) {
+  explicit FlutterViewImpl(int view_id)
+      : WebView::ViewImplementation(WebView::IsPrivate::No), m_view_id(view_id) {
     m_backend = create_view_backend();
   }
 
@@ -799,24 +929,28 @@ private:
   to_widget_position(Gfx::IntPoint content_position) const override {
     return content_position;
   }
+
+  Core::AnonymousBuffer m_system_theme_buffer;
+
+#ifdef __ANDROID__
+  OwnPtr<AndroidFrameBuffer> m_android_frame_buffer;
+  bool m_logged_unsupported_ahb_format{false};
+#endif
 };
 
 #include <map>
 // View registry — owns all FlutterViewImpl instances.
 static std::map<int, AK::OwnPtr<FlutterViewImpl>> g_web_views;
 
-String FlutterViewImpl::create_child_web_view_handle(Optional<u64> page_index,
-                                                     int &new_view_id) {
+// Adopts an already-prepared traversable (a tab or popup the page opened) into
+// a fresh Flutter view and returns its window handle.
+String FlutterViewImpl::create_child_web_view_handle(
+    WebView::CanonicalTraversable &traversable, int &new_view_id) {
   new_view_id = -1;
 
   auto created_view = FlutterViewImpl::create(g_next_view_id++).release_value();
-  if (page_index.has_value()) {
-    created_view->m_client_state.client = client();
-    created_view->m_client_state.page_index = page_index.value();
-    created_view->initialize_client(CreateNewClient::No);
-  } else {
-    created_view->initialize_client(CreateNewClient::Yes);
-  }
+  created_view->initialize_tab(Web::HTML::VisibilityState::Visible, traversable);
+  created_view->attach_signals();
 
   new_view_id = created_view->m_view_id;
   auto handle = created_view->handle();
@@ -829,6 +963,8 @@ download_status_to_string(WebView::FileDownloader::DownloadStatus status) {
   switch (status) {
   case WebView::FileDownloader::DownloadStatus::InProgress:
     return "in-progress"sv;
+  case WebView::FileDownloader::DownloadStatus::Paused:
+    return "paused"sv;
   case WebView::FileDownloader::DownloadStatus::Completed:
     return "completed"sv;
   case WebView::FileDownloader::DownloadStatus::Canceled:
@@ -865,6 +1001,8 @@ serialize_download(WebView::FileDownloader::Download const &download) {
 // needed here.
 class FlutterFileDownloaderObserver final
     : public WebView::FileDownloaderObserver {
+  AK_ALLOC_WITH_KMALLOC;
+
 public:
   virtual void
   download_added(WebView::FileDownloader::Download const &download) override {
@@ -874,7 +1012,7 @@ public:
   download_updated(WebView::FileDownloader::Download const &download) override {
     notify(download);
   }
-  virtual void download_removed(u64 id) override {
+  virtual void download_removed(u64 id, WebView::IsPrivate) override {
     if (g_download_removed_callback)
       g_download_removed_callback(id);
   }
@@ -892,6 +1030,7 @@ static AK::OwnPtr<FlutterFileDownloaderObserver> g_download_observer;
 
 class FlutterApplication : public WebView::Application {
   WEB_VIEW_APPLICATION(FlutterApplication)
+  AK_ALLOC_WITH_KMALLOC;
 
 public:
   FlutterApplication(Optional<ByteString> ladybird_binary_path = {})
@@ -901,29 +1040,31 @@ public:
 
   virtual void create_platform_arguments(Core::ArgsParser &) override {}
   virtual void create_platform_options(
-      WebView::BrowserOptions &browser_options,
-      WebView::RequestServerOptions &request_server_options,
+      [[maybe_unused]] WebView::BrowserOptions &browser_options,
+      [[maybe_unused]] WebView::RequestServerOptions &request_server_options,
       WebView::WebContentOptions &web_content_options) override {
-#if defined(__linux__) || defined(AK_OS_IOS)
+#if defined(__linux__)
     browser_options.disable_sandbox = WebView::DisableSandbox::Yes;
 #endif
 #ifdef __ANDROID__
     auto const config = snapshot_android_runtime_config();
     if (!config.certificates_path.is_empty())
       request_server_options.certificates.append(config.certificates_path);
-    web_content_options.force_cpu_painting = WebView::ForceCPUPainting::No;
-#elif defined(AK_OS_IOS)
-    // honestly cpu painting should never happen
-    web_content_options.force_cpu_painting = WebView::ForceCPUPainting::No;
 #endif
-  }
-
-  virtual bool should_capture_web_content_output() const override {
-    return false;
+    // WebContent renders into a shared image buffer; the embedder composites
+    // it itself, so there is no GPU path to force CPU painting away from.
+    web_content_options.force_cpu_painting = WebView::ForceCPUPainting::No;
   }
 
   virtual Core::EventLoop &create_platform_event_loop() override {
     return WebView::Application::create_platform_event_loop();
+  }
+
+  // FlutterBird is the browser: it owns its profile and its process, and a
+  // second instance must start a second engine rather than hand its URLs to the
+  // first one and exit, which would leave a window with no engine behind it.
+  virtual bool should_coordinate_browser_process() const override {
+    return false;
   }
 
   virtual Optional<WebView::ViewImplementation &>
@@ -972,8 +1113,8 @@ public:
     }
   }
 
-  // todo: figure out what "Selection" is
-  virtual Utf16String clipboard_text(ClipboardType type) const override {
+  virtual Utf16String
+  clipboard_text(ClipboardType type = ClipboardType::Text) const override {
     if (g_get_clipboard_text_callback) {
       if (char *result = g_get_clipboard_text_callback()) {
         auto text = Utf16String::from_utf8(StringView(result, strlen(result)));
@@ -982,32 +1123,21 @@ public:
       }
       return {};
     }
-    return WebView::Application::clipboard_text();
+    return WebView::Application::clipboard_text(type);
   }
-  virtual Vector<Web::Clipboard::SystemClipboardRepresentation>
-  clipboard_entries() const override {
-    if (g_get_clipboard_text_callback) {
-      Vector<Web::Clipboard::SystemClipboardRepresentation> representations;
-      if (char *result = g_get_clipboard_text_callback()) {
-        representations.empend(ByteString(result), "text/plain"_string);
-        free(result);
-      }
-      return representations;
-    }
-    return WebView::Application::clipboard_entries();
-  }
-  virtual void insert_clipboard_entry(
-      Web::Clipboard::SystemClipboardRepresentation entry) override {
-    if (g_set_clipboard_text_callback && entry.mime_type == "text/plain"sv) {
-      g_set_clipboard_text_callback(entry.data.characters());
+
+  virtual void set_clipboard_text(
+      String text, ClipboardType type = ClipboardType::Text) override {
+    if (g_set_clipboard_text_callback &&
+        type == ClipboardType::Text) {
+      g_set_clipboard_text_callback(text.to_byte_string().characters());
       return;
     }
-    WebView::Application::insert_clipboard_entry(std::move(entry));
+    WebView::Application::set_clipboard_text(move(text), type);
   }
 };
 
 static AK::OwnPtr<FlutterApplication> s_app;
-static AK::OwnPtr<WebView::BrowserProcess> s_browser_process;
 
 struct LatestFrameHandle {
   AK::RefPtr<Gfx::Bitmap const> bitmap;
@@ -1052,7 +1182,7 @@ void init_ladybird() {
     // Use share/Lagom in the bundle as resource root
     auto resource_root =
         LexicalPath::join(app_dir, "share"sv, "Lagom"sv).string();
-    WebView::s_ladybird_resource_root = resource_root;
+    Web::s_ladybird_resource_root = resource_root;
     Core::ResourceImplementation::install(
         make<Core::ResourceImplementationFile>(
             MUST(String::from_byte_string(resource_root))));
@@ -1062,17 +1192,10 @@ void init_ladybird() {
   }
 #endif
 
-#if defined(__APPLE__) && TARGET_OS_IPHONE
-  static char const *argv[] = {"ladybird", "--disable-sql-database", nullptr};
-  static AK::StringView string_views[] = {
-      AK::StringView("ladybird", 8),
-      AK::StringView("--disable-sql-database", 22)};
-  Main::Arguments arguments = {2, (char **)argv, {string_views, 2}};
-#else
-  static char const *argv[] = {"ladybird", nullptr};
+  static char program_name[] = "ladybird";
+  static char *argv[] = {program_name, nullptr};
   static AK::StringView string_views[] = {AK::StringView("ladybird", 8)};
-  Main::Arguments arguments = {1, (char **)argv, {string_views, 1}};
-#endif
+  Main::Arguments arguments = {1, argv, {string_views, 1}};
 
   auto app = FlutterApplication::create(arguments, lib_path);
   if (app.is_error()) {
@@ -1083,26 +1206,9 @@ void init_ladybird() {
   }
   s_app = app.release_value();
   g_download_observer = make<FlutterFileDownloaderObserver>();
-
-  s_browser_process = make<WebView::BrowserProcess>();
-
-  if (auto const &browser_options = WebView::Application::browser_options();
-      !browser_options.headless_mode.has_value()) {
-    if (browser_options.force_new_process == WebView::ForceNewProcess::No) {
-      auto disposition = s_browser_process->connect(browser_options.raw_urls,
-                                                    browser_options.new_window);
-
-      if (!disposition.is_error() &&
-          disposition.value() ==
-              WebView::BrowserProcess::ProcessDisposition::ExitProcess) {
-        std::fprintf(stderr, "Opening in existing process\n");
-        return;
-      }
-    }
-  }
+  g_engine_ready = true;
 }
 
-// The following was written by AI a while ago and works so idk
 // ---------------------------------------------------------------------------
 // Event-loop tick — inspired by GTK's EventLoopImplementationGtk::pump():
 //
@@ -1118,13 +1224,6 @@ void init_ladybird() {
 // anything that was enqueued during that poll.
 // ---------------------------------------------------------------------------
 extern "C" void tick_ladybird() {
-  // While the main thread is inside a synchronous IPC wait we must not pump
-  // Ladybird's event loop — doing so can cause re-entrant IPC calls that
-  // corrupt connection state in the Compositor service.
-#if defined(AK_OS_IOS)
-  if (ladybird_is_ipc_wait_in_progress())
-    return;
-#endif
   // Pre-drain: flush events queued since last tick.
   Core::ThreadEventQueue::current().process();
 
@@ -1137,9 +1236,15 @@ extern "C" void tick_ladybird() {
 }
 
 int create_web_view() {
+  if (!g_engine_ready) {
+    std::fprintf(stderr,
+                 "create_web_view: Ladybird engine is not initialized\n");
+    return -1;
+  }
+
   int id = g_next_view_id++;
   auto view = FlutterViewImpl::create(id).release_value();
-  view->initialize_client();
+  view->start_tab();
   g_web_views[id] = std::move(view);
   if (g_active_view_id == -1)
     g_active_view_id = id;
@@ -1276,10 +1381,6 @@ void set_frame_callback(int view_id, FrameCallback callback, void *context) {
     std::lock_guard lock(it->second->m_backend->callback_mutex);
     it->second->m_backend->frame_callback = callback;
     it->second->m_backend->frame_callback_context = context;
-    // std::fprintf(stderr,
-    //              "[Ladybird][engine] set_frame_callback view=%d callback=%p "
-    //              "context=%p\n",
-    //              view_id, reinterpret_cast<void *>(callback), context);
   }
 }
 
@@ -1313,8 +1414,6 @@ void navigate_to(int view_id, const char *url) {
 void set_zoom(int view_id, double zoom) {
   if (zoom <= 0.0)
     return;
-  std::fprintf(stderr, "[LibBird] set_zoom: view_id=%d, zoom=%f\n", view_id,
-               zoom);
   auto it = g_web_views.find(view_id);
   if (it != g_web_views.end()) {
     it->second->m_zoom = zoom;
@@ -1341,12 +1440,6 @@ void set_display_metadata(int view_id, bool has_display_id, uint64_t display_id,
   if (has_display_id)
     optional_display_id = display_id;
 
-  std::fprintf(stderr,
-               "[LibBird] set_display_metadata: view_id=%d has_display_id=%d "
-               "display_id=%llu refresh_rate=%f max_fps=%f\n",
-               view_id, has_display_id ? 1 : 0,
-               static_cast<unsigned long long>(display_id), refresh_rate,
-               maximum_frames_per_second);
   it->second->set_display_metadata(optional_display_id, refresh_rate,
                                    maximum_frames_per_second);
 }
@@ -1373,7 +1466,7 @@ void set_url_change_callback(int view_id, UrlChangeCallback callback) {
     {
       std::lock_guard lock(it->second->m_info_mutex);
       it->second->m_url_change_callback = callback;
-      auto const &url = it->second->url();
+      auto const &url = it->second->displayed_url();
       has_valid_initial_url = !url.scheme().is_empty();
       if (has_valid_initial_url)
         current_url = url.to_string().to_byte_string();
@@ -1409,13 +1502,15 @@ void set_navigation_history_change_callback(
   {
     std::lock_guard lock(it->second->m_info_mutex);
     it->second->m_navigation_history_change_callback = callback;
-    current_json = WebView::history_json_entries(
-                       it->second->traversable().session_history())
-                       .serialized()
-                       .to_byte_string();
+    if (callback && it->second->has_traversable()) {
+      current_json = WebView::history_json_entries(
+                         it->second->traversable().session_history())
+                         .serialized()
+                         .to_byte_string();
+    }
   }
 
-  if (callback)
+  if (callback && !current_json.is_empty())
     callback(view_id, strdup(current_json.characters()));
 }
 
@@ -1437,7 +1532,6 @@ void set_cross_site_navigation_callback(int view_id,
 }
 
 void reload_tab(int view_id) {
-  // std::lock_guard<std::mutex> lock(g_web_views_mutex);
   auto it = g_web_views.find(view_id);
   if (it != g_web_views.end()) {
     it->second->reload();
@@ -1445,7 +1539,6 @@ void reload_tab(int view_id) {
 }
 
 void go_back(int view_id) {
-  // std::lock_guard<std::mutex> lock(g_web_views_mutex);
   auto it = g_web_views.find(view_id);
   if (it != g_web_views.end()) {
     it->second->traverse_the_history_by_delta(-1);
@@ -1453,7 +1546,6 @@ void go_back(int view_id) {
 }
 
 void go_forward(int view_id) {
-  // std::lock_guard<std::mutex> lock(g_web_views_mutex);
   auto it = g_web_views.find(view_id);
   if (it != g_web_views.end()) {
     it->second->traverse_the_history_by_delta(1);
@@ -1462,9 +1554,6 @@ void go_forward(int view_id) {
 
 void request_exit_fullscreen(int view_id) {
   auto it = g_web_views.find(view_id);
-  std::fprintf(stderr,
-               "[Fullscreen] request_exit_fullscreen view=%d found=%d\n",
-               view_id, it != g_web_views.end());
   if (it != g_web_views.end())
     it->second->exit_fullscreen();
 }
@@ -1477,10 +1566,6 @@ void request_exit_fullscreen(int view_id) {
 // notifications, to avoid racing Flutter's own in-flight viewport updates.
 void confirm_fullscreen_state(int view_id, bool is_fullscreen) {
   auto it = g_web_views.find(view_id);
-  std::fprintf(stderr,
-               "[Fullscreen] confirm_fullscreen_state view=%d "
-               "is_fullscreen=%d found=%d\n",
-               view_id, is_fullscreen, it != g_web_views.end());
   if (it == g_web_views.end())
     return;
   it->second->set_is_fullscreen(is_fullscreen ? Web::ViewportIsFullscreen::Yes
@@ -1506,7 +1591,7 @@ char *get_view_url(int view_id) {
   if (it == g_web_views.end())
     return nullptr;
 
-  auto const &url = it->second->url();
+  auto const &url = it->second->displayed_url();
   if (url.scheme().is_empty())
     return nullptr;
 
@@ -1514,12 +1599,21 @@ char *get_view_url(int view_id) {
   return strdup(bytes.characters());
 }
 
+// The ordinary (non-private) browsing session owns the history and favicon
+// stores libbird reads for autocomplete and bookmark serialization.
+static WebView::BrowsingSession &ui_session() {
+  return WebView::Application::default_session();
+}
+
 char *get_bookmarks_json() {
   if (!s_app)
     return nullptr;
 
-  auto json =
-      WebView::Application::bookmark_store().serialize_items().serialized();
+  auto &session = ui_session();
+  auto json = WebView::Application::bookmark_store()
+                  .serialize_items(session.favicon_store ? *session.favicon_store
+                                                         : Optional<WebView::FaviconStore&>{})
+                  .serialized();
   auto bytes = json.to_byte_string();
   return strdup(bytes.characters());
 }
@@ -1539,7 +1633,7 @@ void toggle_bookmark_for_view(int view_id) {
   }
 
   bookmark_store.add_bookmark(url, it->second->title().to_utf8(),
-                              it->second->favicon_base64_png());
+                              it->second->favicon_hash());
 }
 
 bool is_current_view_bookmarked(int view_id) {
@@ -1557,21 +1651,21 @@ char *history_autocomplete_json(int view_id, const char *query, int limit) {
   if (g_web_views.find(view_id) == g_web_views.end())
     return nullptr;
 
-  String query_string;
-  if (query && strlen(query) > 0) {
-    auto maybe_query = String::from_utf8(StringView(query, strlen(query)));
-    if (!maybe_query.is_error())
-      query_string = maybe_query.release_value();
-  }
+  auto &session = ui_session();
+  if (!session.history_store)
+    return nullptr;
+
+  StringView query_string;
+  if (query && strlen(query) > 0)
+    query_string = StringView(query, strlen(query));
 
   size_t safe_limit = limit > 0 ? static_cast<size_t>(limit) : 8;
 
   // A private view's own history store is disabled, but autocomplete still
-  // draws suggestions from ordinary (non-private) history regardless of
-  // view->is_private()
-  // -- see WebView::Autocomplete::query_autocomplete_engine.
-  auto entries = WebView::Application::history_store(WebView::IsPrivate::No)
-                     .autocomplete_entries(query_string, safe_limit);
+  // draws suggestions from ordinary (non-private) history regardless of the
+  // view's privacy — hence the ordinary session's store.
+  auto entries =
+      session.history_store->autocomplete_entries(query_string, safe_limit);
 
   JsonArray suggestions;
   suggestions.ensure_capacity(entries.size());
@@ -1581,8 +1675,11 @@ char *history_autocomplete_json(int view_id, const char *query, int limit) {
     item.set("url"sv, entry.url);
     if (entry.title.has_value())
       item.set("title"sv, *entry.title);
-    if (entry.favicon_base64_png.has_value())
-      item.set("favicon"sv, *entry.favicon_base64_png);
+    if (entry.favicon_png.has_value()) {
+      if (auto encoded = encode_base64(entry.favicon_png->bytes());
+          !encoded.is_error())
+        item.set("favicon"sv, encoded.release_value());
+    }
     suggestions.must_append(move(item));
   }
 
@@ -1609,11 +1706,12 @@ char *get_search_engine_name() {
   if (!s_app)
     return nullptr;
 
-  auto const &search_engine = WebView::Application::settings().search_engine();
-  if (!search_engine.has_value())
+  auto const &search_engine_settings =
+      WebView::Application::settings().search_engine_settings();
+  if (!search_engine_settings.engine.has_value())
     return nullptr;
 
-  auto bytes = search_engine->name.to_byte_string();
+  auto bytes = search_engine_settings.engine->name.to_byte_string();
   return strdup(bytes.characters());
 }
 
@@ -1621,12 +1719,15 @@ void set_search_engine(const char *name) {
   if (!s_app)
     return;
 
+  auto &settings = WebView::Application::settings();
+  auto current = settings.search_engine_settings();
   if (name && strlen(name) > 0) {
-    WebView::Application::settings().set_search_engine(
-        StringView(name, strlen(name)));
+    current.engine =
+        settings.find_search_engine_by_name(StringView(name, strlen(name)));
   } else {
-    WebView::Application::settings().set_search_engine({});
+    current.engine = {};
   }
+  settings.set_search_engine_settings(move(current));
 }
 
 static char const *json_value_type_name(JsonValue::Type type) {
@@ -1715,10 +1816,16 @@ void copy_selection(int view_id) {
   if (it == g_web_views.end())
     return;
 
-  if (auto text = it->second->selected_text(); !text.is_empty()) {
+  it->second->selected_text()->when_resolved([view_id](ByteString const &text) {
+    if (text.is_empty())
+      return;
+    auto it = g_web_views.find(view_id);
+    if (it == g_web_views.end())
+      return;
     WebView::Application::the().insert_clipboard_entry(
-        {std::move(text), "text/plain"_string});
-  }
+        Web::Clipboard::SystemClipboardRepresentation {
+            MUST(String::from_utf8("text/plain"sv)), text });
+  });
 }
 
 void paste_from_clipboard(int view_id) {
@@ -1726,7 +1833,7 @@ void paste_from_clipboard(int view_id) {
   if (it == g_web_views.end())
     return;
 
-  it->second->paste_text_from_clipboard();
+  it->second->paste_from_clipboard();
 }
 
 void select_all(int view_id) {
@@ -1741,10 +1848,14 @@ void set_loading_state_change_callback(int view_id,
                                        LoadingStateChangeCallback callback) {
   auto it = g_web_views.find(view_id);
   if (it != g_web_views.end()) {
-    std::lock_guard lock(it->second->m_info_mutex);
-    it->second->m_loading_state_change_callback = callback;
+    bool is_loading = false;
+    {
+      std::lock_guard lock(it->second->m_info_mutex);
+      it->second->m_loading_state_change_callback = callback;
+      is_loading = it->second->is_loading();
+    }
     if (callback)
-      callback(it->second->m_is_loading);
+      callback(is_loading);
   }
 }
 
@@ -1823,7 +1934,7 @@ bool is_tab_loading(int view_id) {
   auto it = g_web_views.find(view_id);
   if (it == g_web_views.end())
     return false;
-  return it->second->m_is_loading;
+  return it->second->is_loading();
 }
 
 extern "C" {
@@ -1831,18 +1942,15 @@ extern "C" {
 void dispatch_mouse_event(int view_id, int type, int x, int y, int button,
                           int buttons, int modifiers, double wheel_delta_x,
                           double wheel_delta_y) {
-  // std::lock_guard<std::mutex> lock(g_web_views_mutex);
   auto it = g_web_views.find(view_id);
   if (it != g_web_views.end()) {
-    it->second->dispatch_mouse_event(static_cast<Web::MouseEvent::Type>(type),
-                                     x, y, button, buttons, modifiers,
+    it->second->dispatch_mouse_event(type, x, y, button, buttons, modifiers,
                                      wheel_delta_x, wheel_delta_y);
   }
 }
 
 void dispatch_key_event(int view_id, int type, int keycode, int modifiers,
                         uint32_t code_point, bool repeat) {
-  // std::lock_guard<std::mutex> lock(g_web_views_mutex);
   auto it = g_web_views.find(view_id);
   if (it != g_web_views.end()) {
     it->second->dispatch_key_event(static_cast<Web::KeyEvent::Type>(type),
@@ -1923,5 +2031,5 @@ void prune_inactive_downloads() {
     return;
   (void)WebView::Application::the()
       .file_downloader()
-      .prune_inactive_downloads();
+      .prune_inactive_downloads(WebView::IsPrivate::No);
 }

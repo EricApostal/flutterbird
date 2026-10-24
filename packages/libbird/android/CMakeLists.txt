@@ -139,7 +139,6 @@ add_library(engine SHARED
 )
 
 if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-    target_compile_definitions(engine PRIVATE USE_VULKAN_AHB_IMAGES=1)
     target_compile_options(engine PRIVATE
         -Wno-unqualified-std-cast-call
         -Wno-user-defined-literals
@@ -178,6 +177,7 @@ target_link_libraries(engine PRIVATE
     LibJS
     LibMain
     LibWeb
+    LibWebCommon
     LibWebView
     LibRequests
     LibURL

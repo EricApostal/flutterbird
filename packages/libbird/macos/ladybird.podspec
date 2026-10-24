@@ -28,7 +28,9 @@ Pod::Spec.new do |s|
   s.source_files        = 'Classes/**/*'
   s.public_header_files = 'Classes/**/*.h'
 
-  s.platform     = :osx, '12.0'
+  # Ladybird itself builds for macOS 14.4+ (its CMakeLists.txt default
+  # deployment target), so the app that embeds it cannot target anything older.
+  s.platform     = :osx, '14.4'
   s.swift_version = '5.0'
   s.dependency 'FlutterMacOS'
 
@@ -67,14 +69,13 @@ Pod::Spec.new do |s|
 
     'HEADER_SEARCH_PATHS' => [
       '$(inherited)',
-      '"${PODS_TARGET_SRCROOT}/../third_party/ladybird/UI/AppKit"',
+      '"${PODS_TARGET_SRCROOT}/../cpp"',
       '"${PODS_TARGET_SRCROOT}/../third_party/ladybird"',
       '"${PODS_TARGET_SRCROOT}/../third_party/ladybird/Libraries"',
       '"${PODS_TARGET_SRCROOT}/../third_party/ladybird/Services"',
       '"${PODS_TARGET_SRCROOT}/../third_party/ladybird/Build/release"',
-      '"${PODS_TARGET_SRCROOT}/../third_party/ladybird/Build/release/Lagom"',
-      '"${PODS_TARGET_SRCROOT}/../third_party/ladybird/Build/release/Lagom/Libraries"',
-      '"${PODS_TARGET_SRCROOT}/../third_party/ladybird/Build/release/Lagom/Services"',
+      '"${PODS_TARGET_SRCROOT}/../third_party/ladybird/Build/release/Libraries"',
+      '"${PODS_TARGET_SRCROOT}/../third_party/ladybird/Build/release/Services"',
       '"${PODS_TARGET_SRCROOT}/../third_party/ladybird/Build/release/vcpkg_installed/arm64-osx-dynamic/include"'
     ].join(' ')
   }

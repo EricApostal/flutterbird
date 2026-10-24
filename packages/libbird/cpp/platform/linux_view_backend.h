@@ -4,7 +4,7 @@
  *
  * Frame flow (mirrors the Qt WebContentView pattern):
  *   WebContent renders → ViewImplementation::on_ready_to_paint fires →
- *   FlutterViewImpl extracts the Gfx::Bitmap from m_client_state →
+ *   FlutterViewImpl extracts the Gfx::Bitmap from the front bitmap →
  *   LinuxViewBackend::on_bitmap_ready() is called →
  *   Gfx::Bitmap RefPtr stored under m_bitmap_mutex →
  *   fire_frame_ready() invoked without bitmap lock →
@@ -31,7 +31,6 @@ public:
 
   // ViewBackend overrides
   void on_bitmap_ready(AK::RefPtr<Gfx::Bitmap const> bitmap) override;
-  void on_hardware_frame_ready(int width, int height) override;
   void *pixel_data() override;
   bool copy_pixels_into(uint8_t *out_buffer, size_t out_capacity,
                         int &out_width, int &out_height) const override;

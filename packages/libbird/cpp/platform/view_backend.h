@@ -12,10 +12,10 @@
  *
  * Frame-ingestion contract
  * ────────────────────────
- * FlutterViewImpl::initialize_client() sets the ViewImplementation
+ * FlutterViewImpl::attach_signals() sets the ViewImplementation
  * on_ready_to_paint callback.  That lambda extracts the bitmap /
- * IOSurface from m_client_state and calls the appropriate method on
- * the backend:
+ * IOSurface from the view's front bitmap and calls the appropriate method
+ * on the backend:
  *
  *   Linux / fallback:  on_bitmap_ready(Gfx::Bitmap const)
  *   macOS (future):    MacOSViewBackend::on_iosurface_ready(…)
@@ -66,13 +66,6 @@ public:
   // override the method that is relevant to them.
   virtual void on_bitmap_ready(AK::RefPtr<Gfx::Bitmap const> bitmap) {
     (void)bitmap;
-  }
-
-  // Called when a hardware buffer is ready (e.g. AHardwareBuffer).
-  // This bypasses CPU pixel data but still increments frame generation.
-  virtual void on_hardware_frame_ready(int width, int height) {
-    (void)width;
-    (void)height;
   }
 
   // ── Output ───────────────────────────────────────────────────────────

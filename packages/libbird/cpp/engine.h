@@ -233,6 +233,19 @@ LADYBIRD_API void copy_selection(int view_id);
 LADYBIRD_API void paste_from_clipboard(int view_id);
 LADYBIRD_API void select_all(int view_id);
 
+// Event types for dispatch_mouse_event(). These are FlutterBird's own ABI
+// values and are mapped onto the engine's Web::MouseEvent::Type inside the
+// engine -- do not pass the engine's enum values directly, they are not stable
+// (e.g. the engine inserted MouseCancel before MouseWheel, which silently
+// turned every wheel event into a cancel).
+typedef enum {
+  LADYBIRD_MOUSE_DOWN = 0,
+  LADYBIRD_MOUSE_UP = 1,
+  LADYBIRD_MOUSE_MOVE = 2,
+  LADYBIRD_MOUSE_LEAVE = 3,
+  LADYBIRD_MOUSE_WHEEL = 4,
+} LadybirdMouseEventType;
+
 LADYBIRD_API void dispatch_mouse_event(int view_id, int type, int x, int y,
                                        int button, int buttons, int modifiers,
                                        double wheel_delta_x,

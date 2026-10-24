@@ -5,12 +5,7 @@
 #include "view_backend.h"
 
 #include <CoreVideo/CoreVideo.h>
-#include <TargetConditionals.h>
-#if TARGET_OS_IPHONE
-#include <IOSurface/IOSurfaceRef.h>
-#else
 #include <IOSurface/IOSurface.h>
-#endif
 
 class MacOSViewBackend final : public ViewBackend {
 public:
