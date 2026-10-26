@@ -20,6 +20,13 @@
 #include <android/hardware_buffer.h>
 #endif
 
+#ifdef __APPLE__
+// For opening downloaded files with their default handler / revealing them in
+// Finder (see FlutterApplication::open_download).
+#include <crt_externs.h>
+#include <spawn.h>
+#endif
+
 #include <AK/Base64.h>
 #include <AK/BitCast.h>
 #include <AK/HashMap.h>
@@ -503,6 +510,14 @@ public:
     if (!action || !action->visible() || !action->enabled())
       return false;
 
+    // The actions a context menu carries are application-wide (Copy, Paste,
+    // View Source, ...), and their callbacks ask the application for the active
+    // view. This embedder only ever set that when a view was created, so it
+    // would stay on the first tab forever and every such action would act on
+    // the wrong page. A context menu is the plugin's proof of which view the
+    // user is acting on, so mark that one active before the action runs.
+    g_active_view_id = m_view_id;
+
     action->activate();
 
     std::lock_guard lock(m_context_menu_mutex);
@@ -869,9 +884,30 @@ public:
     return {};
   }
 
+  static Web::WheelDeltaPrecision
+  to_engine_wheel_delta_precision(int precision) {
+    return precision == LADYBIRD_WHEEL_PRECISE
+               ? Web::WheelDeltaPrecision::Precise
+               : Web::WheelDeltaPrecision::Discrete;
+  }
+
+  static Web::ScrollGesturePhase
+  to_engine_scroll_gesture_phase(int phase) {
+    switch (phase) {
+    case LADYBIRD_SCROLL_PHASE_ONGOING:
+      return Web::ScrollGesturePhase::Ongoing;
+    case LADYBIRD_SCROLL_PHASE_MOMENTUM:
+      return Web::ScrollGesturePhase::Momentum;
+    case LADYBIRD_SCROLL_PHASE_ENDED:
+      return Web::ScrollGesturePhase::Ended;
+    }
+    return Web::ScrollGesturePhase::None;
+  }
+
   void dispatch_mouse_event(int abi_type, int x, int y, int button, int buttons,
                             int modifiers, double wheel_delta_x,
-                            double wheel_delta_y) {
+                            double wheel_delta_y, int abi_precision,
+                            int abi_phase) {
     auto type = to_engine_mouse_event_type(abi_type);
     if (!type.has_value()) {
       std::fprintf(stderr,
@@ -882,15 +918,13 @@ public:
     Web::DevicePixelPoint position = {x, y};
     Web::DevicePixelPoint screen_position = {x, y};
 
-    // Flutter hands over continuous pixel deltas (trackpad pans and wheel
-    // notches alike) and has no notion of the engine's gesture phases, so:
-    //   - the deltas are precise ones, and the legacy 120ths-of-a-tick count is
-    //     derived from them with the engine's own rule;
-    //   - the gesture stays phase-less. Claiming Ongoing for input we can never
-    //     End would latch a phased gesture for good, and FlutterBird's Dart
-    //     layer runs its own momentum anyway.
-    auto wheel_delta_precision = Web::WheelDeltaPrecision::Precise;
-    auto scroll_gesture_phase = Web::ScrollGesturePhase::None;
+    // Flutter says which of its input produced the deltas and where they sit in
+    // their gesture (see window.dart: a touchpad's pan steps against a mouse
+    // wheel's notches, and the framework's own momentum steps), so the engine
+    // gets the same picture Ladybird's Qt frontend gives it: precise phased
+    // steps for a trackpad, discrete phase-less ones for a wheel.
+    auto wheel_delta_precision = to_engine_wheel_delta_precision(abi_precision);
+    auto scroll_gesture_phase = to_engine_scroll_gesture_phase(abi_phase);
     auto wheel_tick_120ths_x =
         Web::wheel_tick_120ths_from_pixel_delta(wheel_delta_x,
                                                 wheel_delta_precision);
@@ -976,6 +1010,42 @@ String FlutterViewImpl::create_child_web_view_handle(
   return handle;
 }
 
+// Creates a view with a tab of its own -- no traversable to adopt -- for a tab
+// the engine opens by itself rather than one the embedder or a page asked for.
+// View Source is the one such case: the engine answers a source request by
+// handing the embedder a brand-new tab holding the highlighted source.
+// Mirrors what create_web_view() does for an embedder-requested tab.
+static int create_blank_web_view() {
+  auto created_view = FlutterViewImpl::create(g_next_view_id++).release_value();
+  created_view->start_tab();
+
+  int const new_view_id = created_view->m_view_id;
+  g_web_views[new_view_id] = std::move(created_view);
+  if (g_active_view_id == -1)
+    g_active_view_id = new_view_id;
+  return new_view_id;
+}
+
+// Looks up the new-web-view callback the Flutter side registers per view. Such
+// a callback is what turns an engine-created view into a tab widget, and every
+// view carries the same Dart handler, so the active view answers for the tab the
+// engine is about to open. Views whose Dart controller has been disposed have no
+// handler left, so any view that still has one is a better answer than none.
+static NewWebViewCallback new_web_view_callback_from_views() {
+  if (auto it = g_web_views.find(g_active_view_id); it != g_web_views.end()) {
+    std::lock_guard lock(it->second->m_info_mutex);
+    if (it->second->m_new_web_view_callback)
+      return it->second->m_new_web_view_callback;
+  }
+
+  for (auto const &[view_id, view] : g_web_views) {
+    std::lock_guard lock(view->m_info_mutex);
+    if (view->m_new_web_view_callback)
+      return view->m_new_web_view_callback;
+  }
+  return nullptr;
+}
+
 static StringView
 download_status_to_string(WebView::FileDownloader::DownloadStatus status) {
   switch (status) {
@@ -1046,6 +1116,41 @@ private:
 
 static AK::OwnPtr<FlutterFileDownloaderObserver> g_download_observer;
 
+#ifdef __APPLE__
+// Hands a path to /usr/bin/open: plain for "Open" (the default handler for the
+// file type), "-R" to reveal it in Finder. Returning false means the spawn
+// itself failed, leaving the caller to fall back to upstream's behavior.
+static bool open_path_with_host(ByteString const &path, bool reveal_in_folder) {
+  if (path.is_empty())
+    return false;
+
+  char const *argv[4];
+  int argc = 0;
+  argv[argc++] = "/usr/bin/open";
+  if (reveal_in_folder)
+    argv[argc++] = "-R";
+  argv[argc++] = path.characters();
+  argv[argc] = nullptr;
+
+  // Close-on-exec for every other descriptor, so the helper cannot inherit the
+  // engine's IPC sockets and leave a peer waiting on one until it exits.
+  posix_spawnattr_t attributes;
+  if (posix_spawnattr_init(&attributes) != 0)
+    return false;
+  posix_spawnattr_setflags(&attributes, POSIX_SPAWN_CLOEXEC_DEFAULT);
+
+  pid_t pid = 0;
+  int const result = posix_spawn(&pid, argv[0], nullptr, &attributes,
+                                 const_cast<char **>(argv), *_NSGetEnviron());
+  posix_spawnattr_destroy(&attributes);
+  return result == 0;
+}
+#else
+// Only macOS has a host handler / file manager wired up here; everywhere else
+// the caller falls back to upstream's implementation.
+static bool open_path_with_host(ByteString const &, bool) { return false; }
+#endif
+
 class FlutterApplication : public WebView::Application {
   WEB_VIEW_APPLICATION(FlutterApplication)
   AK_ALLOC_WITH_KMALLOC;
@@ -1085,6 +1190,16 @@ public:
     return false;
   }
 
+  // macOS hands pages the bounce they expect at a scroller's edge, the way
+  // Ladybird's Qt frontend does there (Application::platform_scrolls_elastically
+  // in UI/Qt/Application.cpp).
+  virtual bool platform_scrolls_elastically() const override {
+#if defined(__APPLE__)
+    return true;
+#endif
+    return false;
+  }
+
   virtual Optional<WebView::ViewImplementation &>
   active_web_view() const override {
     if (g_active_view_id != -1) {
@@ -1099,8 +1214,16 @@ public:
   }
 
   virtual Optional<WebView::ViewImplementation &>
-  open_blank_new_tab(Web::HTML::ActivateTab) const override {
-    return {};
+  open_blank_new_tab(Web::HTML::ActivateTab activate_tab) const override {
+    int const new_view_id = create_blank_web_view();
+    auto it = g_web_views.find(new_view_id);
+    if (it == g_web_views.end())
+      return {};
+
+    if (auto callback = new_web_view_callback_from_views())
+      callback(new_view_id, activate_tab == Web::HTML::ActivateTab::Yes);
+
+    return *it->second;
   }
 
   virtual Optional<ByteString>
@@ -1131,6 +1254,20 @@ public:
     }
   }
 
+  // Hands the file to the OS: the default handler for "Open", Finder for
+  // "Show in folder". Upstream's base implementation only prints the path.
+  virtual void
+  open_download(WebView::FileDownloader::Download const &download) const override {
+    if (!open_path_with_host(download.destination.string(), false))
+      WebView::Application::open_download(download);
+  }
+
+  virtual void show_download_in_folder(
+      WebView::FileDownloader::Download const &download) const override {
+    if (!open_path_with_host(download.destination.string(), true))
+      WebView::Application::show_download_in_folder(download);
+  }
+
   virtual Utf16String
   clipboard_text(ClipboardType type = ClipboardType::Text) const override {
     if (g_get_clipboard_text_callback) {
@@ -1152,6 +1289,45 @@ public:
       return;
     }
     WebView::Application::set_clipboard_text(move(text), type);
+  }
+
+  // Every copy the engine performs -- a selection copy, a context menu action,
+  // navigator.clipboard.write -- ends up in Application::insert_clipboard_entry,
+  // which funnels into insert_clipboard_item(); reads (paste) go through
+  // clipboard_item(). Those item-level hooks are what carry text to and from
+  // the real OS clipboard, so the embedder's callbacks have to be wired there
+  // and not only in the text-level overrides above (which only serve the
+  // selection clipboard).
+  virtual Web::Clipboard::SystemClipboardItem clipboard_item() const override {
+    if (g_get_clipboard_text_callback) {
+      if (char *result = g_get_clipboard_text_callback()) {
+        auto text = ByteString(result);
+        free(result);
+        return Web::Clipboard::SystemClipboardItem{{
+            {
+                .name = MUST(String::from_utf8("text/plain"sv)),
+                .data = move(text),
+            },
+        }};
+      }
+    }
+    return WebView::Application::clipboard_item();
+  }
+
+  virtual void
+  insert_clipboard_item(Web::Clipboard::SystemClipboardItem item) override {
+    for (auto const &representation :
+         item.system_clipboard_representations) {
+      if (representation.name != "text/plain"sv)
+        continue;
+
+      if (auto const *data = representation.data.get_pointer<ByteString>()) {
+        if (g_set_clipboard_text_callback)
+          g_set_clipboard_text_callback(data->characters());
+        return;
+      }
+    }
+    WebView::Application::insert_clipboard_item(move(item));
   }
 };
 
@@ -1706,7 +1882,36 @@ char *history_autocomplete_json(int view_id, const char *query, int limit) {
   return strdup(bytes.characters());
 }
 
-char *get_builtin_search_engines_json() {
+// Settings exposes no accessor for its custom engines, and they can be added
+// either through this ABI or through the engine's own about:settings page, so
+// read them back out of the serialized settings -- the same JSON the engine
+// persists them in.
+static void append_custom_search_engines(JsonArray &engines) {
+  auto settings = WebView::Application::settings().serialize_json();
+  auto search_engine = settings.as_object().get_object("searchEngine"sv);
+  if (!search_engine.has_value())
+    return;
+
+  auto custom_engines = search_engine->get_array("custom"sv);
+  if (!custom_engines.has_value())
+    return;
+
+  custom_engines->for_each([&](JsonValue const &engine) {
+    if (!engine.is_object())
+      return;
+    auto name = engine.as_object().get_string("name"sv);
+    auto url = engine.as_object().get_string("url"sv);
+    if (!name.has_value() || !url.has_value())
+      return;
+
+    JsonObject item;
+    item.set("name"sv, *name);
+    item.set("queryUrl"sv, *url);
+    engines.must_append(move(item));
+  });
+}
+
+char *get_search_engines_json() {
   JsonArray engines;
   for (auto const &engine : WebView::builtin_search_engines()) {
     JsonObject item;
@@ -1714,6 +1919,9 @@ char *get_builtin_search_engines_json() {
     item.set("queryUrl"sv, engine.query_url);
     engines.must_append(move(item));
   }
+
+  if (s_app)
+    append_custom_search_engines(engines);
 
   auto json = JsonValue(move(engines)).serialized();
   auto bytes = json.to_byte_string();
@@ -1733,19 +1941,54 @@ char *get_search_engine_name() {
   return strdup(bytes.characters());
 }
 
-void set_search_engine(const char *name) {
+bool add_custom_search_engine(const char *name, const char *query_url) {
+  if (!s_app || !name || strlen(name) == 0 || !query_url ||
+      strlen(query_url) == 0)
+    return false;
+
+  auto &settings = WebView::Application::settings();
+
+  // Names identify engines everywhere else in this API and in the engine, so a
+  // second engine under an existing name would be unreachable.
+  if (settings.find_search_engine_by_name(StringView(name, strlen(name)))
+          .has_value())
+    return false;
+
+  // Without the placeholder every query would be dropped on the floor.
+  if (strstr(query_url, "%s") == nullptr)
+    return false;
+
+  // Let the engine validate the URL, so an engine added here is no more
+  // lenient than one added on its own settings page.
+  JsonObject engine;
+  engine.set("name"sv, StringView(name, strlen(name)));
+  engine.set("url"sv, StringView(query_url, strlen(query_url)));
+  auto parsed = WebView::Settings::parse_custom_search_engine(
+      JsonValue(move(engine)));
+  if (!parsed.has_value())
+    return false;
+
+  settings.add_custom_search_engine(parsed.release_value());
+  return true;
+}
+
+bool set_search_engine(const char *name) {
   if (!s_app)
-    return;
+    return false;
 
   auto &settings = WebView::Application::settings();
   auto current = settings.search_engine_settings();
   if (name && strlen(name) > 0) {
-    current.engine =
+    auto engine =
         settings.find_search_engine_by_name(StringView(name, strlen(name)));
+    if (!engine.has_value())
+      return false;
+    current.engine = move(engine);
   } else {
     current.engine = {};
   }
   settings.set_search_engine_settings(move(current));
+  return true;
 }
 
 static char const *json_value_type_name(JsonValue::Type type) {
@@ -1862,6 +2105,14 @@ void select_all(int view_id) {
   it->second->select_all();
 }
 
+void view_source(int view_id) {
+  auto it = g_web_views.find(view_id);
+  if (it == g_web_views.end())
+    return;
+
+  it->second->get_source();
+}
+
 void set_loading_state_change_callback(int view_id,
                                        LoadingStateChangeCallback callback) {
   auto it = g_web_views.find(view_id);
@@ -1959,12 +2210,21 @@ extern "C" {
 
 void dispatch_mouse_event(int view_id, int type, int x, int y, int button,
                           int buttons, int modifiers, double wheel_delta_x,
-                          double wheel_delta_y) {
+                          double wheel_delta_y, int wheel_delta_precision,
+                          int scroll_gesture_phase) {
   auto it = g_web_views.find(view_id);
   if (it != g_web_views.end()) {
     it->second->dispatch_mouse_event(type, x, y, button, buttons, modifiers,
-                                     wheel_delta_x, wheel_delta_y);
+                                     wheel_delta_x, wheel_delta_y,
+                                     wheel_delta_precision,
+                                     scroll_gesture_phase);
   }
+}
+
+void set_view_focused(int view_id, bool focused) {
+  auto it = g_web_views.find(view_id);
+  if (it != g_web_views.end())
+    it->second->set_has_system_focus(focused);
 }
 
 void dispatch_key_event(int view_id, int type, int keycode, int modifiers,

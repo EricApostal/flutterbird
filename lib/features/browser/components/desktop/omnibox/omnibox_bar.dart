@@ -5,6 +5,7 @@ import 'package:flutterbird/features/browser/components/browser_context_menu.dar
 import 'package:flutterbird/features/browser/components/desktop/downloads/downloads_button.dart';
 import 'package:flutterbird/features/browser/components/desktop/omnibox/omnibox_bookmarks_bar.dart';
 import 'package:flutterbird/features/browser/components/desktop/omnibox/omnibox_search_field.dart';
+import 'package:flutterbird/features/browser/components/desktop/search_engine_dialog.dart';
 import 'package:flutterbird/features/browser/state/tab_actions.dart';
 import 'package:flutterbird/features/browser/state/tab_layout_mode.dart';
 import 'package:flutterbird/features/browser/state/omnibox_state.dart';
@@ -16,6 +17,9 @@ enum _ToolbarMenuAction {
   closeCurrentTab,
   copySelection,
   pasteFromClipboard,
+  viewSource,
+  selectSearchEngine,
+  addSearchEngine,
   goBack,
   goForward,
   reload,
@@ -27,13 +31,21 @@ enum _ToolbarMenuAction {
 }
 
 class _ToolbarMenuSelection {
-  const _ToolbarMenuSelection.action(this.action) : bookmarkUrl = null;
+  const _ToolbarMenuSelection.action(this.action)
+    : bookmarkUrl = null,
+      searchEngineName = null;
 
   const _ToolbarMenuSelection.openBookmark(this.bookmarkUrl)
-    : action = _ToolbarMenuAction.openBookmark;
+    : action = _ToolbarMenuAction.openBookmark,
+      searchEngineName = null;
+
+  const _ToolbarMenuSelection.selectSearchEngine(this.searchEngineName)
+    : action = _ToolbarMenuAction.selectSearchEngine,
+      bookmarkUrl = null;
 
   final _ToolbarMenuAction action;
   final String? bookmarkUrl;
+  final String? searchEngineName;
 }
 
 class BrowserOmniboxBar extends ConsumerStatefulWidget {
@@ -351,6 +363,22 @@ class _BrowserOmniboxBarState extends ConsumerState<BrowserOmniboxBar> {
         label: 'Copy Selection',
       ),
       actionItem(action: _ToolbarMenuAction.pasteFromClipboard, label: 'Paste'),
+      actionItem(action: _ToolbarMenuAction.viewSource, label: 'View Source'),
+      const BrowserContextMenuItem.separator(),
+      // The active engine carries the check mark, including when the selection
+      // is implicit: activeSearchEngine falls back to DuckDuckGo, which is what
+      // typed queries actually use.
+      for (final engine in currentTabController.getSearchEngines())
+        BrowserContextMenuItem.action(
+          label: engine.name,
+          value: _ToolbarMenuSelection.selectSearchEngine(engine.name),
+          checkable: true,
+          checked: engine.name == currentTabController.activeSearchEngine.name,
+        ),
+      const BrowserContextMenuItem.action(
+        label: 'Add Search Engine…',
+        value: _ToolbarMenuSelection.action(_ToolbarMenuAction.addSearchEngine),
+      ),
       const BrowserContextMenuItem.separator(),
       actionItem(
         action: _ToolbarMenuAction.goBack,
@@ -431,6 +459,18 @@ class _BrowserOmniboxBarState extends ConsumerState<BrowserOmniboxBar> {
       case _ToolbarMenuAction.pasteFromClipboard:
         currentTabController.pasteFromClipboard();
         break;
+      case _ToolbarMenuAction.viewSource:
+        currentTabController.viewSource();
+        break;
+      case _ToolbarMenuAction.selectSearchEngine:
+        _onSearchEngineSelected(
+          currentTabController,
+          selection.searchEngineName,
+        );
+        break;
+      case _ToolbarMenuAction.addSearchEngine:
+        _onAddSearchEngine(currentTabController);
+        break;
       case _ToolbarMenuAction.goBack:
         currentTabController.goBack();
         break;
@@ -464,6 +504,46 @@ class _BrowserOmniboxBarState extends ConsumerState<BrowserOmniboxBar> {
         ref.read(browserTabLayoutModeControllerProvider.notifier).toggle();
         break;
     }
+  }
+
+  // Both the omnibox's search/home URLs and the suggestion list's "Search <x>
+  // for ..." label are derived from the engine's current selection, so the bar
+  // rebuilds once the selection changed.
+  void _onSearchEngineSelected(LadybirdController controller, String? name) {
+    if (name == null) return;
+    try {
+      controller.setSearchEngine(name);
+    } on ArgumentError catch (error) {
+      _showSearchEngineError(error.message);
+      return;
+    }
+    setState(() {});
+  }
+
+  Future<void> _onAddSearchEngine(LadybirdController controller) async {
+    final added = await showAddSearchEngineDialog(
+      context: context,
+      onSubmit: (name, queryUrl) {
+        try {
+          controller.addCustomSearchEngine(name, queryUrl);
+        } on ArgumentError catch (error) {
+          return error.message?.toString() ?? '$error';
+        }
+        return null;
+      },
+    );
+    if (added && mounted) setState(() {});
+  }
+
+  void _showSearchEngineError(Object? message) {
+    if (!mounted) return;
+    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+      SnackBar(
+        content: Text(
+          message?.toString() ?? 'Could not change the search engine.',
+        ),
+      ),
+    );
   }
 
   @override

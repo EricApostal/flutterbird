@@ -710,17 +710,34 @@ class LadybirdBindings {
         ffi.Pointer<ffi.Char> Function(int, ffi.Pointer<ffi.Char>, int)
       >(isLeaf: true);
 
-  ffi.Pointer<ffi.Char> get_builtin_search_engines_json() {
-    return _get_builtin_search_engines_json();
+  ffi.Pointer<ffi.Char> get_search_engines_json() {
+    return _get_search_engines_json();
   }
 
-  late final _get_builtin_search_engines_jsonPtr =
+  late final _get_search_engines_jsonPtr =
       _lookup<ffi.NativeFunction<ffi.Pointer<ffi.Char> Function()>>(
-        'get_builtin_search_engines_json',
+        'get_search_engines_json',
       );
-  late final _get_builtin_search_engines_json =
-      _get_builtin_search_engines_jsonPtr
-          .asFunction<ffi.Pointer<ffi.Char> Function()>();
+  late final _get_search_engines_json = _get_search_engines_jsonPtr
+      .asFunction<ffi.Pointer<ffi.Char> Function()>();
+
+  bool add_custom_search_engine(
+    ffi.Pointer<ffi.Char> name,
+    ffi.Pointer<ffi.Char> query_url,
+  ) {
+    return _add_custom_search_engine(name, query_url);
+  }
+
+  late final _add_custom_search_enginePtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.Bool Function(ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Char>)
+        >
+      >('add_custom_search_engine');
+  late final _add_custom_search_engine = _add_custom_search_enginePtr
+      .asFunction<
+        bool Function(ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Char>)
+      >();
 
   ffi.Pointer<ffi.Char> get_search_engine_name() {
     return _get_search_engine_name();
@@ -733,16 +750,16 @@ class LadybirdBindings {
   late final _get_search_engine_name = _get_search_engine_namePtr
       .asFunction<ffi.Pointer<ffi.Char> Function()>();
 
-  void set_search_engine(ffi.Pointer<ffi.Char> name) {
+  bool set_search_engine(ffi.Pointer<ffi.Char> name) {
     return _set_search_engine(name);
   }
 
   late final _set_search_enginePtr =
-      _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Pointer<ffi.Char>)>>(
+      _lookup<ffi.NativeFunction<ffi.Bool Function(ffi.Pointer<ffi.Char>)>>(
         'set_search_engine',
       );
   late final _set_search_engine = _set_search_enginePtr
-      .asFunction<void Function(ffi.Pointer<ffi.Char>)>();
+      .asFunction<bool Function(ffi.Pointer<ffi.Char>)>();
 
   ffi.Pointer<ffi.Char> get_config_variable_definitions_json() {
     return _get_config_variable_definitions_json();
@@ -826,6 +843,14 @@ class LadybirdBindings {
       _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Int)>>('select_all');
   late final _select_all = _select_allPtr.asFunction<void Function(int)>();
 
+  void view_source(int view_id) {
+    return _view_source(view_id);
+  }
+
+  late final _view_sourcePtr =
+      _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Int)>>('view_source');
+  late final _view_source = _view_sourcePtr.asFunction<void Function(int)>();
+
   void dispatch_mouse_event(
     int view_id,
     int type,
@@ -836,6 +861,8 @@ class LadybirdBindings {
     int modifiers,
     double wheel_delta_x,
     double wheel_delta_y,
+    int wheel_delta_precision,
+    int scroll_gesture_phase,
   ) {
     return _dispatch_mouse_event(
       view_id,
@@ -847,6 +874,8 @@ class LadybirdBindings {
       modifiers,
       wheel_delta_x,
       wheel_delta_y,
+      wheel_delta_precision,
+      scroll_gesture_phase,
     );
   }
 
@@ -863,13 +892,38 @@ class LadybirdBindings {
             ffi.Int,
             ffi.Double,
             ffi.Double,
+            ffi.Int,
+            ffi.Int,
           )
         >
       >('dispatch_mouse_event');
   late final _dispatch_mouse_event = _dispatch_mouse_eventPtr
       .asFunction<
-        void Function(int, int, int, int, int, int, int, double, double)
+        void Function(
+          int,
+          int,
+          int,
+          int,
+          int,
+          int,
+          int,
+          double,
+          double,
+          int,
+          int,
+        )
       >();
+
+  void set_view_focused(int view_id, bool focused) {
+    return _set_view_focused(view_id, focused);
+  }
+
+  late final _set_view_focusedPtr =
+      _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Int, ffi.Bool)>>(
+        'set_view_focused',
+      );
+  late final _set_view_focused = _set_view_focusedPtr
+      .asFunction<void Function(int, bool)>();
 
   void dispatch_key_event(
     int view_id,
@@ -1249,6 +1303,27 @@ typedef NavigationHistoryChangeCallbackFunction =
     ffi.Void Function(ffi.Int view_id, ffi.Pointer<ffi.Char> history_json);
 typedef DartNavigationHistoryChangeCallbackFunction =
     void Function(int view_id, ffi.Pointer<ffi.Char> history_json);
+
+abstract class LadybirdMouseEventType {
+  static const int LADYBIRD_MOUSE_DOWN = 0;
+  static const int LADYBIRD_MOUSE_UP = 1;
+  static const int LADYBIRD_MOUSE_MOVE = 2;
+  static const int LADYBIRD_MOUSE_LEAVE = 3;
+  static const int LADYBIRD_MOUSE_WHEEL = 4;
+}
+
+abstract class LadybirdWheelDeltaPrecision {
+  static const int LADYBIRD_WHEEL_DISCRETE = 0;
+  static const int LADYBIRD_WHEEL_PRECISE = 1;
+}
+
+abstract class LadybirdScrollGesturePhase {
+  static const int LADYBIRD_SCROLL_PHASE_NONE = 0;
+  static const int LADYBIRD_SCROLL_PHASE_ONGOING = 1;
+  static const int LADYBIRD_SCROLL_PHASE_MOMENTUM = 2;
+  static const int LADYBIRD_SCROLL_PHASE_ENDED = 3;
+}
+
 typedef AskUserForDownloadPathCallback =
     ffi.Pointer<ffi.NativeFunction<AskUserForDownloadPathCallbackFunction>>;
 typedef AskUserForDownloadPathCallbackFunction =

@@ -191,10 +191,21 @@ LADYBIRD_API bool is_current_view_bookmarked(int view_id);
 LADYBIRD_API char *history_autocomplete_json(int view_id, const char *query,
                                               int limit);
 
-// Returns a JSON array string of the engine's built-in search engines, each
-// with "name" and "queryUrl" fields. Caller owns returned memory and must
-// free it.
-LADYBIRD_API char *get_builtin_search_engines_json();
+// Returns a JSON array string of every search engine the engine knows about --
+// its builtins, then any custom engines added through this API or through the
+// engine's own about:settings page -- each with "name" and "queryUrl" fields.
+// Caller owns returned memory and must free it.
+LADYBIRD_API char *get_search_engines_json();
+
+// Adds a custom search engine. `name` must be non-empty and unused by any other
+// engine (builtin or custom); `query_url` must be a valid absolute URL
+// containing "%s" where the query text goes, e.g.
+// "https://example.com/search?q=%s". Returns false without changing anything if
+// the engine rejects either one (the engine validates the URL, so a name that
+// merely looks like a URL is still rejected). Adding an engine does not select
+// it -- call set_search_engine() with its name for that.
+LADYBIRD_API bool add_custom_search_engine(const char *name,
+                                           const char *query_url);
 
 // Returns the name of the currently configured search engine, or nullptr if
 // no explicit search engine has been configured (the embedder should treat
@@ -203,8 +214,10 @@ LADYBIRD_API char *get_search_engine_name();
 
 // Sets the active search engine by name (must match a builtin or custom
 // search engine name). Pass nullptr or an empty string to clear the
-// selection and fall back to the default.
-LADYBIRD_API void set_search_engine(const char *name);
+// selection and fall back to the default. Returns false -- leaving the
+// current selection untouched -- if `name` is non-empty and no engine by that
+// name exists, so a typo is reported instead of silently falling back.
+LADYBIRD_API bool set_search_engine(const char *name);
 
 // Returns a JSON array string describing all generic config variables
 // exposed by the engine (name, title, description, default value, and
@@ -233,6 +246,12 @@ LADYBIRD_API void copy_selection(int view_id);
 LADYBIRD_API void paste_from_clipboard(int view_id);
 LADYBIRD_API void select_all(int view_id);
 
+// Asks the engine for the view's page source. The engine answers
+// asynchronously by opening a new view (announced through the new_web_view
+// callback) whose page shows the syntax-highlighted source; there is no
+// return value to wait on.
+LADYBIRD_API void view_source(int view_id);
+
 // Event types for dispatch_mouse_event(). These are FlutterBird's own ABI
 // values and are mapped onto the engine's Web::MouseEvent::Type inside the
 // engine -- do not pass the engine's enum values directly, they are not stable
@@ -246,10 +265,38 @@ typedef enum {
   LADYBIRD_MOUSE_WHEEL = 4,
 } LadybirdMouseEventType;
 
-LADYBIRD_API void dispatch_mouse_event(int view_id, int type, int x, int y,
-                                       int button, int buttons, int modifiers,
-                                       double wheel_delta_x,
-                                       double wheel_delta_y);
+// How the wheel deltas of a mouse-wheel event were produced, matching
+// Web::WheelDeltaPrecision. Discrete deltas come from stepwise input (mouse
+// wheel notches); precise ones from input that reports exact pixel distances
+// (touchpad panning).
+typedef enum {
+  LADYBIRD_WHEEL_DISCRETE = 0,
+  LADYBIRD_WHEEL_PRECISE = 1,
+} LadybirdWheelDeltaPrecision;
+
+// Where a mouse-wheel event sits in its scroll gesture, matching
+// Web::ScrollGesturePhase. A touchpad's steps belong to one gesture that starts
+// when the fingers land (Ongoing), continues through the momentum after they
+// lift (Momentum), and ends when it settles (Ended); a mouse wheel has no
+// phase. The engine needs this to stretch a scroller at its edge, to know when
+// a stretch springs back, and to latch a gesture to the right scroller.
+typedef enum {
+  LADYBIRD_SCROLL_PHASE_NONE = 0,
+  LADYBIRD_SCROLL_PHASE_ONGOING = 1,
+  LADYBIRD_SCROLL_PHASE_MOMENTUM = 2,
+  LADYBIRD_SCROLL_PHASE_ENDED = 3,
+} LadybirdScrollGesturePhase;
+
+LADYBIRD_API void dispatch_mouse_event(
+    int view_id, int type, int x, int y, int button, int buttons, int modifiers,
+    double wheel_delta_x, double wheel_delta_y,
+    int wheel_delta_precision, int scroll_gesture_phase);
+
+// Tells the engine whether this view (and so its tab) holds system focus.
+// WebContent only has a focused navigable while it does, and the actions that
+// work on a selection -- select all, copy, and the text-input ones -- act on
+// that navigable, so nothing is selected or copied without this.
+LADYBIRD_API void set_view_focused(int view_id, bool focused);
 
 LADYBIRD_API void dispatch_key_event(int view_id, int type, int keycode,
                                      int modifiers, uint32_t code_point,

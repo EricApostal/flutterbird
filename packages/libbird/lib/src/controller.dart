@@ -32,6 +32,7 @@ class LadybirdController {
   // derived from the engine's configured search engine.
   final String? initialUrl;
   bool hasNavigatedInitial = false;
+  bool _lastFocused = false;
   bool hasStartedNavigation = false;
 
   late final ffi.NativeCallable<ffi.Void Function()> _resizeCallback;
@@ -88,9 +89,11 @@ class LadybirdController {
       ValueNotifier(const []);
   static bool _downloadsSeeded = false;
 
-  // Set right before triggering a native paste so the synchronous
-  // GetClipboardTextCallback (invoked mid-paste, on the same isolate) has
-  // something to hand back. See pasteFromClipboard() below.
+  // Holds the text the synchronous GetClipboardTextCallback (invoked mid-paste,
+  // on the same isolate) hands back, since nothing can await the real OS
+  // clipboard from inside that callback. Refreshed before anything that lets
+  // the engine read the clipboard -- pasteFromClipboard() and every context menu
+  // action, whose "Paste" entry is the engine's own.
   static String? _pendingPasteText;
 
   void Function()? onResize;
@@ -667,10 +670,10 @@ class LadybirdController {
     return json;
   }
 
-  // Returns the engine's built-in search engines (name + query URL
-  // template), as shipped by WebView::builtin_search_engines().
-  List<LadybirdSearchEngine> getBuiltinSearchEngines() {
-    final ptr = _bindings.get_builtin_search_engines_json();
+  // Returns every search engine the engine knows about -- its builtins plus
+  // any custom engines (name + query URL template), in that order.
+  List<LadybirdSearchEngine> getSearchEngines() {
+    final ptr = _bindings.get_search_engines_json();
     if (ptr == ffi.nullptr) return const [];
     final json = ptr.cast<Utf8>().toDartString();
     malloc.free(ptr);
@@ -696,15 +699,64 @@ class LadybirdController {
   }
 
   // Sets the active search engine by name. Pass null to clear the selection
-  // and fall back to [fallbackSearchEngine].
+  // and fall back to [fallbackSearchEngine]. Throws [ArgumentError] if no
+  // engine by that name exists -- the engine refuses an unknown name rather
+  // than silently dropping the selection, so a typo can't look like success.
   void setSearchEngine(String? name) {
     if (name == null || name.isEmpty) {
       _bindings.set_search_engine(ffi.nullptr);
       return;
     }
     final namePtr = name.toNativeUtf8();
-    _bindings.set_search_engine(namePtr.cast<ffi.Char>());
+    final didSet = _bindings.set_search_engine(namePtr.cast<ffi.Char>());
     malloc.free(namePtr);
+    if (!didSet) {
+      throw ArgumentError('No search engine named "$name" is known.');
+    }
+  }
+
+  // Adds a custom search engine and makes it the active one. [queryUrl] is the
+  // engine's query template, e.g. "https://example.com/search?q=%s".
+  //
+  // Throws [ArgumentError] with a message worth showing the user if the name is
+  // empty or already taken, or if the URL isn't one the engine accepts (a valid
+  // absolute URL containing "%s").
+  void addCustomSearchEngine(String name, String queryUrl) {
+    final newName = name.trim();
+    final newQueryUrl = queryUrl.trim();
+
+    if (newName.isEmpty) {
+      throw ArgumentError('A search engine needs a name.');
+    }
+    if (newQueryUrl.isEmpty) {
+      throw ArgumentError('A search engine needs a search URL.');
+    }
+    if (!newQueryUrl.contains('%s')) {
+      throw ArgumentError(
+        'The search URL must contain "%s" where the query goes, '
+        'e.g. "https://example.com/search?q=%s".',
+      );
+    }
+    if (getSearchEngines().any((engine) => engine.name == newName)) {
+      throw ArgumentError('A search engine named "$newName" already exists.');
+    }
+
+    final namePtr = newName.toNativeUtf8();
+    final queryUrlPtr = newQueryUrl.toNativeUtf8();
+    final didAdd = _bindings.add_custom_search_engine(
+      namePtr.cast<ffi.Char>(),
+      queryUrlPtr.cast<ffi.Char>(),
+    );
+    malloc.free(namePtr);
+    malloc.free(queryUrlPtr);
+
+    if (!didAdd) {
+      throw ArgumentError(
+        '"$newQueryUrl" is not a search URL the engine accepts; it must be a '
+        'valid URL containing "%s".',
+      );
+    }
+    setSearchEngine(newName);
   }
 
   // Used when no search engine has been explicitly configured.
@@ -717,7 +769,7 @@ class LadybirdController {
   // the configured engine if it's still a known builtin/custom engine,
   // otherwise [fallbackSearchEngine].
   LadybirdSearchEngine get activeSearchEngine {
-    final engines = getBuiltinSearchEngines();
+    final engines = getSearchEngines();
     final wantedName = getSearchEngineName() ?? fallbackSearchEngine.name;
 
     for (final engine in engines) {
@@ -841,14 +893,37 @@ class LadybirdController {
     _bindings.copy_selection(_viewId);
   }
 
+  // Keeps [_pendingPasteText] in step with the real OS clipboard. Reading it
+  // needs an await, so every path that can lead to the engine reading the
+  // clipboard refreshes the cache first: the engine's synchronous
+  // GetClipboardTextCallback can only hand back what is already cached.
+  //
+  // Best effort by design -- a context menu action must still run when the
+  // platform clipboard can't be read, and one of them ("Paste") is all that
+  // depends on this.
+  Future<void> _refreshClipboardTextCache() async {
+    try {
+      final data = await Clipboard.getData(Clipboard.kTextPlain);
+      LadybirdController._pendingPasteText = data?.text;
+    } catch (error) {
+      debugPrint('Could not read the system clipboard: $error');
+    }
+  }
+
   Future<void> pasteFromClipboard() async {
-    final data = await Clipboard.getData(Clipboard.kTextPlain);
-    LadybirdController._pendingPasteText = data?.text;
+    await _refreshClipboardTextCache();
     _bindings.paste_from_clipboard(_viewId);
   }
 
   void selectAll() {
     _bindings.select_all(_viewId);
+  }
+
+  // Asks the engine for this view's page source. It answers by opening a new
+  // tab (see [onNewWebView]) showing the syntax-highlighted source; nothing is
+  // returned, so there is nothing to await here.
+  void viewSource() {
+    _bindings.view_source(_viewId);
   }
 
   // Commits text from a platform input method (e.g. a Flutter soft keyboard)
@@ -954,6 +1029,20 @@ class LadybirdController {
   static const int mouseLeave = 3;
   static const int mouseWheel = 4;
 
+  // Wheel-delta precision, mirrored from LadybirdWheelDeltaPrecision in
+  // cpp/engine.h. Discrete deltas come from stepwise input (mouse wheel
+  // notches); precise ones from input reporting exact pixel distances
+  // (touchpad panning).
+  static const int wheelDiscrete = 0;
+  static const int wheelPrecise = 1;
+
+  // Where a wheel event sits in its scroll gesture, mirrored from
+  // LadybirdScrollGesturePhase in cpp/engine.h.
+  static const int scrollPhaseNone = 0;
+  static const int scrollPhaseOngoing = 1;
+  static const int scrollPhaseMomentum = 2;
+  static const int scrollPhaseEnded = 3;
+
   void dispatchMouseEvent({
     required int type,
     required int x,
@@ -963,6 +1052,8 @@ class LadybirdController {
     required int modifiers,
     required double wheelDeltaX,
     required double wheelDeltaY,
+    int wheelDeltaPrecision = wheelDiscrete,
+    int scrollGesturePhase = scrollPhaseNone,
   }) {
     _bindings.dispatch_mouse_event(
       _viewId,
@@ -974,6 +1065,8 @@ class LadybirdController {
       modifiers,
       wheelDeltaX,
       wheelDeltaY,
+      wheelDeltaPrecision,
+      scrollGesturePhase,
     );
   }
 
@@ -994,11 +1087,26 @@ class LadybirdController {
     );
   }
 
-  bool activateContextMenuAction(int actionToken) {
+  // Runs a context menu action the engine handed this view. The engine's own
+  // "Paste" action reads the clipboard synchronously while it runs, so the
+  // cache is refreshed before control passes to the engine -- hence the wait,
+  // and hence the Future.
+  Future<bool> activateContextMenuAction(int actionToken) async {
+    await _refreshClipboardTextCache();
     return _bindings.activate_context_menu_action(_viewId, actionToken);
   }
 
+  // Tells the engine whether this view holds system focus. WebContent only has a
+  // focused navigable while it does, and the actions that work on a selection
+  // (select all, copy) as well as text input act on that navigable.
+  void setViewFocused(bool focused) {
+    if (focused == _lastFocused) return;
+    _lastFocused = focused;
+    _bindings.set_view_focused(_viewId, focused);
+  }
+
   void dispose() {
+    setViewFocused(false);
     _bindings.set_new_web_view_callback(_viewId, ffi.nullptr);
     _bindings.set_context_menu_request_callback(_viewId, ffi.nullptr);
     _bindings.set_cursor_change_callback(_viewId, ffi.nullptr);
