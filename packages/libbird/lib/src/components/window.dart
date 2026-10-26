@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' as ui;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/foundation.dart';
@@ -11,6 +12,24 @@ import 'keys.dart';
 
 class LadybirdView extends StatefulWidget {
   final LadybirdController controller;
+
+  /// Supplies the frame a view last presented, if the host keeps such a store
+  /// (FlutterBird answers this from its HistoryBitmapCache). Called once per
+  /// mount, before the first build.
+  ///
+  /// libbird has no frame store of its own: a texture only ever holds whatever
+  /// the engine last presented for its view. Creating one is an async platform
+  /// call, and the engine's surface only matches this view's box once the
+  /// engine has presented a frame at that size -- a tab that was hidden across
+  /// a window resize has not. Until either holds, that texture would paint
+  /// nothing and reveal the window behind it, so the returned frame is drawn
+  /// over it: the tab shows the page it last presented instead of the
+  /// background while its own view catches up.
+  ///
+  /// Ownership passes to the view, which disposes the image with the widget;
+  /// return a fresh handle (e.g. `ui.Image.clone()`), not one still shared
+  /// with a cache.
+  static ui.Image? Function(int viewId)? lastFrameProvider;
 
   const LadybirdView({super.key, required this.controller});
 
@@ -32,6 +51,16 @@ const TextEditingValue _kBaselineEditingValue = TextEditingValue(
 class _LadybirdViewState extends State<LadybirdView>
     with SingleTickerProviderStateMixin, TextInputClient, DeltaTextInputClient {
   int? _textureId;
+  // The frame this view last presented, held for as long as the live texture
+  // cannot be trusted to fill the box (see LadybirdView.lastFrameProvider) and
+  // disposed with the widget.
+  ui.Image? _previousFrame;
+  // Latches true once the live texture has been worth painting -- i.e. it
+  // exists and the engine has presented a frame at this view's current size.
+  // From then on the backdrop is never drawn again: across a later resize the
+  // engine's one-frame catch-up is better than a stale frame.
+  bool _hasLiveFrame = false;
+  Timer? _previousFrameReleaseTimer;
   final FocusNode _focusNode = FocusNode();
   TextInputConnection? _textInputConnection;
   TextEditingValue _shadowEditingValue = _kBaselineEditingValue;
@@ -43,6 +72,10 @@ class _LadybirdViewState extends State<LadybirdView>
 
   double _accumulatedWheelX = 0;
   double _accumulatedWheelY = 0;
+  // The phase the current gesture's steps carry, so a step dispatched outside
+  // the pointer callbacks (the momentum ticker, a gesture end) still belongs to
+  // the gesture the platform reported.
+  int _panGesturePhase = LadybirdController.scrollPhaseNone;
 
   Ticker? _momentumTicker;
   Offset _lastPointerPos = Offset.zero;
@@ -298,8 +331,17 @@ class _LadybirdViewState extends State<LadybirdView>
     super.initState();
     _momentumTicker = createTicker(_onMomentumTick);
     _attachControllerListeners(widget.controller);
+    _resolvePreviousFrame(widget.controller);
+    _focusNode.addListener(_onFocusChanged);
+    // This view is mounted because its tab is the one being shown, so it holds
+    // focus until the node says otherwise.
+    widget.controller.setViewFocused(true);
 
     _recreateTexture();
+  }
+
+  void _onFocusChanged() {
+    widget.controller.setViewFocused(_focusNode.hasFocus);
   }
 
   @override
@@ -317,6 +359,7 @@ class _LadybirdViewState extends State<LadybirdView>
       _stopFrameDiagnostics();
 
       _attachControllerListeners(widget.controller);
+      _resolvePreviousFrame(widget.controller);
 
       _recreateTexture();
     }
@@ -342,16 +385,25 @@ class _LadybirdViewState extends State<LadybirdView>
     }
   }
 
-  void _onSizeChanged(Size size, double density) {
-    if (size.width <= 0 || size.height <= 0) return;
+  // Pushes this view's viewport to the engine, called from build -- before the
+  // frame that draws at this size is rasterized -- rather than post-frame, so
+  // the engine starts relaying out at this size a frame earlier. Only the view
+  // being laid out is ever resized here: a tab that becomes visible does this
+  // on its own first build, which is all a hidden tab needs (its engine keeps
+  // the size it had while it was shown until then).
+  void _applyViewport(Size size, double density) {
+    if (size.width <= 0 || size.height <= 0 || density <= 0) return;
     final physicalSize = Size(size.width * density, size.height * density);
-
-    // debugPrint(
-    //   "[LibBird] _onSizeChanged: flutterSize: $size, density: $density, physicalSize: $physicalSize",
-    // );
 
     widget.controller.updateDevicePixelRatio(density);
     widget.controller.resizeWindow(physicalSize);
+  }
+
+  // The half of layout-time work that talks to notifiers and navigation, kept
+  // out of build: it can notify listeners that rebuild widgets, which is not
+  // allowed while a frame is being built.
+  void _onLayoutSettled() {
+    if (!mounted) return;
 
     if (widget.controller.hasStartedNavigation &&
         widget.controller.urlNotifier.value.trim().isEmpty) {
@@ -370,6 +422,45 @@ class _LadybirdViewState extends State<LadybirdView>
         );
       });
     }
+  }
+
+  // The engine reports the frame it last presented in physical pixels, and
+  // only ever at the size it presented it for (its default size until it has
+  // presented anything at all).
+  Size? _engineSurfaceSize(double density) {
+    if (density <= 0) return null;
+    final width = widget.controller.getSurfaceWidth() / density;
+    final height = widget.controller.getSurfaceHeight() / density;
+    if (width <= 0 || height <= 0) return null;
+    return Size(width, height);
+  }
+
+  static bool _sizesMatch(Size a, Size b) =>
+      (a.width - b.width).abs() < 1.0 && (a.height - b.height).abs() < 1.0;
+
+  void _resolvePreviousFrame(LadybirdController controller) {
+    _previousFrameReleaseTimer?.cancel();
+    _previousFrameReleaseTimer = null;
+    _previousFrame?.dispose();
+    _previousFrame = LadybirdView.lastFrameProvider?.call(controller.viewId);
+    _hasLiveFrame = false;
+
+    if (_previousFrame != null) {
+      // Safety valve: if the engine never does come back with a frame at this
+      // view's size, the texture takes over anyway -- the stand-in frame must
+      // not outlive the live view indefinitely.
+      _previousFrameReleaseTimer = Timer(
+        const Duration(milliseconds: 500),
+        _releasePreviousFrame,
+      );
+    }
+  }
+
+  void _releasePreviousFrame() {
+    _previousFrameReleaseTimer?.cancel();
+    _previousFrameReleaseTimer = null;
+    if (_hasLiveFrame || !mounted) return;
+    setState(() => _hasLiveFrame = true);
   }
 
   void _onPointerEvent(PointerEvent event, int type) {
@@ -439,7 +530,19 @@ class _LadybirdViewState extends State<LadybirdView>
     );
   }
 
-  void _dispatchWheelDelta(Offset localPosition, double deltaX, double deltaY) {
+  // `precision` and `phase` say what produced these deltas and where they sit
+  // in their gesture; the engine needs both to latch a gesture to a scroller,
+  // to stretch one at its edge, and to know when a stretch springs back. They
+  // are sourced the way Ladybird's Qt frontend sources them from QWheelEvent:
+  // a mouse wheel's notches are discrete and phase-less, a touchpad's pan steps
+  // are precise and belong to the gesture the platform reports.
+  void _dispatchWheelDelta(
+    Offset localPosition,
+    double deltaX,
+    double deltaY, {
+    int precision = LadybirdController.wheelDiscrete,
+    int? phase,
+  }) {
     final density = MediaQuery.devicePixelRatioOf(context);
 
     _accumulatedWheelX += deltaX;
@@ -464,6 +567,8 @@ class _LadybirdViewState extends State<LadybirdView>
       ),
       wheelDeltaX: wheelX,
       wheelDeltaY: wheelY,
+      wheelDeltaPrecision: precision,
+      scrollGesturePhase: phase ?? _panGesturePhase,
     );
   }
 
@@ -512,26 +617,42 @@ class _LadybirdViewState extends State<LadybirdView>
     _lastSimX = currentX;
     _lastSimY = currentY;
 
-    _dispatchWheelDelta(_lastPointerPos, -deltaX, -deltaY);
+    _dispatchWheelDelta(
+      _lastPointerPos,
+      -deltaX,
+      -deltaY,
+      precision: LadybirdController.wheelPrecise,
+      phase: LadybirdController.scrollPhaseMomentum,
+    );
 
     final doneX = _simulationX?.isDone(timeInSeconds) ?? true;
     final doneY = _simulationY?.isDone(timeInSeconds) ?? true;
 
     if (doneX && doneY) {
       _momentumTicker?.stop();
+      _endScrollGesture();
     }
   }
 
+  // A wheel's notches carry no phase. They are sent as precise deltas, which is
+  // the encoding this plugin has always used for them and which the engine
+  // scrolls, rather than as discrete steps: a discrete step is routed through
+  // the compositor's smooth-scroll path, which found no scroll target for a
+  // plain document in the smoke check (see tool/engine_smoke_check.dart), so a
+  // wheel would stop scrolling on such pages.
   void _onPointerScroll(PointerScrollEvent event) {
     _dispatchWheelDelta(
       event.localPosition,
       event.scrollDelta.dx,
       event.scrollDelta.dy,
+      precision: LadybirdController.wheelPrecise,
+      phase: LadybirdController.scrollPhaseNone,
     );
   }
 
   void _onPointerPanZoomStart(PointerPanZoomStartEvent event) {
     _momentumTicker?.stop();
+    _panGesturePhase = LadybirdController.scrollPhaseOngoing;
     _lastPointerPos = event.localPosition;
     _panZoomVelocityTracker = VelocityTracker.withKind(
       PointerDeviceKind.trackpad,
@@ -539,14 +660,21 @@ class _LadybirdViewState extends State<LadybirdView>
   }
 
   void _onPointerPanZoomUpdate(PointerPanZoomUpdateEvent event) {
+    if (_momentumTicker?.isActive ?? false)
+      _endScrollGesture();
     _momentumTicker?.stop();
+    _panGesturePhase = LadybirdController.scrollPhaseOngoing;
     _lastPointerPos = event.localPosition;
     _panZoomVelocityTracker?.addPosition(event.timeStamp, event.pan);
+
+    _panGesturePhase = LadybirdController.scrollPhaseOngoing;
 
     _dispatchWheelDelta(
       event.localPosition,
       -event.panDelta.dx,
       -event.panDelta.dy,
+      precision: LadybirdController.wheelPrecise,
+      phase: LadybirdController.scrollPhaseOngoing,
     );
   }
 
@@ -554,6 +682,14 @@ class _LadybirdViewState extends State<LadybirdView>
     final Offset velocity =
         _panZoomVelocityTracker?.getVelocity().pixelsPerSecond ?? Offset.zero;
     _panZoomVelocityTracker = null;
+
+    _dispatchWheelDelta(
+      _lastPointerPos,
+      0,
+      0,
+      precision: LadybirdController.wheelPrecise,
+      phase: LadybirdController.scrollPhaseEnded,
+    );
 
     _simulationX = _getPlatformSimulation(velocity.dx, Axis.horizontal);
     _simulationY = _getPlatformSimulation(velocity.dy, Axis.vertical);
@@ -595,22 +731,36 @@ class _LadybirdViewState extends State<LadybirdView>
   void _onTouchPanStart(DragStartDetails details) {
     _focusNode.requestFocus();
     _momentumTicker?.stop();
+    _panGesturePhase = LadybirdController.scrollPhaseOngoing;
     _lastPointerPos = details.localPosition;
   }
 
   void _onTouchPanUpdate(DragUpdateDetails details) {
+    if (_momentumTicker?.isActive ?? false)
+      _endScrollGesture();
     _momentumTicker?.stop();
+    _panGesturePhase = LadybirdController.scrollPhaseOngoing;
     _lastPointerPos = details.localPosition;
 
     _dispatchWheelDelta(
       details.localPosition,
       -details.delta.dx,
       -details.delta.dy,
+      precision: LadybirdController.wheelPrecise,
+      phase: LadybirdController.scrollPhaseOngoing,
     );
   }
 
   void _onTouchPanEnd(DragEndDetails details) {
     final velocity = details.velocity.pixelsPerSecond;
+
+    _dispatchWheelDelta(
+      _lastPointerPos,
+      0,
+      0,
+      precision: LadybirdController.wheelPrecise,
+      phase: LadybirdController.scrollPhaseEnded,
+    );
 
     _simulationX = _getPlatformSimulation(velocity.dx, Axis.horizontal);
     _simulationY = _getPlatformSimulation(velocity.dy, Axis.vertical);
@@ -622,6 +772,20 @@ class _LadybirdViewState extends State<LadybirdView>
     } else {
       _momentumTicker?.stop();
     }
+  }
+
+  // Tells the engine the gesture these steps belonged to has ended, which is
+  // when it springs back a scroller it stretched at an edge.
+  void _endScrollGesture() {
+    if (_panGesturePhase == LadybirdController.scrollPhaseNone) return;
+    _dispatchWheelDelta(
+      _lastPointerPos,
+      0,
+      0,
+      precision: LadybirdController.wheelPrecise,
+      phase: LadybirdController.scrollPhaseEnded,
+    );
+    _panGesturePhase = LadybirdController.scrollPhaseNone;
   }
 
   bool _isPlatformShortcutPressed() {
@@ -700,6 +864,11 @@ class _LadybirdViewState extends State<LadybirdView>
     _focusNode.dispose();
     _stopFrameDiagnostics();
     _frameDiagnosticsNotifier.dispose();
+    _previousFrameReleaseTimer?.cancel();
+    _previousFrame?.dispose();
+    _previousFrame = null;
+    _focusNode.removeListener(_onFocusChanged);
+    widget.controller.setViewFocused(false);
 
     if (_textureId != null) {
       widget.controller.unregisterTexture(_textureId!);
@@ -763,24 +932,46 @@ class _LadybirdViewState extends State<LadybirdView>
 
   @override
   Widget build(BuildContext context) {
-    if (_textureId == null) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
     return SizedBox.expand(
       child: LayoutBuilder(
         builder: (context, constraints) {
           final density = MediaQuery.devicePixelRatioOf(context);
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            _onSizeChanged(constraints.biggest, density);
-          });
+          final contentBox = constraints.biggest;
 
-          final paddedWidth = widget.controller.getSurfaceWidth() / density;
-          final paddedHeight = widget.controller.getSurfaceHeight() / density;
+          // Push the viewport to the engine before this frame is rasterized, so
+          // a view that was laid out at a different size while it was hidden
+          // starts relaying out now instead of one frame from now.
+          _applyViewport(contentBox, density);
+          WidgetsBinding.instance.addPostFrameCallback((_) => _onLayoutSettled());
 
-          // debugPrint(
-          //   "[LibBird] Window.build: constraints=$constraints, density=$density, paddedWidth=$paddedWidth, paddedHeight=$paddedHeight, surfaceWidth=${widget.controller.getSurfaceWidth()}",
-          // );
+          final engineSurface = _engineSurfaceSize(density);
+          final surfaceMatchesBox =
+              engineSurface != null && _sizesMatch(engineSurface, contentBox);
+          final textureId = _textureId;
+
+          if (textureId != null && surfaceMatchesBox && !_hasLiveFrame) {
+            // The engine has presented a frame at the size this view is laid
+            // out at, so the texture now holds a frame that fills the box:
+            // latch the backdrop off. Written in build on purpose -- it only
+            // ever flips false -> true, and it is read below, so no rebuild is
+            // needed to apply it.
+            _hasLiveFrame = true;
+            _previousFrameReleaseTimer?.cancel();
+            _previousFrameReleaseTimer = null;
+          }
+
+          final previousFrame = _previousFrame;
+          final previousFrameCoversView =
+              previousFrame != null && !_hasLiveFrame;
+
+          // A frame the engine presented at some other size would be drawn
+          // clipped or stretched at the wrong size, and an uncreated texture
+          // paints nothing at all, so until the engine catches up the view is
+          // drawn at the size it is actually laid out at and covered by the
+          // frame this tab last presented.
+          final padded = surfaceMatchesBox ? engineSurface : contentBox;
+          final paddedWidth = padded.width;
+          final paddedHeight = padded.height;
 
           return ClipRect(
             child: OverflowBox(
@@ -841,10 +1032,28 @@ class _LadybirdViewState extends State<LadybirdView>
                         child: Stack(
                           fit: StackFit.expand,
                           children: [
-                            Texture(
-                              key: ValueKey(_textureId),
-                              textureId: _textureId!,
-                            ),
+                            if (textureId != null)
+                              Texture(
+                                key: ValueKey(textureId),
+                                textureId: textureId,
+                              ),
+                            // This tab's last presented frame, standing in for
+                            // a texture that has nothing to paint yet or holds
+                            // a frame at another size. Sized to the box it
+                            // covers rather than to the engine's surface, so
+                            // the first thing shown for a tab is its page at
+                            // the size it is actually being laid out at.
+                            if (previousFrameCoversView)
+                              Positioned.fill(
+                                child: RawImage(
+                                  image: previousFrame,
+                                  fit: BoxFit.cover,
+                                  alignment: Alignment.topLeft,
+                                  filterQuality: FilterQuality.low,
+                                ),
+                              ),
+                            if (textureId == null && previousFrame == null)
+                              const Center(child: CircularProgressIndicator()),
                             if (_showFrameDiagnostics)
                               ValueListenableBuilder<
                                 _FrameDiagnosticsSnapshot?

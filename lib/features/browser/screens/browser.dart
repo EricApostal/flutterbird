@@ -10,8 +10,10 @@ import 'package:flutterbird/features/browser/components/desktop/omnibox/omnibox_
 import 'package:flutterbird/features/browser/components/desktop/tabs/tab_bar.dart';
 import 'package:flutterbird/features/browser/components/desktop/tabs/vertical_tab_sidebar.dart';
 import 'package:flutterbird/features/browser/state/fullscreen_mode.dart';
+import 'package:flutterbird/features/browser/state/history_bitmap_cache.dart';
 import 'package:flutterbird/features/browser/state/tab_actions.dart';
 import 'package:flutterbird/features/browser/state/tab_layout_mode.dart';
+import 'package:ladybird/ladybird.dart';
 
 class BrowserWindowScreen extends ConsumerStatefulWidget {
   final int viewId;
@@ -35,6 +37,12 @@ class _BrowserWindowScreenState extends ConsumerState<BrowserWindowScreen> {
   void initState() {
     super.initState();
     HardwareKeyboard.instance.addHandler(_handleKeyEvent);
+
+    // Every tab's view texture is created fresh here (each tab is its own
+    // route), so a switched-to tab starts with a texture that has nothing to
+    // paint: hand libbird this tab's last presented frame to cover that, from
+    // the same snapshots the swipe-back stack is built from.
+    LadybirdView.lastFrameProvider = HistoryBitmapCache.instance.cloneLastFrame;
   }
 
   @override

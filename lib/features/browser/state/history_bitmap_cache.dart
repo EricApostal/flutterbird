@@ -15,6 +15,17 @@ class HistoryBitmapCache {
 
   static const int _maxMemoryEntries = 8;
 
+  // The frames a tab has presented, one per view, newest last -- the most
+  // recent of the per-step snapshots below, which is what a view being shown
+  // again stands on until its own texture has something to paint. Memory only,
+  // and per session on purpose: view ids are reused by a fresh engine, so a
+  // frame from an earlier run must never be shown over a new view. Clones
+  // share pixel data with the per-step entries, so this costs one frame per
+  // tab at most -- the same order as the entries it sits next to.
+  static const int _maxLastFrames = 8;
+  final LinkedHashMap<int, ui.Image> _lastFrameByView =
+      LinkedHashMap<int, ui.Image>();
+
   // Insertion order == LRU order; re-inserting a key on access moves it to
   // the most-recently-used (last) position.
   final LinkedHashMap<_CacheKey, ui.Image> _memory =
@@ -33,6 +44,7 @@ class HistoryBitmapCache {
   Future<void> store(int viewId, int step, ui.Image image) async {
     final key = _CacheKey(viewId, step);
     _rememberInMemory(key, image);
+    _rememberLastFrame(viewId, image);
 
     final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
     if (byteData == null) return;
@@ -40,6 +52,21 @@ class HistoryBitmapCache {
     final file = await _entryFile(viewId, step);
     await file.parent.create(recursive: true);
     await file.writeAsBytes(byteData.buffer.asUint8List(), flush: true);
+  }
+
+  // The last frame `viewId` presented, if it has been captured this session.
+  // Returns a handle the caller owns (the cache may drop its own copy at any
+  // point), so it stays valid for as long as the caller holds it.
+  ui.Image? cloneLastFrame(int viewId) => _lastFrameByView[viewId]?.clone();
+
+  void _rememberLastFrame(int viewId, ui.Image image) {
+    _lastFrameByView.remove(viewId)?.dispose();
+    // A clone, not the image itself: the per-step entry that owns `image`
+    // disposes it when it is evicted, which must not invalidate this frame.
+    _lastFrameByView[viewId] = image.clone();
+    while (_lastFrameByView.length > _maxLastFrames) {
+      _lastFrameByView.remove(_lastFrameByView.keys.first)?.dispose();
+    }
   }
 
   // Returns the cached snapshot for (viewId, step), if any -- from memory if
@@ -85,6 +112,8 @@ class HistoryBitmapCache {
   }
 
   Future<void> evictTab(int viewId) async {
+    _lastFrameByView.remove(viewId)?.dispose();
+
     final staleKeys = _memory.keys
         .where((key) => key.viewId == viewId)
         .toList(growable: false);
