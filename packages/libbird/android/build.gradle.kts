@@ -247,9 +247,6 @@ configure<LibraryExtension> {
                                 "ladybird_plugin",
                                 "engine",
                                 "ladybird",
-                                // AudioServer is what plays page audio: the UI process spawns it as a helper, finds it
-                                // as libAudioServer.so in the native library directory, and its AAudio backend is the
-                                // only thing on Android that opens an output device.
                                 "AudioServer",
                                 "Compositor",
                                 "ImageDecoder",
