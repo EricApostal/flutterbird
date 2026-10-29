@@ -328,7 +328,8 @@ class _LadybirdViewState extends State<LadybirdView>
     // focus until the node says otherwise.
     widget.controller.setViewFocused(true);
 
-    _recreateTexture();
+    _textureId = widget.controller.textureId;
+    if (_textureId == null) _recreateTexture();
   }
 
   void _onFocusChanged() {
@@ -342,38 +343,25 @@ class _LadybirdViewState extends State<LadybirdView>
       _detachControllerListeners(oldWidget.controller);
       _detachTextInputConnection();
 
-      if (_textureId != null) {
-        oldWidget.controller.unregisterTexture(_textureId!);
-        _textureId = null;
-      }
-
+      _textureId = null;
       _stopFrameDiagnostics();
 
       _attachControllerListeners(widget.controller);
       _resolvePreviousFrame(widget.controller);
 
-      _recreateTexture();
+      _textureId = widget.controller.textureId;
+      if (_textureId == null) _recreateTexture();
     }
   }
 
   Future<void> _recreateTexture() async {
-    final int? oldTextureId = _textureId;
-    final int textureId = await widget.controller.createTexture();
+    final textureId = await widget.controller.acquireTexture();
+    if (!mounted) return;
 
-    if (mounted) {
-      setState(() {
-        _textureId = textureId;
-      });
-      _startFrameDiagnosticsIfNeeded();
-      if (oldTextureId != null && oldTextureId != textureId) {
-        widget.controller.unregisterTexture(oldTextureId);
-      }
-    } else {
-      await widget.controller.unregisterTexture(textureId);
-      if (oldTextureId != null) {
-        await widget.controller.unregisterTexture(oldTextureId);
-      }
-    }
+    setState(() {
+      _textureId = textureId;
+    });
+    _startFrameDiagnosticsIfNeeded();
   }
 
   // Pushes this view's viewport to the engine, called from build -- before the
@@ -805,10 +793,6 @@ class _LadybirdViewState extends State<LadybirdView>
     _previousFrame = null;
     _focusNode.removeListener(_onFocusChanged);
     widget.controller.setViewFocused(false);
-
-    if (_textureId != null) {
-      widget.controller.unregisterTexture(_textureId!);
-    }
     super.dispose();
   }
 

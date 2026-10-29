@@ -953,8 +953,28 @@ class LadybirdController {
     _bindings.unmark_text_from_input_method(_viewId);
   }
 
-  Future<int> createTexture() async {
-    return await _channel.invokeMethod('createTexture', _viewId);
+  // One texture per view, kept for as long as the view lives. Creating a
+  // texture is a platform call, so a texture made per mount left the frames
+  // before it resolved with nothing to paint -- which is what showed the window
+  // behind the page on every tab switch.
+  int? _textureId;
+
+  /// The texture this view renders into, if one has been created.
+  int? get textureId => _textureId;
+
+  Future<int> acquireTexture() async {
+    final existing = _textureId;
+    if (existing != null) return existing;
+
+    final created = await _channel.invokeMethod<int>('createTexture', _viewId);
+    if (created == null)
+      throw StateError('the platform returned no texture for view $_viewId');
+    _textureId = created;
+    return created;
+  }
+
+  Future<void> createTexture() async {
+    await acquireTexture();
   }
 
   Future<void> unregisterTexture(int textureId) async {
@@ -1136,6 +1156,11 @@ class LadybirdController {
     _inputCaretRectChangeCallback.close();
     _fullscreenChangeCallback.close();
     _navigationHistoryChangeCallback.close();
+
+    final textureId = _textureId;
+    _textureId = null;
+    if (textureId != null) unregisterTexture(textureId).ignore();
+
     _bindings.destroy_web_view(_viewId);
   }
 }
