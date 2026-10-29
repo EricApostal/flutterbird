@@ -212,68 +212,53 @@ class _BrowserWindowScreenState extends ConsumerState<BrowserWindowScreen> {
                           key: GlobalObjectKey<State<BrowserWindow>>(viewId),
                           viewId: viewId,
                         )
-                      : AnimatedSwitcher(
-                          duration: _kLayoutTransitionDuration,
-                          switchInCurve: Curves.easeOutCubic,
-                          switchOutCurve: Curves.easeOutCubic,
-                          transitionBuilder: (child, animation) {
-                            final slide = Tween<Offset>(
-                              begin: const Offset(0.02, 0),
-                              end: Offset.zero,
-                            ).animate(animation);
-                            return FadeTransition(
-                              opacity: animation,
-                              child: SlideTransition(
-                                position: slide,
-                                child: child,
-                              ),
-                            );
-                          },
-                          child: isVerticalLayout
-                              ? Column(
-                                  key: const ValueKey('vertical-layout'),
-                                  children: [
-                                    BrowserOmniboxBar(
-                                      currentTabController:
-                                          currentTabController,
-                                    ),
-                                    Expanded(
-                                      child: Container(
-                                        color:
-                                            theme.colorScheme.primaryContainer,
-                                        child: ClipRRect(
-                                          borderRadius: .only(
-                                            topLeft: .circular(8),
-                                          ),
-                                          child: BrowserWindow(
-                                            key:
-                                                GlobalObjectKey<
-                                                  State<BrowserWindow>
-                                                >(viewId),
-                                            viewId: viewId,
-                                          ),
+                      // No cross-fade between the two layouts: it faded the
+                      // page itself, so switching the tab layout showed the
+                      // window behind the content for the duration. The sidebar
+                      // still animates; the page is simply always at full
+                      // opacity.
+                      : (isVerticalLayout
+                            ? Column(
+                                key: const ValueKey('vertical-layout'),
+                                children: [
+                                  BrowserOmniboxBar(
+                                    currentTabController: currentTabController,
+                                  ),
+                                  Expanded(
+                                    child: Container(
+                                      color: theme.colorScheme.primaryContainer,
+                                      child: ClipRRect(
+                                        borderRadius: .only(
+                                          topLeft: .circular(8),
+                                        ),
+                                        child: BrowserWindow(
+                                          key:
+                                              GlobalObjectKey<
+                                                State<BrowserWindow>
+                                              >(viewId),
+                                          viewId: viewId,
                                         ),
                                       ),
                                     ),
-                                  ],
-                                )
-                              : Column(
-                                  key: const ValueKey('horizontal-layout'),
-                                  children: [
-                                    SizedBox(height: padding.top),
-                                    BrowserTabBar(currentViewId: viewId),
-                                    Expanded(
-                                      child: BrowserWindow(
-                                        key:
-                                            GlobalObjectKey<
-                                              State<BrowserWindow>
-                                            >(viewId),
-                                        viewId: viewId,
-                                      ),
+                                  ),
+                                ],
+                              )
+                            : Column(
+                                key: const ValueKey('horizontal-layout'),
+                                children: [
+                                  SizedBox(height: padding.top),
+                                  BrowserTabBar(currentViewId: viewId),
+                                  Expanded(
+                                    child: BrowserWindow(
+                                      key:
+                                          GlobalObjectKey<State<BrowserWindow>>(
+                                            viewId,
+                                          ),
+                                      viewId: viewId,
                                     ),
-                                  ],
-                                ),
-                        ),
+                                  ),
+                                ],
+                              )),
                 ),
               ],
             ),
