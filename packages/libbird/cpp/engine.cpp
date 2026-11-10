@@ -1,6 +1,7 @@
 #include "engine.h"
 #include "LibWebView/Application.h"
 #include <cstdio>
+#include <cerrno>
 #include <memory>
 #include <mutex>
 #include <stdint.h>
@@ -29,6 +30,7 @@
 
 #include <AK/Base64.h>
 #include <AK/BitCast.h>
+#include <AK/Error.h>
 #include <AK/HashMap.h>
 #include <AK/JsonArray.h>
 #include <AK/JsonObject.h>
@@ -525,6 +527,25 @@ public:
     return true;
   }
 
+  // Ladybird 2026-11 stopped keeping one Menu per kind on the view: each
+  // request builds a fresh menu and hands it to the view through this hook
+  // (the old page_context_menu()/on_activation pair is gone). The Flutter
+  // side still keys its presentation off the menu kind, and the only stable
+  // kind marker left is the menu title.
+  virtual void show_context_menu(WebView::Menu &menu,
+                                 Gfx::IntPoint widget_position) override {
+    auto const title = menu.title();
+    StringView type = "page"sv;
+    if (title == "Link Context Menu"sv ||
+        title == "Selected Text Link Context Menu"sv)
+      type = "link"sv;
+    else if (title == "Image Context Menu"sv)
+      type = "image"sv;
+    else if (title == "Media Context Menu"sv)
+      type = "media"sv;
+    dispatch_context_menu_request(type, widget_position, menu);
+  }
+
   // Pushes the engine's viewport/window geometry for the currently-requested
   // render size. Ladybird 2026-10 moved viewport pushes behind
   // ViewImplementation::handle_resize()/set_window_size(); the device pixel
@@ -828,19 +849,6 @@ public:
       }
       if (callback)
         callback(m_view_id, false);
-    };
-
-    page_context_menu().on_activation = [this](Gfx::IntPoint position) {
-      dispatch_context_menu_request("page"sv, position, page_context_menu());
-    };
-    link_context_menu().on_activation = [this](Gfx::IntPoint position) {
-      dispatch_context_menu_request("link"sv, position, link_context_menu());
-    };
-    image_context_menu().on_activation = [this](Gfx::IntPoint position) {
-      dispatch_context_menu_request("image"sv, position, image_context_menu());
-    };
-    media_context_menu().on_activation = [this](Gfx::IntPoint position) {
-      dispatch_context_menu_request("media"sv, position, media_context_menu());
     };
   }
 
@@ -1226,17 +1234,21 @@ public:
     return *it->second;
   }
 
-  virtual Optional<ByteString>
+  // Ladybird 2026-11 moved download-path prompting behind a promise so a
+  // frontend can show an async dialog. FlutterBird's callback is synchronous,
+  // so settle the promise before returning it.
+  virtual NonnullRefPtr<Core::Promise<ByteString>>
   ask_user_for_download_path(ByteString const &file) const override {
-    if (g_ask_user_for_download_path_callback) {
-      char *result = g_ask_user_for_download_path_callback(file.characters());
-      if (result) {
-        ByteString path(result);
-        free(result);
-        return path;
-      }
-    }
-    return {};
+    if (!g_ask_user_for_download_path_callback)
+      return Core::Promise<ByteString>::rejected(Error::from_errno(ECANCELED));
+
+    char *result = g_ask_user_for_download_path_callback(file.characters());
+    if (!result)
+      return Core::Promise<ByteString>::rejected(Error::from_errno(ECANCELED));
+
+    ByteString path(result);
+    free(result);
+    return Core::Promise<ByteString>::resolved(move(path));
   }
 
   virtual void display_download_confirmation_dialog(
