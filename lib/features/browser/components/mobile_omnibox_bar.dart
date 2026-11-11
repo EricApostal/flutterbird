@@ -24,6 +24,7 @@ enum _ToolbarMenuAction {
   toggleBookmark,
   openBookmark,
   toggleTabLayout,
+  settings,
 }
 
 class _ToolbarMenuSelection {
@@ -51,6 +52,9 @@ class _MobileOmniboxBarState extends ConsumerState<MobileOmniboxBar> {
   final GlobalKey _toolbarMenuButtonKey = GlobalKey();
   LadybirdController? _trackedTabController;
   bool _suppressTrackedTextSync = false;
+  // Set when the user edits the omnibox, cleared when the text is applied
+  // programmatically. A page load must not overwrite what the user is typing.
+  bool _omniboxTextDirty = false;
   final Set<int> _hideDefaultSearchHomeForTabs = <int>{};
 
   @override
@@ -87,6 +91,7 @@ class _MobileOmniboxBarState extends ConsumerState<MobileOmniboxBar> {
   void _syncTrackedTabController(LadybirdController? controller) {
     if (_trackedTabController == controller) return;
 
+    _omniboxTextDirty = false;
     _trackedTabController?.urlNotifier.removeListener(_onTrackedUrlChanged);
     _trackedTabController = controller;
 
@@ -159,6 +164,7 @@ class _MobileOmniboxBarState extends ConsumerState<MobileOmniboxBar> {
       selection: TextSelection.collapsed(offset: value.length),
     );
     _suppressTrackedTextSync = false;
+    _omniboxTextDirty = false;
   }
 
   void _syncOmniboxTextFromControllerUrl(LadybirdController controller) {
@@ -166,8 +172,9 @@ class _MobileOmniboxBarState extends ConsumerState<MobileOmniboxBar> {
     final currentUrl = controller.urlNotifier.value;
     final shouldHideDefaultSearchHome =
         _hideDefaultSearchHomeForTabs.contains(controller.viewId) &&
-        omnibox.isDefaultSearchHome(controller, currentUrl);
+        omnibox.isUntouchedNewTabUrl(controller, currentUrl);
     final displayText = shouldHideDefaultSearchHome ? '' : currentUrl;
+    if (_omniboxTextDirty && _omniboxFocusNode.hasFocus) return;
     _setOmniboxText(displayText);
   }
 
@@ -191,13 +198,14 @@ class _MobileOmniboxBarState extends ConsumerState<MobileOmniboxBar> {
     if (currentUrl.trim().isEmpty) return;
 
     final omnibox = ref.read(browserOmniboxProvider.notifier);
-    if (!omnibox.isDefaultSearchHome(controller, currentUrl)) {
+    if (!omnibox.isUntouchedNewTabUrl(controller, currentUrl)) {
       _hideDefaultSearchHomeForTabs.remove(controller.viewId);
     }
   }
 
   void _onTrackedTextChanged() {
     if (_suppressTrackedTextSync) return;
+    _omniboxTextDirty = true;
     final controller = _trackedTabController;
     if (controller == null) return;
     _scheduleSyncEngineOmnibox(
@@ -397,6 +405,8 @@ class _MobileOmniboxBarState extends ConsumerState<MobileOmniboxBar> {
             ? 'Switch to Horizontal Tabs'
             : 'Switch to Vertical Tabs',
       ),
+      const BrowserContextMenuItem.separator(),
+      actionItem(action: _ToolbarMenuAction.settings, label: 'Settings'),
     ];
   }
 
@@ -481,6 +491,12 @@ class _MobileOmniboxBarState extends ConsumerState<MobileOmniboxBar> {
         break;
       case _ToolbarMenuAction.toggleTabLayout:
         ref.read(browserTabLayoutModeControllerProvider.notifier).toggle();
+        break;
+      case _ToolbarMenuAction.settings:
+        _omniboxFocusNode.unfocus();
+        _hideDefaultSearchHomeForTabs.remove(currentTabController.viewId);
+        _setOmniboxText('about:settings');
+        currentTabController.navigate('about:settings');
         break;
     }
   }
@@ -822,6 +838,8 @@ class _MobileOmniboxBarState extends ConsumerState<MobileOmniboxBar> {
                                                           horizontal: 10,
                                                           vertical: 12,
                                                         ),
+                                                    hintText:
+                                                        'Search ${omniboxController.searchEngineLabel(currentTabController)} or type a URL',
                                                     hintStyle: theme
                                                         .textTheme
                                                         .bodyMedium

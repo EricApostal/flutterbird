@@ -98,6 +98,8 @@ class OmniboxSearchField extends ConsumerWidget {
                               horizontal: 10,
                               vertical: 12,
                             ),
+                            hintText:
+                                'Search ${omniboxController.searchEngineLabel(currentTabController)} or type a URL',
                             hintStyle: theme.textTheme.bodyMedium?.copyWith(
                               color: theme.colorScheme.onSurface.withAlpha(150),
                             ),
