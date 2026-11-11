@@ -395,7 +395,12 @@ class _LadybirdViewState extends State<LadybirdView>
       widget.controller.hasNavigatedInitial = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         final currentUrl = widget.controller.urlNotifier.value.trim();
-        if (widget.controller.hasStartedNavigation || currentUrl.isNotEmpty) {
+        // A fresh engine tab reports its initial empty document as about:blank
+        // (new_tab_page_url's default). That is still an untouched tab, so the
+        // first navigation below replaces it with the configured home page.
+        final isUntouchedBlankTab =
+            currentUrl.isEmpty || currentUrl == 'about:blank';
+        if (widget.controller.hasStartedNavigation || !isUntouchedBlankTab) {
           return;
         }
         widget.controller.navigate(
