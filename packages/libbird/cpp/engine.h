@@ -174,15 +174,17 @@ LADYBIRD_API bool can_go_back(int view_id);
 LADYBIRD_API bool can_go_forward(int view_id);
 LADYBIRD_API char *get_view_url(int view_id);
 
-// Returns a JSON array string with bookmark items from
-// LibWebView::BookmarkStore. Caller owns returned memory and must free it.
-LADYBIRD_API char *get_bookmarks_json();
+// Returns the profile's config directory, where embedder-owned per-profile
+// files live. Caller owns returned memory and must free it.
+LADYBIRD_API char *get_profile_config_directory();
 
-// Toggles bookmark status for the current URL in the target view.
-LADYBIRD_API void toggle_bookmark_for_view(int view_id);
+// Returns the current page's favicon hash, or nullptr when it has none.
+// Caller owns returned memory and must free it.
+LADYBIRD_API char *get_view_favicon_hash(int view_id);
 
-// Returns whether the current URL in the target view is bookmarked.
-LADYBIRD_API bool is_current_view_bookmarked(int view_id);
+// Returns the PNG of the favicon with this hash, base64-encoded, or nullptr
+// when the engine has none. Caller owns returned memory and must free it.
+LADYBIRD_API char *get_favicon_png_base64(const char *favicon_hash);
 
 // Returns a JSON array string of history autocomplete entries. Suggestions
 // always come from the non-private history store, matching

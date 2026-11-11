@@ -216,7 +216,7 @@ class _MobileOmniboxBarState extends ConsumerState<MobileOmniboxBar> {
       if (!mounted || _trackedTabController != controller) return;
       final omnibox = ref.read(browserOmniboxProvider.notifier);
       if (refreshBookmarks) {
-        omnibox.refreshBookmarksFromEngine(controller);
+        omnibox.refreshBookmarks(controller);
       }
       if (refreshHistory) {
         omnibox.refreshHistorySuggestionsFromEngine(
@@ -301,7 +301,7 @@ class _MobileOmniboxBarState extends ConsumerState<MobileOmniboxBar> {
   List<BrowserContextMenuItem> _buildToolbarContextMenuItems(
     BrowserOmnibox omnibox,
     LadybirdController currentTabController,
-    List<BrowserBookmark> bookmarks,
+    List<BirdBookmark> bookmarks,
   ) {
     BrowserContextMenuItem actionItem({
       required _ToolbarMenuAction action,
@@ -319,7 +319,9 @@ class _MobileOmniboxBarState extends ConsumerState<MobileOmniboxBar> {
       currentTabController.urlNotifier.value,
     );
     final hasUrl = normalizedUrl.isNotEmpty;
-    final isBookmarked = currentTabController.isCurrentViewBookmarked();
+    final isBookmarked = omnibox.isBookmarked(
+      currentTabController.urlNotifier.value,
+    );
     final canGoBack = currentTabController.canGoBack();
     final canGoForward = currentTabController.canGoForward();
 
@@ -401,7 +403,7 @@ class _MobileOmniboxBarState extends ConsumerState<MobileOmniboxBar> {
   Future<void> _showToolbarContextMenu(
     BrowserOmnibox omnibox,
     LadybirdController currentTabController,
-    List<BrowserBookmark> bookmarks,
+    List<BirdBookmark> bookmarks,
   ) async {
     final buttonContext = _toolbarMenuButtonKey.currentContext;
     if (buttonContext == null) return;
@@ -485,7 +487,7 @@ class _MobileOmniboxBarState extends ConsumerState<MobileOmniboxBar> {
 
   Widget _buildBookmarksToolbar(
     ThemeData theme,
-    List<BrowserBookmark> bookmarks,
+    List<BirdBookmark> bookmarks,
     LadybirdController currentTabController,
   ) {
     if (bookmarks.isEmpty) {

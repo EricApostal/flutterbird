@@ -174,6 +174,7 @@ find_package(OpenSSL REQUIRED)
 target_link_libraries(engine PRIVATE
     AK
     LibCore
+    LibDatabase
     LibFileSystem
     LibGfx
     LibImageDecoderClient

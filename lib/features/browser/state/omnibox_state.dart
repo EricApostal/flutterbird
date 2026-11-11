@@ -1,19 +1,12 @@
 import 'dart:convert';
 
+import 'package:bird_core/bird_core.dart';
 import 'package:ladybird/ladybird.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 part 'omnibox_state.g.dart';
 
 enum OmniboxSuggestionType { bookmark, history, searchQuery, searchAction }
-
-class BrowserBookmark {
-  final String url;
-  final String title;
-  final String? favicon;
-
-  const BrowserBookmark({required this.url, required this.title, this.favicon});
-}
 
 class OmniboxSuggestion {
   final OmniboxSuggestionType type;
@@ -32,7 +25,7 @@ class OmniboxSuggestion {
 }
 
 class BrowserOmniboxState {
-  final List<BrowserBookmark> bookmarks;
+  final List<BirdBookmark> bookmarks;
   final List<OmniboxSuggestion> historySuggestions;
 
   const BrowserOmniboxState({
@@ -41,7 +34,7 @@ class BrowserOmniboxState {
   });
 
   BrowserOmniboxState copyWith({
-    List<BrowserBookmark>? bookmarks,
+    List<BirdBookmark>? bookmarks,
     List<OmniboxSuggestion>? historySuggestions,
   }) {
     return BrowserOmniboxState(
@@ -120,9 +113,13 @@ class BrowserOmnibox extends _$BrowserOmnibox {
     return state.bookmarks.any((bookmark) => bookmark.url == normalized);
   }
 
-  void refreshBookmarksFromEngine(LadybirdController controller) {
-    final rawJson = controller.getBookmarksJson();
-    final bookmarks = _parseBookmarksJson(rawJson);
+  void refreshBookmarks(LadybirdController controller) {
+    final bookmarks = ref
+        .read(bookmarkStoreProvider)
+        .bookmarks(
+          directory: controller.getProfileConfigDirectory(),
+          faviconPng: controller.getFaviconPngBase64,
+        );
     state = state.copyWith(bookmarks: bookmarks);
   }
 
@@ -136,8 +133,15 @@ class BrowserOmnibox extends _$BrowserOmnibox {
   }
 
   void toggleBookmarkForCurrentView(LadybirdController controller) {
-    controller.toggleBookmarkForCurrentView();
-    refreshBookmarksFromEngine(controller);
+    ref
+        .read(bookmarkStoreProvider)
+        .toggle(
+          directory: controller.getProfileConfigDirectory(),
+          url: controller.urlNotifier.value,
+          title: controller.titleNotifier.value,
+          faviconHash: controller.getViewFaviconHash(),
+        );
+    refreshBookmarks(controller);
   }
 
   String? _readFavicon(Map<String, dynamic> item) {
@@ -155,52 +159,6 @@ class BrowserOmnibox extends _$BrowserOmnibox {
     }
 
     return null;
-  }
-
-  List<BrowserBookmark> _parseBookmarksJson(String rawJson) {
-    if (rawJson.trim().isEmpty) return const [];
-
-    final decoded = jsonDecode(rawJson);
-    if (decoded is! List<dynamic>) return const [];
-
-    final bookmarks = <BrowserBookmark>[];
-
-    void collect(dynamic item) {
-      if (item is! Map<String, dynamic>) return;
-      final type = item['type'];
-      if (type == 'bookmark') {
-        final rawUrl = item['url'];
-        if (rawUrl is! String || rawUrl.trim().isEmpty) return;
-        final rawTitle = item['title'];
-        final title = (rawTitle is String && rawTitle.trim().isNotEmpty)
-            ? rawTitle.trim()
-            : rawUrl;
-        bookmarks.add(
-          BrowserBookmark(
-            url: rawUrl,
-            title: title,
-            favicon: _readFavicon(item),
-          ),
-        );
-        return;
-      }
-
-      if (type == 'folder') {
-        final children = item['children'];
-        if (children is! List<dynamic>) return;
-        for (final child in children) {
-          if (child is Map<String, dynamic>) collect(child);
-        }
-      }
-    }
-
-    for (final item in decoded) {
-      if (item is Map<String, dynamic>) {
-        collect(item);
-      }
-    }
-
-    return bookmarks;
   }
 
   List<OmniboxSuggestion> _parseHistorySuggestionsJson(String rawJson) {

@@ -162,6 +162,14 @@ Pod::Spec.new do |s|
         if [ -d "${BUNDLE_DIR}/res" ]; then
           cp -af "${BUNDLE_DIR}/res/." "${DEST_RES_DIR}/"
         fi
+
+        # Ladybird's processes map ICU's data file before main(); helpers look
+        # for it as ../Resources/icu relative to their own directory. Without it
+        # WebContent (and the rest) abort before they can load a page.
+        if [ -d "${BUNDLE_DIR}/icu" ]; then
+          mkdir -p "${DEST_RES_DIR}/icu"
+          cp -af "${BUNDLE_DIR}/icu/." "${DEST_RES_DIR}/icu/"
+        fi
       SCRIPT
     }
   ]

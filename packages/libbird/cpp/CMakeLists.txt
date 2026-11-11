@@ -143,6 +143,7 @@ target_link_libraries(engine PRIVATE
     lagom-url
     lagom-ipc
     lagom-core
+    lagom-database
     lagom-ak  
     lagom-gfx
     skia
@@ -172,12 +173,27 @@ if (APPLE)
     # comes out of the Ladybird build tree: hashing it means a rebuilt Ladybird
     # (a new pinned revision, an upstream change) reaches the app even when no
     # line of engine.cpp moved and the engine therefore never relinks.
+    # ICU ships without its data, in one file every Ladybird process maps before
+    # main(). Upstream puts it in its app's Resources/icu; the helpers the engine
+    # spawns look for it as ../Resources/icu relative to their own directory, so
+    # it has to travel with the bundle under the same name.
+    set(LADYBIRD_ICU_SOURCE "${LADYBIRD_OUT_DIR}/bin/Ladybird.app/Contents/Resources/icu")
+
     file(GLOB LADYBIRD_BUNDLE_INPUTS
         "${LADYBIRD_OUT_DIR}/lib/*"
         "${LADYBIRD_OUT_DIR}/vcpkg_installed/${VCPKG_TRIPLET}/lib/*"
         "${LADYBIRD_OUT_DIR}/bin/Ladybird.app/Contents/MacOS/*"
+        "${LADYBIRD_OUT_DIR}/bin/Ladybird.app/Contents/Resources/icu/*"
         "${LADYBIRD_DIR}/Base/res/*"
     )
+
+    set(LADYBIRD_BUNDLE_ICU_COMMANDS)
+    if (EXISTS "${LADYBIRD_ICU_SOURCE}")
+        set(LADYBIRD_BUNDLE_ICU_COMMANDS
+            COMMAND ${CMAKE_COMMAND} -E make_directory "${BUNDLE_DIR}/icu"
+            COMMAND ${CMAKE_COMMAND} -E copy_directory "${LADYBIRD_ICU_SOURCE}" "${BUNDLE_DIR}/icu"
+        )
+    endif()
 
     add_custom_command(
         OUTPUT "${BUNDLE_STAMP}"
@@ -193,6 +209,7 @@ if (APPLE)
         # enumerating them here silently did not.
         COMMAND ${CMAKE_COMMAND} -E copy_directory "${LADYBIRD_OUT_DIR}/bin/Ladybird.app/Contents/MacOS" "${BUNDLE_DIR}/binaries"
         COMMAND ${CMAKE_COMMAND} -E copy_directory "${LADYBIRD_DIR}/Base/res" "${BUNDLE_DIR}/res"
+        ${LADYBIRD_BUNDLE_ICU_COMMANDS}
         COMMAND ${CMAKE_COMMAND} -E touch "${BUNDLE_STAMP}"
         DEPENDS ${LADYBIRD_BUNDLE_INPUTS}
         COMMENT "Refreshing LadybirdBundle from the Ladybird build tree"

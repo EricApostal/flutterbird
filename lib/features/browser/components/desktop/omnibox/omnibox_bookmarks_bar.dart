@@ -1,9 +1,10 @@
+import 'package:bird_core/bird_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutterbird/features/browser/components/desktop/omnibox/favicon_or_icon.dart';
 import 'package:flutterbird/features/browser/state/omnibox_state.dart';
 
 class OmniboxBookmarksBar extends StatelessWidget {
-  final List<BrowserBookmark> bookmarks;
+  final List<BirdBookmark> bookmarks;
   final ValueChanged<String> onBookmarkTap;
 
   const OmniboxBookmarksBar({
@@ -37,7 +38,7 @@ class OmniboxBookmarksBar extends StatelessWidget {
 }
 
 class _BookmarkChip extends StatelessWidget {
-  final BrowserBookmark bookmark;
+  final BirdBookmark bookmark;
   final VoidCallback onTap;
 
   const _BookmarkChip({required this.bookmark, required this.onTap});
@@ -55,9 +56,7 @@ class _BookmarkChip extends StatelessWidget {
           minimumSize: const Size(0, 28),
           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(4),
-          ),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
           side: BorderSide(width: 0, color: Colors.transparent),
         ),
         child: Row(

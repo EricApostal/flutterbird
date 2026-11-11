@@ -640,20 +640,39 @@ class LadybirdController {
     return _bindings.is_tab_loading(_viewId);
   }
 
-  String getBookmarksJson() {
-    final ptr = _bindings.get_bookmarks_json();
-    if (ptr == ffi.nullptr) return '[]';
-    final json = ptr.cast<Utf8>().toDartString();
+  String? _profileConfigDirectory;
+
+  /// The profile's config directory, where per-profile files such as the
+  /// embedder's bookmarks live. The engine's profile does not move, so this is
+  /// read once.
+  String? getProfileConfigDirectory() {
+    if (_profileConfigDirectory != null) return _profileConfigDirectory;
+    final ptr = _bindings.get_profile_config_directory();
+    if (ptr == ffi.nullptr) return null;
+    _profileConfigDirectory = ptr.cast<Utf8>().toDartString();
     malloc.free(ptr);
-    return json;
+    return _profileConfigDirectory;
   }
 
-  void toggleBookmarkForCurrentView() {
-    _bindings.toggle_bookmark_for_view(_viewId);
+  /// The current page's favicon hash, or null when it has none.
+  String? getViewFaviconHash() {
+    final ptr = _bindings.get_view_favicon_hash(_viewId);
+    if (ptr == ffi.nullptr) return null;
+    final hash = ptr.cast<Utf8>().toDartString();
+    malloc.free(ptr);
+    return hash;
   }
 
-  bool isCurrentViewBookmarked() {
-    return _bindings.is_current_view_bookmarked(_viewId);
+  /// The PNG of a favicon the engine has stored, base64-encoded, or null when
+  /// it has none.
+  String? getFaviconPngBase64(String hash) {
+    final hashPtr = hash.toNativeUtf8();
+    final ptr = _bindings.get_favicon_png_base64(hashPtr.cast<ffi.Char>());
+    malloc.free(hashPtr);
+    if (ptr == ffi.nullptr) return null;
+    final encoded = ptr.cast<Utf8>().toDartString();
+    malloc.free(ptr);
+    return encoded;
   }
 
   String getHistoryAutocompleteJson(String query, {int limit = 8}) {

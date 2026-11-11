@@ -654,38 +654,42 @@ class LadybirdBindings {
   late final _get_view_url = _get_view_urlPtr
       .asFunction<ffi.Pointer<ffi.Char> Function(int)>(isLeaf: true);
 
-  ffi.Pointer<ffi.Char> get_bookmarks_json() {
-    return _get_bookmarks_json();
+  ffi.Pointer<ffi.Char> get_profile_config_directory() {
+    return _get_profile_config_directory();
   }
 
-  late final _get_bookmarks_jsonPtr =
+  late final _get_profile_config_directoryPtr =
       _lookup<ffi.NativeFunction<ffi.Pointer<ffi.Char> Function()>>(
-        'get_bookmarks_json',
+        'get_profile_config_directory',
       );
-  late final _get_bookmarks_json = _get_bookmarks_jsonPtr
-      .asFunction<ffi.Pointer<ffi.Char> Function()>(isLeaf: true);
+  late final _get_profile_config_directory = _get_profile_config_directoryPtr
+      .asFunction<ffi.Pointer<ffi.Char> Function()>();
 
-  void toggle_bookmark_for_view(int view_id) {
-    return _toggle_bookmark_for_view(view_id);
+  ffi.Pointer<ffi.Char> get_view_favicon_hash(int view_id) {
+    return _get_view_favicon_hash(view_id);
   }
 
-  late final _toggle_bookmark_for_viewPtr =
-      _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Int)>>(
-        'toggle_bookmark_for_view',
+  late final _get_view_favicon_hashPtr =
+      _lookup<ffi.NativeFunction<ffi.Pointer<ffi.Char> Function(ffi.Int)>>(
+        'get_view_favicon_hash',
       );
-  late final _toggle_bookmark_for_view = _toggle_bookmark_for_viewPtr
-      .asFunction<void Function(int)>();
+  late final _get_view_favicon_hash = _get_view_favicon_hashPtr
+      .asFunction<ffi.Pointer<ffi.Char> Function(int)>();
 
-  bool is_current_view_bookmarked(int view_id) {
-    return _is_current_view_bookmarked(view_id);
+  ffi.Pointer<ffi.Char> get_favicon_png_base64(
+    ffi.Pointer<ffi.Char> favicon_hash,
+  ) {
+    return _get_favicon_png_base64(favicon_hash);
   }
 
-  late final _is_current_view_bookmarkedPtr =
-      _lookup<ffi.NativeFunction<ffi.Bool Function(ffi.Int)>>(
-        'is_current_view_bookmarked',
-      );
-  late final _is_current_view_bookmarked = _is_current_view_bookmarkedPtr
-      .asFunction<bool Function(int)>(isLeaf: true);
+  late final _get_favicon_png_base64Ptr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.Pointer<ffi.Char> Function(ffi.Pointer<ffi.Char>)
+        >
+      >('get_favicon_png_base64');
+  late final _get_favicon_png_base64 = _get_favicon_png_base64Ptr
+      .asFunction<ffi.Pointer<ffi.Char> Function(ffi.Pointer<ffi.Char>)>();
 
   ffi.Pointer<ffi.Char> history_autocomplete_json(
     int view_id,

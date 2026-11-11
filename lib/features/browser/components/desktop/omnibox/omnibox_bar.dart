@@ -228,7 +228,7 @@ class _BrowserOmniboxBarState extends ConsumerState<BrowserOmniboxBar> {
       if (!mounted || _trackedTabController != controller) return;
       final omnibox = ref.read(browserOmniboxProvider.notifier);
       if (refreshBookmarks) {
-        omnibox.refreshBookmarksFromEngine(controller);
+        omnibox.refreshBookmarks(controller);
       }
       if (refreshHistory) {
         omnibox.refreshHistorySuggestionsFromEngine(
@@ -298,7 +298,7 @@ class _BrowserOmniboxBarState extends ConsumerState<BrowserOmniboxBar> {
   List<BrowserContextMenuItem> _buildToolbarContextMenuItems(
     BrowserOmnibox omnibox,
     LadybirdController currentTabController,
-    List<BrowserBookmark> bookmarks,
+    List<BirdBookmark> bookmarks,
   ) {
     BrowserContextMenuItem actionItem({
       required _ToolbarMenuAction action,
@@ -316,7 +316,9 @@ class _BrowserOmniboxBarState extends ConsumerState<BrowserOmniboxBar> {
       currentTabController.urlNotifier.value,
     );
     final hasUrl = normalizedUrl.isNotEmpty;
-    final isBookmarked = currentTabController.isCurrentViewBookmarked();
+    final isBookmarked = omnibox.isBookmarked(
+      currentTabController.urlNotifier.value,
+    );
     final canGoBack = currentTabController.canGoBack();
     final canGoForward = currentTabController.canGoForward();
 
@@ -412,7 +414,7 @@ class _BrowserOmniboxBarState extends ConsumerState<BrowserOmniboxBar> {
   Future<void> _showToolbarContextMenu(
     BrowserOmnibox omnibox,
     LadybirdController currentTabController,
-    List<BrowserBookmark> bookmarks,
+    List<BirdBookmark> bookmarks,
   ) async {
     final buttonContext = _toolbarMenuButtonKey.currentContext;
     if (buttonContext == null) return;
@@ -601,8 +603,7 @@ class _BrowserOmniboxBarState extends ConsumerState<BrowserOmniboxBar> {
                   valueListenable: currentTabController.urlNotifier,
                   builder: (context, url, child) {
                     final normalized = omniboxController.normalizeUrl(url);
-                    final isBookmarked = currentTabController
-                        .isCurrentViewBookmarked();
+                    final isBookmarked = omniboxController.isBookmarked(url);
                     return IconButton(
                       icon: Icon(
                         isBookmarked ? Icons.bookmark : Icons.bookmark_border,

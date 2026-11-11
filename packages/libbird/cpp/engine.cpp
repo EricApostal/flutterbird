@@ -23,7 +23,7 @@
 
 #ifdef __APPLE__
 // For opening downloaded files with their default handler / revealing them in
-// Finder (see FlutterApplication::open_download).
+// Finder (see open_download / show_download_in_folder).
 #include <crt_externs.h>
 #include <spawn.h>
 #endif
@@ -37,6 +37,7 @@
 #include <AK/LexicalPath.h>
 #include <AK/OwnPtr.h>
 #include <AK/StringView.h>
+#include <AK/Time.h>
 #include <LibCore/Environment.h>
 #include <LibCore/EventLoop.h>
 #include <LibCore/Promise.h>
@@ -58,16 +59,20 @@
 #include <LibWebCommon/Page/ViewportIsFullscreen.h>
 #include <LibWebCommon/PixelUnits.h>
 #include <LibWebCommon/WebView/Utilities.h>
+#include <LibDatabase/Database.h>
+#include <LibGfx/ImageFormats/PNGWriter.h>
+#include <LibWebCommon/Clipboard/SystemClipboard.h>
 #include <LibWebView/Application.h>
-#include <LibWebView/BookmarkStore.h>
 #include <LibWebView/BrowsingSession.h>
+#include <LibWebView/ContextMenuRequest.h>
+#include <LibWebView/FaviconStore.h>
 #include <LibWebView/FileDownloader.h>
 #include <LibWebView/HistoryDebug.h>
 #include <LibWebView/HistoryStore.h>
-#include <LibWebView/Menu.h>
 #include <LibWebView/Options.h>
 #include <LibWebView/SearchEngine.h>
 #include <LibWebView/Settings.h>
+#include <LibWebView/URL.h>
 #include <LibWebView/ViewImplementation.h>
 #include <LibWebView/WebContentPage.h>
 #ifndef __APPLE__
@@ -85,6 +90,58 @@ int g_active_view_id = -1;
 // every entry point that touches the engine checks it, so a failed or absent
 // initialization degrades to no-ops instead of a null-application crash.
 static bool g_engine_ready = false;
+
+// Upstream 2026-11 moved the history and favicon stores out of LibWebView and
+// into the browser's UI, which now owns them and records visits, titles and
+// favicons itself. The engine is that UI for FlutterBird, so it owns the same
+// stores here; the autocomplete ABI and the bookmark store (in bird_core, which
+// reads these stores through the favicon lookup below) use them.
+static AK::OwnPtr<WebView::FaviconStore> g_favicon_store;
+static AK::OwnPtr<WebView::HistoryStore> g_history_store;
+
+static void create_engine_stores() {
+  auto const &paths = WebView::Application::profile().paths();
+
+  if (WebView::Application::browser_options().disable_sql_database !=
+      WebView::DisableSQLDatabase::No) {
+    g_favicon_store = WebView::FaviconStore::create();
+    g_history_store = WebView::HistoryStore::create_disabled();
+    return;
+  }
+
+  // The History database is shared by the favicon and history stores, so
+  // preflight both before applying either migration: a database written by a
+  // newer build must be left untouched, as the Qt frontend does.
+  auto created = [&]() -> ErrorOr<bool> {
+    auto database = TRY(Database::Database::create(paths.data, "History"sv));
+    auto favicons_outcome = TRY(WebView::FaviconStore::migrate_schema(
+        database, Database::MigrationMode::CheckOnly));
+    auto history_outcome = TRY(WebView::HistoryStore::migrate_schema(
+        database, Database::MigrationMode::CheckOnly));
+    if (favicons_outcome != Database::MigrationOutcome::Success ||
+        history_outcome != Database::MigrationOutcome::Success)
+      return false;
+    if (TRY(WebView::FaviconStore::migrate_schema(database)) !=
+        Database::MigrationOutcome::Success)
+      return false;
+    if (TRY(WebView::HistoryStore::migrate_schema(database)) !=
+        Database::MigrationOutcome::Success)
+      return false;
+
+    g_favicon_store = TRY(WebView::FaviconStore::create(database));
+    g_history_store = TRY(WebView::HistoryStore::create(database));
+    return true;
+  }();
+
+  if (created.is_error() || !created.value()) {
+    if (created.is_error())
+      std::fprintf(stderr,
+                   "[Ladybird] Unable to open the History database: %d\n",
+                   created.error().code());
+    g_favicon_store = WebView::FaviconStore::create();
+    g_history_store = WebView::HistoryStore::create(*g_favicon_store);
+  }
+}
 
 AskUserForDownloadPathCallback g_ask_user_for_download_path_callback = nullptr;
 DisplayDownloadConfirmationDialogCallback
@@ -240,6 +297,19 @@ public:
   int m_view_id;
   double m_zoom{1.0};
 
+  // The hash the engine's stores know the current page's favicon by. Guarded by
+  // m_info_mutex because the C ABI reads it from Flutter's thread.
+  Optional<String> m_favicon_hash;
+
+  // The link the page is making to the selected text, for the context menu's
+  // "Copy Link to Highlight".
+  Optional<URL::URL> m_link_to_highlight;
+
+  Optional<String> favicon_hash() {
+    std::lock_guard lock(m_info_mutex);
+    return m_favicon_hash;
+  }
+
   // Viewport dimensions — updated by resize() so viewport_size() always
   // returns the currently-requested render size, not the last painted size.
   int m_viewport_width{800};
@@ -272,7 +342,14 @@ public:
       nullptr;
 
   std::mutex m_context_menu_mutex;
-  HashMap<int, WeakPtr<WebView::Action>> m_context_menu_actions;
+
+  // What one context menu item does; the token Flutter hands back names it.
+  struct ContextMenuAction {
+    bool enabled { true };
+    Function<void()> activate;
+  };
+
+  HashMap<int, ContextMenuAction> m_context_menu_actions;
   int m_next_context_menu_action_token{1};
 
   static int to_cursor_type_for_flutter(Gfx::Cursor const &cursor) {
@@ -285,10 +362,10 @@ public:
         });
   }
 
-  int register_context_menu_action(
-      NonnullRefPtr<WebView::Action> const &action) {
+  // Called with m_context_menu_mutex held.
+  int register_context_menu_action(ContextMenuAction action) {
     int token = m_next_context_menu_action_token++;
-    m_context_menu_actions.set(token, action->make_weak_ptr());
+    m_context_menu_actions.set(token, move(action));
     return token;
   }
 
@@ -302,9 +379,11 @@ public:
   // presented bitmap into it (refresh_android_hardware_buffer).
   void *front_ahb() {
 #ifdef __ANDROID__
-    if (m_front_bitmap.shared_image_buffer) {
-      if (auto *engine_buffer =
-              m_front_bitmap.shared_image_buffer->native_buffer())
+    // The presented frame lives in the backing stores now; present its own
+    // hardware buffer when the compositor exported one.
+    if (auto frame = backing_stores().displayed_frame();
+        frame.has_value() && frame->shared_image_buffer) {
+      if (auto *engine_buffer = frame->shared_image_buffer->native_buffer())
         return engine_buffer;
     }
     if (!m_android_frame_buffer)
@@ -317,12 +396,12 @@ public:
 
 #ifdef __ANDROID__
   void refresh_android_hardware_buffer() {
-    if (!m_has_usable_bitmap || !m_front_bitmap.shared_image_buffer)
+    auto frame = backing_stores().displayed_frame();
+    if (!frame.has_value() || !frame->shared_image_buffer)
       return;
 
-    auto const &bitmap = m_front_bitmap.shared_image_buffer->bitmap();
-    auto const bitmap_size =
-        m_front_bitmap.last_painted_size.to_type<int>();
+    auto const &bitmap = frame->shared_image_buffer->bitmap();
+    auto const bitmap_size = frame->size;
 
     // AHardwareBuffer only offers R8G8B8A8; an engine BGRA bitmap has to be
     // swizzled on the way in. Anything else has no representable layout.
@@ -417,48 +496,422 @@ public:
 
 #endif
 
-  JsonArray serialize_context_menu_items(WebView::Menu const &menu) {
-    JsonArray items;
+  // Upstream moved the action and menu classes, and the building of context
+  // menus, into the browser's UI: a view now only says what the menu is about.
+  // FlutterBird is a UI of its own, so the engine builds the menu here and
+  // hands Flutter the same JSON it always has: every action item carries a
+  // token the engine maps back to the work the item does.
+  // Called with m_context_menu_mutex held.
+  void add_action(JsonArray &items, StringView text, Function<void()> activate,
+                  bool enabled = true) {
+    JsonObject item;
+    item.set("kind"sv, "action"sv);
+    item.set("token"sv, register_context_menu_action({ enabled, move(activate) }));
+    item.set("text"sv, text);
+    item.set("enabled"sv, enabled);
+    item.set("checkable"sv, false);
+    items.must_append(move(item));
+  }
 
-    for (auto const &menu_item : menu.items()) {
-      menu_item.visit(
-          [&](NonnullRefPtr<WebView::Action> const &action) {
-            if (!action->visible())
-              return;
+  // Called with m_context_menu_mutex held.
+  void add_checkable_action(JsonArray &items, StringView text, bool checked,
+                            Function<void()> activate, bool enabled = true) {
+    JsonObject item;
+    item.set("kind"sv, "action"sv);
+    item.set("token"sv, register_context_menu_action({ enabled, move(activate) }));
+    item.set("text"sv, text);
+    item.set("enabled"sv, enabled);
+    item.set("checkable"sv, true);
+    item.set("checked"sv, checked);
+    items.must_append(move(item));
+  }
 
-            JsonObject item;
-            item.set("kind"sv, "action"sv);
-            item.set("token"sv, register_context_menu_action(action));
-            item.set("text"sv, action->text());
-            item.set("enabled"sv, action->enabled());
-            item.set("checkable"sv, action->is_checkable());
-            if (action->is_checkable())
-              item.set("checked"sv, action->checked());
-            items.must_append(move(item));
-          },
-          [&](NonnullRefPtr<WebView::Menu> const &submenu) {
-            if (!submenu->visible())
-              return;
+  static void add_separator(JsonArray &items) {
+    JsonObject item;
+    item.set("kind"sv, "separator"sv);
+    items.must_append(move(item));
+  }
 
-            JsonObject item;
-            item.set("kind"sv, "submenu"sv);
-            item.set("text"sv, submenu->title());
-            item.set("items"sv,
-                     JsonValue(serialize_context_menu_items(*submenu)));
-            items.must_append(move(item));
-          },
-          [&](WebView::Separator) {
-            JsonObject item;
-            item.set("kind"sv, "separator"sv);
-            items.must_append(move(item));
-          });
+  static void copy_text_to_clipboard(ByteString const &text) {
+    if (!text.is_empty())
+      WebView::Application::the().set_clipboard_text(
+          MUST(String::from_byte_string(text)));
+  }
+
+  void add_copy_url_action(JsonArray &items, StringView text,
+                           URL::URL const &url) {
+    add_action(items, text, [url] {
+      copy_text_to_clipboard(WebView::url_text_to_copy(url));
+    });
+  }
+
+  void add_open_in_new_tab_action(
+      JsonArray &items, StringView text, URL::URL const &url,
+      Optional<Web::HTML::PreparedNavigationDescriptor> const &navigation) {
+    add_action(items, text, [this, url, navigation] {
+      if (navigation.has_value())
+        open_navigation_in_new_tab(*navigation, Web::HTML::ActivateTab::No);
+      else
+        open_url_in_new_tab(url, Web::HTML::ActivateTab::No);
+    });
+  }
+
+  void add_open_url_actions(
+      JsonArray &items, URL::URL const &url,
+      Optional<Web::HTML::PreparedNavigationDescriptor> const &navigation) {
+    add_open_in_new_tab_action(items, "Open Link in New Tab"sv, url,
+                               navigation);
+
+    if (is_private() != WebView::IsPrivate::No)
+      return;
+
+    add_action(items, "Open Link in New Window"sv, [this, url, navigation] {
+      if (navigation.has_value())
+        open_navigation_in_new_window(*navigation, WebView::IsPrivate::No);
+      else
+        open_url_in_new_window(url, WebView::IsPrivate::No);
+    });
+
+    if (!WebView::Application::the().supports_private_browsing_windows())
+      return;
+
+    add_action(
+        items, "Open Link in Private Window"sv, [this, url, navigation] {
+          if (!navigation.has_value()) {
+            open_url_in_new_window(url, WebView::IsPrivate::Yes);
+            return;
+          }
+          auto private_navigation = *navigation;
+          private_navigation.referrer_policy =
+              Web::ReferrerPolicy::ReferrerPolicy::NoReferrer;
+          open_navigation_in_new_window(move(private_navigation),
+                                        WebView::IsPrivate::Yes);
+        });
+  }
+
+  void add_link_actions(
+      JsonArray &items,
+      Web::HTML::PreparedNavigationDescriptor const &navigation) {
+    auto url = navigation.url;
+
+    StringView copy_url_text = "Copy Link"sv;
+    switch (WebView::url_type(url)) {
+    case WebView::URLType::Email:
+      copy_url_text = "Copy Email Address"sv;
+      break;
+    case WebView::URLType::Telephone:
+      copy_url_text = "Copy Phone Number"sv;
+      break;
+    case WebView::URLType::Other:
+      break;
     }
 
+    add_open_url_actions(items, url, navigation);
+    add_separator(items);
+    add_copy_url_action(items, copy_url_text, url);
+    add_action(items, "Download Linked File"sv,
+               [this, url] { download_url(url, PromptForPath::No); });
+    add_action(items, "Save Link As…"sv,
+               [this, url] { download_url(url, PromptForPath::Yes); });
+  }
+
+  // Text can be edited only in a field, and copied only where there is some.
+  void add_text_edit_actions(JsonArray &items, bool is_editable,
+                             bool has_selected_text) {
+    if (is_editable) {
+      add_action(items, "Cut"sv, [this] {
+        cut_selected_text()->when_resolved(
+            [](ByteString text) { copy_text_to_clipboard(text); });
+      });
+    }
+    if (is_editable || has_selected_text) {
+      add_action(items, "Copy"sv, [this] {
+        selected_text()->when_resolved(
+            [](ByteString text) { copy_text_to_clipboard(text); });
+      });
+    }
+    if (is_editable) {
+      add_action(items, "Paste"sv, [this] {
+        paste_from_clipboard(Web::Clipboard::PasteMode::AllMimeTypes);
+      });
+      add_action(items, "Paste and Match Style"sv, [this] {
+        paste_from_clipboard(Web::Clipboard::PasteMode::PlainTextOnly);
+      });
+      add_action(items, "Select All"sv, [this] { select_all(); });
+    }
+  }
+
+  void add_look_up_action(JsonArray &items,
+                          WebView::ContextMenuRequest const &request) {
+    if (!request.dictionary_lookup.has_value())
+      return;
+
+    add_action(items, "Look Up"sv,
+               [this, lookup = *request.dictionary_lookup,
+                position = request.dictionary_lookup_position] {
+                 if (on_request_dictionary_lookup)
+                   on_request_dictionary_lookup(lookup, position);
+               });
+  }
+
+  void add_search_action(JsonArray &items,
+                         Optional<String> const &selected_text) {
+    auto const &search_engine =
+        WebView::Application::settings().search_engine_settings().engine;
+    if (!search_engine.has_value() || !selected_text.has_value())
+      return;
+
+    auto url = URL::Parser::basic_parse(
+        search_engine->format_search_query_for_navigation(*selected_text));
+    if (!url.has_value())
+      return;
+
+    add_action(items,
+               search_engine->format_search_query_for_display(*selected_text),
+               [this, url = url.release_value()] {
+                 open_url_in_new_tab(url, Web::HTML::ActivateTab::Yes);
+               });
+  }
+
+  void add_spelling_actions(JsonArray &items,
+                            WebView::ContextMenuRequest const &request) {
+    if (!request.misspelled_word.has_value())
+      return;
+
+    for (auto const &guess : request.spelling_guesses) {
+      add_action(items, MUST(guess.utf16_view().to_utf8()),
+                 [this, guess] {
+                   replace_context_menu_misspelling(guess);
+                 });
+    }
+    if (request.spelling_guesses.is_empty())
+      add_action(items, "No Guesses Found"sv, [] {}, false);
+
+    add_separator(items);
+    add_action(items, "Ignore Spelling"sv, [this, word = *request.misspelled_word] {
+      ignore_misspelling(word);
+    });
+    add_action(items, "Learn Spelling"sv, [this, word = *request.misspelled_word] {
+      learn_misspelling(word);
+    });
+  }
+
+  void add_copy_link_to_highlight_action(
+      JsonArray &items, WebView::ContextMenuRequest const &request) {
+    if (!request.makes_link_to_highlight)
+      return;
+
+    add_action(items, "Copy Link to Highlight"sv, [this] {
+      if (m_link_to_highlight.has_value())
+        copy_text_to_clipboard(WebView::url_text_to_copy(*m_link_to_highlight));
+    }, m_link_to_highlight.has_value());
+  }
+
+  // The element is the one under the cursor when the context menu opened, so a
+  // page that changes while the menu is open still inspects the right element.
+  void add_inspect_element_action(JsonArray &items,
+                                  WebView::ContextMenuRequest const &request) {
+    if (!request.can_inspect_element)
+      return;
+    add_separator(items);
+    add_action(items, "Inspect Element"sv,
+               [this] { inspect_context_menu_element(); });
+  }
+
+  JsonArray create_page_context_menu(WebView::ContextMenuRequest const &request) {
+    // The page's own items are left out where the menu is about the text.
+    auto is_about_page = !request.is_editable && !request.selected_text.has_value();
+
+    JsonArray items;
+    add_spelling_actions(items, request);
+    add_separator(items);
+    add_look_up_action(items, request);
+    if (is_about_page) {
+      add_action(items, "Back"sv, [this] { traverse_the_history_by_delta(-1); },
+                 can_navigate_back());
+      add_action(items, "Forward"sv,
+                 [this] { traverse_the_history_by_delta(1); },
+                 can_navigate_forward());
+      add_action(items, "Reload"sv, [this] { reload(); });
+    }
+    add_separator(items);
+    add_text_edit_actions(items, request.is_editable,
+                          request.selected_text.has_value());
+    add_separator(items);
+    add_search_action(items, request.selected_text);
+    add_copy_link_to_highlight_action(items, request);
+    add_separator(items);
+    if (is_about_page)
+      add_action(items, "View Page Source"sv, [this] { get_source(); },
+                 can_view_source());
+    add_action(items, "Report Website Issue…"sv,
+               [this] { report_website_issue(); },
+               can_report_website_issue());
+    add_separator(items);
+    if (is_about_page) {
+      add_action(items, "Take Screenshot..."sv, [this] {
+        if (on_request_screenshot)
+          on_request_screenshot();
+      });
+    }
+    add_inspect_element_action(items, request);
     return items;
   }
 
-  void dispatch_context_menu_request(StringView type, Gfx::IntPoint position,
-                                     WebView::Menu &menu) {
+  JsonArray create_selected_text_link_context_menu(
+      WebView::ContextMenuRequest const &request, URL::URL const &url) {
+    JsonArray items;
+    add_look_up_action(items, request);
+    add_open_url_actions(items, url, {});
+    add_separator(items);
+    add_text_edit_actions(items, request.is_editable, true);
+    add_separator(items);
+    add_search_action(items, request.selected_text);
+    add_copy_link_to_highlight_action(items, request);
+    add_inspect_element_action(items, request);
+    return items;
+  }
+
+  JsonArray create_link_context_menu(WebView::ContextMenuRequest const &request) {
+    JsonArray items;
+    add_link_actions(items, *request.link_navigation);
+    add_copy_link_to_highlight_action(items, request);
+    add_inspect_element_action(items, request);
+    return items;
+  }
+
+  JsonArray create_image_context_menu(WebView::ContextMenuRequest const &request) {
+    auto const &navigation = *request.navigation;
+    auto url = navigation.url;
+
+    JsonArray items;
+    if (request.link_navigation.has_value()) {
+      add_link_actions(items, *request.link_navigation);
+      add_separator(items);
+    }
+    add_open_in_new_tab_action(items, "Open Image in New Tab"sv, url, navigation);
+    add_action(items, "Open Image"sv, [this, navigation] { load(navigation); });
+    add_separator(items);
+    add_action(
+        items, "Copy Image"sv,
+        [bitmap = request.image_bitmap] {
+          if (!bitmap.has_value() || !bitmap->is_valid())
+            return;
+          auto encoded = Gfx::PNGWriter::encode(*bitmap->bitmap());
+          if (encoded.is_error())
+            return;
+          WebView::Application::the().insert_clipboard_item(
+              { { { MUST(String::from_utf8("image/png"sv)),
+                    ByteString { encoded.value().bytes() } } } });
+        },
+        request.image_bitmap.has_value());
+    add_copy_url_action(items, "Copy Image Address"sv, url);
+    add_action(items, "Save Image As…"sv,
+               [this, url, image_mime_type = request.image_mime_type] {
+                 download_url(url, PromptForPath::Yes, image_mime_type);
+               });
+    add_inspect_element_action(items, request);
+    return items;
+  }
+
+  JsonArray create_media_context_menu(WebView::ContextMenuRequest const &request) {
+    auto const &media = *request.media;
+
+    auto send = [this](WebView::ContextMenuMediaAction action) {
+      return [this, action] { do_context_menu_media_action(action); };
+    };
+
+    JsonArray items;
+    if (media.is_playing)
+      add_action(items, "Pause"sv, send(WebView::ContextMenuMediaAction::TogglePlay));
+    else
+      add_action(items, "Play"sv, send(WebView::ContextMenuMediaAction::TogglePlay));
+    if (media.is_muted)
+      add_action(items, "Unmute"sv, send(WebView::ContextMenuMediaAction::ToggleMute));
+    else
+      add_action(items, "Mute"sv, send(WebView::ContextMenuMediaAction::ToggleMute));
+    if (media.has_user_agent_controls)
+      add_action(items, "Hide Controls"sv, send(WebView::ContextMenuMediaAction::ToggleControls));
+    else
+      add_action(items, "Show Controls"sv, send(WebView::ContextMenuMediaAction::ToggleControls));
+    add_checkable_action(items, "Loop"sv, media.is_looping,
+                         send(WebView::ContextMenuMediaAction::ToggleLoop));
+    add_separator(items);
+    if (media.is_picture_in_picture)
+      add_action(items, "Exit Picture in Picture"sv,
+                 send(WebView::ContextMenuMediaAction::TogglePictureInPicture));
+    else if (media.can_enter_picture_in_picture)
+      add_action(items, "Picture in Picture"sv,
+                 send(WebView::ContextMenuMediaAction::TogglePictureInPicture));
+    if (media.is_video && media.is_fullscreen)
+      add_action(items, "Exit Full Screen"sv,
+                 send(WebView::ContextMenuMediaAction::ToggleFullscreen));
+    else if (media.is_video)
+      add_action(items, "Full Screen"sv,
+                 send(WebView::ContextMenuMediaAction::ToggleFullscreen));
+    add_separator(items);
+    if (media.media_url.has_value()) {
+      auto url = *media.media_url;
+      add_open_in_new_tab_action(
+          items, media.is_video ? "Open Video in New Tab"sv
+                                : "Open Audio in New Tab"sv,
+          url, request.navigation);
+      if (request.navigation.has_value())
+        add_action(items, media.is_video ? "Open Video"sv : "Open Audio"sv,
+                   [this, navigation = *request.navigation] { load(navigation); });
+      add_copy_url_action(
+          items, media.is_video ? "Copy Video Address"sv : "Copy Audio Address"sv,
+          url);
+    }
+    add_inspect_element_action(items, request);
+    return items;
+  }
+
+  JsonArray create_context_menu(WebView::ContextMenuRequest const &request) {
+    switch (request.kind) {
+    case WebView::ContextMenuKind::Page:
+      if (request.selected_text.has_value()) {
+        if (auto url = WebView::url_from_text(*request.selected_text);
+            url.has_value())
+          return create_selected_text_link_context_menu(request, *url);
+      }
+      return create_page_context_menu(request);
+    case WebView::ContextMenuKind::Link:
+      if (request.link_navigation.has_value())
+        return create_link_context_menu(request);
+      break;
+    case WebView::ContextMenuKind::Image:
+      if (request.navigation.has_value())
+        return create_image_context_menu(request);
+      break;
+    case WebView::ContextMenuKind::Media:
+      if (request.media.has_value())
+        return create_media_context_menu(request);
+      break;
+    }
+    return create_page_context_menu(request);
+  }
+
+  static StringView context_menu_type(WebView::ContextMenuRequest const &request) {
+    switch (request.kind) {
+    case WebView::ContextMenuKind::Page:
+      if (request.selected_text.has_value() &&
+          WebView::url_from_text(*request.selected_text).has_value())
+        return "link"sv;
+      return "page"sv;
+    case WebView::ContextMenuKind::Link:
+      return "link"sv;
+    case WebView::ContextMenuKind::Image:
+      return "image"sv;
+    case WebView::ContextMenuKind::Media:
+      return "media"sv;
+    }
+    return "page"sv;
+  }
+
+  // The view says what the user asked a menu for; the engine, as the UI, makes
+  // the menu for it and hands Flutter its JSON.
+  virtual void did_request_context_menu(WebView::ContextMenuRequest request) override {
     ContextMenuRequestCallback callback = nullptr;
     char *payload = nullptr;
 
@@ -466,13 +919,13 @@ public:
       std::lock_guard lock(m_context_menu_mutex);
       m_context_menu_actions.clear();
 
-      JsonObject request;
-      request.set("type"sv, type);
-      request.set("x"sv, position.x());
-      request.set("y"sv, position.y());
-      request.set("items"sv, JsonValue(serialize_context_menu_items(menu)));
+      JsonObject menu;
+      menu.set("type"sv, context_menu_type(request));
+      menu.set("x"sv, request.widget_position.x());
+      menu.set("y"sv, request.widget_position.y());
+      menu.set("items"sv, JsonValue(create_context_menu(request)));
 
-      auto serialized = JsonValue(move(request)).serialized();
+      auto serialized = JsonValue(move(menu)).serialized();
       auto bytes = serialized.to_byte_string();
       payload = strdup(bytes.characters());
       callback = m_context_menu_request_callback;
@@ -498,18 +951,18 @@ public:
   }
 
   bool activate_context_menu_action(int action_token) {
-    WeakPtr<WebView::Action> weak_action;
+    ContextMenuAction action;
 
     {
       std::lock_guard lock(m_context_menu_mutex);
       auto it = m_context_menu_actions.find(action_token);
       if (it == m_context_menu_actions.end())
         return false;
-      weak_action = it->value;
+      action = move(it->value);
+      m_context_menu_actions.clear();
     }
 
-    auto action = weak_action.strong_ref();
-    if (!action || !action->visible() || !action->enabled())
+    if (!action.enabled || !action.activate)
       return false;
 
     // The actions a context menu carries are application-wide (Copy, Paste,
@@ -520,30 +973,8 @@ public:
     // user is acting on, so mark that one active before the action runs.
     g_active_view_id = m_view_id;
 
-    action->activate();
-
-    std::lock_guard lock(m_context_menu_mutex);
-    m_context_menu_actions.clear();
+    action.activate();
     return true;
-  }
-
-  // Ladybird 2026-11 stopped keeping one Menu per kind on the view: each
-  // request builds a fresh menu and hands it to the view through this hook
-  // (the old page_context_menu()/on_activation pair is gone). The Flutter
-  // side still keys its presentation off the menu kind, and the only stable
-  // kind marker left is the menu title.
-  virtual void show_context_menu(WebView::Menu &menu,
-                                 Gfx::IntPoint widget_position) override {
-    auto const title = menu.title();
-    StringView type = "page"sv;
-    if (title == "Link Context Menu"sv ||
-        title == "Selected Text Link Context Menu"sv)
-      type = "link"sv;
-    else if (title == "Image Context Menu"sv)
-      type = "image"sv;
-    else if (title == "Media Context Menu"sv)
-      type = "media"sv;
-    dispatch_context_menu_request(type, widget_position, menu);
   }
 
   // Pushes the engine's viewport/window geometry for the currently-requested
@@ -610,20 +1041,22 @@ public:
     // zero-copy external-texture path, then falls back to bitmap conversion.
     // -----------------------------------------------------------------------
     on_ready_to_paint = [this]() {
-      if (!m_has_usable_bitmap || !m_front_bitmap.shared_image_buffer)
+      // Upstream moved the presented frame into PageBackingStores: the frame to
+      // show is the one in the front backing store, or the kept backup until
+      // that has one.
+      auto frame = backing_stores().displayed_frame();
+      if (!frame.has_value() || !frame->shared_image_buffer)
         return;
 
       ++m_debug_paint_event_count;
 
-      auto *shared_image_buffer =
-          m_front_bitmap.shared_image_buffer.ptr();
+      auto *shared_image_buffer = frame->shared_image_buffer;
 
       // A hardware buffer the compositor rendered into is presented as-is; the
       // plugin reads it through get_android_hardware_buffer.
       if (front_ahb() != nullptr) {
-        auto frame_size = m_front_bitmap.last_painted_size.to_type<int>();
-        m_backend->on_hardware_frame_ready(frame_size.width(),
-                                           frame_size.height());
+        m_backend->on_hardware_frame_ready(frame->size.width(),
+                                           frame->size.height());
         return;
       }
 
@@ -648,10 +1081,8 @@ public:
         auto surface_width = static_cast<int>(IOSurfaceGetWidth(surface));
         auto surface_height = static_cast<int>(IOSurfaceGetHeight(surface));
         if (surface_width <= 0 || surface_height <= 0) {
-          auto bitmap_size =
-              m_front_bitmap.last_painted_size.to_type<int>();
-          surface_width = bitmap_size.width();
-          surface_height = bitmap_size.height();
+          surface_width = frame->size.width();
+          surface_height = frame->size.height();
         }
 
         if (mac_backend->on_iosurface_ready(surface, surface_width,
@@ -750,6 +1181,25 @@ public:
     };
 
     on_favicon_change = [this](Optional<Gfx::Bitmap const &> favicon) {
+      // The view no longer hashes favicons itself, so the engine does it here:
+      // the history store is keyed by that hash, and the embedder asks for it to
+      // attach a favicon to a bookmark.
+      Optional<String> favicon_hash;
+      if (favicon.has_value() && g_favicon_store) {
+        if (auto favicon_png = Gfx::PNGWriter::encode(*favicon);
+            !favicon_png.is_error())
+          favicon_hash =
+              g_favicon_store->add_favicon(favicon_png.release_value());
+      }
+
+      {
+        std::lock_guard lock(m_info_mutex);
+        m_favicon_hash = favicon_hash;
+      }
+
+      if (favicon_hash.has_value() && g_history_store)
+        g_history_store->update_favicon(url(), *favicon_hash);
+
       if (!favicon.has_value())
         return;
 
@@ -990,6 +1440,29 @@ private:
     return content_position;
   }
 
+  // With the history store owned by the UI, a view is what records its visits,
+  // titles and favicons, as the Qt frontend's RemoteView does.
+  virtual void did_visit_page(URL::URL const &url,
+                              Optional<String> const &title,
+                              WebView::HistoryVisitTransition transition) override {
+    if (is_private() != WebView::IsPrivate::No || !g_history_store)
+      return;
+
+    g_history_store->record_visit(url, title, UnixDateTime::now(), transition);
+    if (auto hash = favicon_hash(); hash.has_value())
+      g_history_store->update_favicon(url, *hash);
+  }
+
+  virtual void did_change_visited_page_title(URL::URL const &url,
+                                             String const &title) override {
+    if (is_private() == WebView::IsPrivate::No && g_history_store)
+      g_history_store->update_title(url, title);
+  }
+
+  virtual void did_make_link_to_highlight(Optional<URL::URL> url) override {
+    m_link_to_highlight = move(url);
+  }
+
   Core::AnonymousBuffer m_system_theme_buffer;
 
 #ifdef __ANDROID__
@@ -1222,7 +1695,8 @@ public:
   }
 
   virtual Optional<WebView::ViewImplementation &>
-  open_blank_new_tab(Web::HTML::ActivateTab activate_tab) const override {
+  open_blank_new_tab(Web::HTML::ActivateTab activate_tab,
+                     WebView::ViewImplementation const * = nullptr) const override {
     int const new_view_id = create_blank_web_view();
     auto it = g_web_views.find(new_view_id);
     if (it == g_web_views.end())
@@ -1264,20 +1738,6 @@ public:
       auto message_string = message.to_byte_string();
       g_display_error_dialog_callback(message_string.characters());
     }
-  }
-
-  // Hands the file to the OS: the default handler for "Open", Finder for
-  // "Show in folder". Upstream's base implementation only prints the path.
-  virtual void
-  open_download(WebView::FileDownloader::Download const &download) const override {
-    if (!open_path_with_host(download.destination.string(), false))
-      WebView::Application::open_download(download);
-  }
-
-  virtual void show_download_in_folder(
-      WebView::FileDownloader::Download const &download) const override {
-    if (!open_path_with_host(download.destination.string(), true))
-      WebView::Application::show_download_in_folder(download);
   }
 
   virtual Utf16String
@@ -1411,6 +1871,7 @@ void init_ladybird() {
     return;
   }
   s_app = app.release_value();
+  create_engine_stores();
   g_download_observer = make<FlutterFileDownloaderObserver>();
   g_engine_ready = true;
 }
@@ -1782,14 +2243,14 @@ bool can_go_back(int view_id) {
   auto it = g_web_views.find(view_id);
   if (it == g_web_views.end())
     return false;
-  return it->second->navigate_back_action().enabled();
+  return it->second->can_navigate_back();
 }
 
 bool can_go_forward(int view_id) {
   auto it = g_web_views.find(view_id);
   if (it == g_web_views.end())
     return false;
-  return it->second->navigate_forward_action().enabled();
+  return it->second->can_navigate_forward();
 }
 
 char *get_view_url(int view_id) {
@@ -1805,49 +2266,54 @@ char *get_view_url(int view_id) {
   return strdup(bytes.characters());
 }
 
-// The ordinary (non-private) browsing session owns the history and favicon
-// stores libbird reads for autocomplete and bookmark serialization.
-static WebView::BrowsingSession &ui_session() {
-  return WebView::Application::default_session();
-}
-
-char *get_bookmarks_json() {
+// The profile's config directory, which is where the embedder keeps its own
+// per-profile files next to the engine's (bookmarks, for bird_core).
+char *get_profile_config_directory() {
   if (!s_app)
     return nullptr;
 
-  auto &session = ui_session();
-  auto json = WebView::Application::bookmark_store()
-                  .serialize_items(session.favicon_store ? *session.favicon_store
-                                                         : Optional<WebView::FaviconStore&>{})
-                  .serialized();
-  auto bytes = json.to_byte_string();
+  auto const &config = WebView::Application::profile().paths().config;
+  if (config.is_empty())
+    return nullptr;
+
+  return strdup(config.characters());
+}
+
+// The favicon hash the engine's store knows the viewed page's favicon by, for
+// an embedder that keeps bookmarks of its own.
+char *get_view_favicon_hash(int view_id) {
+  auto it = g_web_views.find(view_id);
+  if (it == g_web_views.end())
+    return nullptr;
+
+  auto hash = it->second->favicon_hash();
+  if (!hash.has_value())
+    return nullptr;
+
+  auto bytes = hash->to_byte_string();
   return strdup(bytes.characters());
 }
 
-void toggle_bookmark_for_view(int view_id) {
-  auto it = g_web_views.find(view_id);
-  if (it == g_web_views.end())
-    return;
+// The PNG of a favicon the engine has stored, base64-encoded, so an embedder's
+// bookmark store can show it without keeping favicon bytes of its own.
+char *get_favicon_png_base64(const char *favicon_hash) {
+  if (!s_app || !g_favicon_store || !favicon_hash)
+    return nullptr;
 
-  auto &bookmark_store = WebView::Application::bookmark_store();
-  auto const &url = it->second->url();
+  auto hash = StringView(favicon_hash, strlen(favicon_hash));
+  if (hash.is_empty())
+    return nullptr;
 
-  if (auto bookmark = bookmark_store.find_bookmark_by_url(url);
-      bookmark.has_value()) {
-    bookmark_store.remove_item(bookmark->id);
-    return;
-  }
+  auto favicon_png = g_favicon_store->favicon_png(hash);
+  if (!favicon_png.has_value())
+    return nullptr;
 
-  bookmark_store.add_bookmark(url, it->second->title().to_utf8(),
-                              it->second->favicon_hash());
-}
+  auto encoded = encode_base64(favicon_png->bytes());
+  if (encoded.is_error())
+    return nullptr;
 
-bool is_current_view_bookmarked(int view_id) {
-  auto it = g_web_views.find(view_id);
-  if (it == g_web_views.end())
-    return false;
-  return WebView::Application::bookmark_store().is_bookmarked(
-      it->second->url());
+  auto bytes = encoded.release_value().to_byte_string();
+  return strdup(bytes.characters());
 }
 
 char *history_autocomplete_json(int view_id, const char *query, int limit) {
@@ -1857,8 +2323,7 @@ char *history_autocomplete_json(int view_id, const char *query, int limit) {
   if (g_web_views.find(view_id) == g_web_views.end())
     return nullptr;
 
-  auto &session = ui_session();
-  if (!session.history_store)
+  if (!g_history_store)
     return nullptr;
 
   StringView query_string;
@@ -1869,9 +2334,8 @@ char *history_autocomplete_json(int view_id, const char *query, int limit) {
 
   // A private view's own history store is disabled, but autocomplete still
   // draws suggestions from ordinary (non-private) history regardless of the
-  // view's privacy — hence the ordinary session's store.
-  auto entries =
-      session.history_store->autocomplete_entries(query_string, safe_limit);
+  // view's privacy — hence the engine's ordinary history store.
+  auto entries = g_history_store->autocomplete_entries(query_string, safe_limit);
 
   JsonArray suggestions;
   suggestions.ensure_capacity(entries.size());
@@ -2106,7 +2570,7 @@ void paste_from_clipboard(int view_id) {
   if (it == g_web_views.end())
     return;
 
-  it->second->paste_from_clipboard();
+  it->second->paste_from_clipboard(Web::Clipboard::PasteMode::AllMimeTypes);
 }
 
 void select_all(int view_id) {
@@ -2298,13 +2762,16 @@ void cancel_download(uint64_t id) {
   WebView::Application::the().file_downloader().cancel_download(id);
 }
 
+// Hands the file to the OS: the default handler for "Open", Finder for "Show
+// in folder". Upstream moved this out of Application and into each frontend, so
+// the engine asks the host itself.
 void open_download(uint64_t id) {
   if (!s_app)
     return;
   if (auto download =
           WebView::Application::the().file_downloader().download(id);
       download.has_value())
-    WebView::Application::the().open_download(*download);
+    open_path_with_host(download->destination.string(), false);
 }
 
 void show_download_in_folder(uint64_t id) {
@@ -2313,7 +2780,7 @@ void show_download_in_folder(uint64_t id) {
   if (auto download =
           WebView::Application::the().file_downloader().download(id);
       download.has_value())
-    WebView::Application::the().show_download_in_folder(*download);
+    open_path_with_host(download->destination.string(), true);
 }
 
 void prune_inactive_downloads() {
