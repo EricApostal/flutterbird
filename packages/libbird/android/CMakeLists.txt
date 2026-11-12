@@ -155,8 +155,6 @@ target_link_libraries(engine PRIVATE
     jnigraphics
 )
 
-add_dependencies(engine ladybird)
-
 if (ANDROID AND NOT BUILD_SHARED_LIBS)
     target_link_options(engine PRIVATE LINKER:--allow-multiple-definition)
 endif()
