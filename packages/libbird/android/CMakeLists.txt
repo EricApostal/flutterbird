@@ -85,7 +85,7 @@ add_subdirectory("${LADYBIRD_DIR}" "${LADYBIRD_BINARY_DIR}")
 # helper executables into that directory as lib<Name>.so so they are packaged
 # and visible to get_paths_for_helper_process() at runtime.
 if (ANDROID AND LADYBIRD_HELPER_JNI_DIR)
-    foreach(helper_process IN ITEMS AudioServer Compositor ImageDecoder RequestServer WebContent)
+    foreach(helper_process IN ITEMS AudioServer Compositor ImageDecoder MediaServer RequestServer VideoDecoderServer WebContent)
         if (TARGET ${helper_process})
             set_target_properties(${helper_process} PROPERTIES
                 OUTPUT_NAME "lib${helper_process}"
@@ -100,7 +100,7 @@ endif()
 # TODO: This is a workaround for a bug in ladybird. This is actually handled,
 # but android is not included in that check
 if (ANDROID AND NOT BUILD_SHARED_LIBS)
-    foreach(helper_process IN ITEMS AudioServer Compositor ImageDecoder RequestServer WebContent)
+    foreach(helper_process IN ITEMS AudioServer Compositor ImageDecoder MediaServer RequestServer VideoDecoderServer WebContent)
         if (TARGET ${helper_process})
             target_link_options(${helper_process} PRIVATE LINKER:--allow-multiple-definition)
         endif()

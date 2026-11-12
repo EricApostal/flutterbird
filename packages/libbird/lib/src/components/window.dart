@@ -78,9 +78,9 @@ class _LadybirdViewState extends State<LadybirdView>
   double _lastSimX = 0;
   double _lastSimY = 0;
 
-  // bool get _showFrameDiagnostics =>
-  //     defaultTargetPlatform == TargetPlatform.android;
-  bool get _showFrameDiagnostics => false;
+  bool get _showFrameDiagnostics =>
+      defaultTargetPlatform == TargetPlatform.android;
+  // bool get _showFrameDiagnostics => false;
 
   void _onNativeResize() {
     if (!mounted) return;
@@ -878,7 +878,8 @@ class _LadybirdViewState extends State<LadybirdView>
           // Until a texture exists there is nothing to paint, so the frame this
           // tab last presented stands in for it rather than the background.
           final previousFrame = _previousFrame;
-          final previousFrameCoversView = textureId == null && previousFrame != null;
+          final previousFrameCoversView =
+              textureId == null && previousFrame != null;
 
           return ClipRect(
             child: OverflowBox(

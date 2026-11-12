@@ -252,7 +252,9 @@ configure<LibraryExtension> {
                                 "AudioServer",
                                 "Compositor",
                                 "ImageDecoder",
+                                "MediaServer",
                                 "RequestServer",
+                                "VideoDecoderServer",
                                 "WebContent"
                         )
             }
