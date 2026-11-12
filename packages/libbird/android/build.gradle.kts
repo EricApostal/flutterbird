@@ -247,7 +247,6 @@ configure<LibraryExtension> {
                         listOf(
                                 "ladybird_plugin",
                                 "engine",
-                                "ladybird",
                                 "AudioServer",
                                 "Compositor",
                                 "ImageDecoder",
