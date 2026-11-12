@@ -30,6 +30,7 @@ val cacheDir = System.getenv("LADYBIRD_CACHE_DIR") ?: "$packageBuildDir/caches"
 val sourceDir = layout.projectDirectory.dir("../third_party/ladybird").asFile.absolutePath
 val generatedSdl3JavaDir = layout.buildDirectory.dir("generated/sdl3Java").get().asFile.absolutePath
 val lagomToolsInstallDir = layout.buildDirectory.dir("lagom-tools-install")
+val ladybirdHelperJniDir = layout.buildDirectory.dir("generated/ladybirdHelperJniLibs")
 val ladybirdVersionFile = layout.projectDirectory.file("../third_party/ladybird.version").asFile
 val ensureLadybirdSourceStamp = layout.buildDirectory.file("generated/ensureLadybirdSource.stamp")
 val lagomToolsStamp = layout.buildDirectory.file("generated/lagom-tools.stamp")
@@ -238,6 +239,7 @@ configure<LibraryExtension> {
                         listOf(
                                 "-DANDROID_STL=c++_shared",
                                 "-DLADYBIRD_CACHE_DIR=$cacheDir",
+                                "-DLADYBIRD_HELPER_JNI_DIR=${ladybirdHelperJniDir.get().asFile.absolutePath}",
                                 "-DVCPKG_TARGET_ANDROID=ON",
                                 "-DLADYBIRD_VCPKG_TYPE=release",
                                 // "-DCMAKE_SHARED_LINKER_FLAGS=-fuse-ld=mold", 
@@ -276,6 +278,7 @@ configure<LibraryExtension> {
         getByName("main") {
             assets.directories.add(layout.buildDirectory.dir("generated/ladybirdAssets").get().asFile.absolutePath)
             java.directories.add(generatedSdl3JavaDir)
+            jniLibs.srcDir(ladybirdHelperJniDir.get().asFile)
         }
     }
 

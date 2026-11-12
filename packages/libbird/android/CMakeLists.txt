@@ -80,6 +80,23 @@ file(MAKE_DIRECTORY "${LADYBIRD_ANDROID_ASSETS_DIR}")
 
 add_subdirectory("${LADYBIRD_DIR}" "${LADYBIRD_BINARY_DIR}")
 
+# Android packages native code from an ABI-named jniLibs directory, and the
+# engine launches its helpers by their APK native-library names. Build the
+# helper executables into that directory as lib<Name>.so so they are packaged
+# and visible to get_paths_for_helper_process() at runtime.
+if (ANDROID AND LADYBIRD_HELPER_JNI_DIR)
+    foreach(helper_process IN ITEMS AudioServer Compositor ImageDecoder RequestServer WebContent)
+        if (TARGET ${helper_process})
+            set_target_properties(${helper_process} PROPERTIES
+                OUTPUT_NAME "lib${helper_process}"
+                SUFFIX ".so"
+                RUNTIME_OUTPUT_DIRECTORY "${LADYBIRD_HELPER_JNI_DIR}/${ANDROID_ABI}"
+            )
+            target_link_options(${helper_process} PRIVATE "LINKER:-rpath,$ORIGIN")
+        endif()
+    endforeach()
+endif()
+
 # TODO: This is a workaround for a bug in ladybird. This is actually handled,
 # but android is not included in that check
 if (ANDROID AND NOT BUILD_SHARED_LIBS)
