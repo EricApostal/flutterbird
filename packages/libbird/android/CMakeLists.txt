@@ -124,7 +124,7 @@ add_custom_target(ladybird_generated_file_mirrors
     DEPENDS ${LADYBIRD_MIRRORED_GENERATED_FILES}
 )
 
-foreach(mirror_consumer_target IN ITEMS audioserverservice compositorservice webcontentservice webworkerservice)
+foreach(mirror_consumer_target IN ITEMS audioserverservice compositorservice webcontentservice)
     if (TARGET ${mirror_consumer_target})
         add_dependencies(${mirror_consumer_target} ladybird_generated_file_mirrors)
     endif()
@@ -133,7 +133,7 @@ endforeach()
 # TODO: This is a workaround for a bug in ladybird. This is actually handled,
 # but android is not included in that check
 if (ANDROID AND NOT BUILD_SHARED_LIBS)
-    foreach(helper_process IN ITEMS AudioServer Compositor ImageDecoder RequestServer WebContent WebWorker)
+    foreach(helper_process IN ITEMS AudioServer Compositor ImageDecoder RequestServer WebContent)
         if (TARGET ${helper_process})
             target_link_options(${helper_process} PRIVATE LINKER:--allow-multiple-definition)
         endif()

@@ -252,8 +252,7 @@ configure<LibraryExtension> {
                                 "Compositor",
                                 "ImageDecoder",
                                 "RequestServer",
-                                "WebContent",
-                                "WebWorker"
+                                "WebContent"
                         )
             }
         }
