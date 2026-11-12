@@ -38,6 +38,21 @@ class _ToolbarMenuSelection {
   final String? bookmarkUrl;
 }
 
+// The omnibox is shared by every tab (each tab is the same route), so a tab
+// switch must save and restore where the user left the caret/selection and
+// whether the omnibox, rather than the page, held focus.
+class _OmniboxTabState {
+  const _OmniboxTabState({
+    required this.text,
+    required this.selection,
+    required this.hadFocus,
+  });
+
+  final String text;
+  final TextSelection selection;
+  final bool hadFocus;
+}
+
 class BrowserOmniboxBar extends ConsumerStatefulWidget {
   final LadybirdController currentTabController;
 
@@ -56,6 +71,8 @@ class _BrowserOmniboxBarState extends ConsumerState<BrowserOmniboxBar> {
   // Set when the user edits the omnibox, cleared when the text is applied
   // programmatically. A page load must not overwrite what the user is typing.
   bool _omniboxTextDirty = false;
+  final Map<int, _OmniboxTabState> _omniboxStateByTab =
+      <int, _OmniboxTabState>{};
   final Set<int> _hideDefaultSearchHomeForTabs = <int>{};
 
   @override
@@ -92,19 +109,46 @@ class _BrowserOmniboxBarState extends ConsumerState<BrowserOmniboxBar> {
   void _syncTrackedTabController(LadybirdController? controller) {
     if (_trackedTabController == controller) return;
 
+    final previous = _trackedTabController;
+    if (previous != null) {
+      final hadFocus = _omniboxFocusNode.hasFocus;
+      _omniboxStateByTab[previous.viewId] = _OmniboxTabState(
+        text: _omniboxTextController.text,
+        // A range left over from an earlier select-all is not the state the
+        // user left: if the page owns focus, restore a caret at the end.
+        selection: hadFocus
+            ? _omniboxTextController.selection
+            : TextSelection.collapsed(
+                offset: _omniboxTextController.text.length,
+              ),
+        hadFocus: hadFocus,
+      );
+    }
+
     _omniboxTextDirty = false;
-    _trackedTabController?.urlNotifier.removeListener(_onTrackedUrlChanged);
+    previous?.urlNotifier.removeListener(_onTrackedUrlChanged);
     _trackedTabController = controller;
 
     if (controller == null) return;
 
+    final activeViewIds = ref
+        .read(browserTabControllerProvider)
+        .map((tab) => tab.viewId)
+        .toSet();
+    _omniboxStateByTab.removeWhere(
+      (viewId, _) => !activeViewIds.contains(viewId),
+    );
+
     if (!controller.hasNavigatedInitial) {
       _hideDefaultSearchHomeForTabs.add(controller.viewId);
-      _focusOmniboxForNewTab(controller);
+      if (!_omniboxStateByTab.containsKey(controller.viewId)) {
+        _focusOmniboxForNewTab(controller);
+      }
     }
 
     controller.urlNotifier.addListener(_onTrackedUrlChanged);
     _syncOmniboxTextFromControllerUrl(controller);
+    _restoreOmniboxState(controller);
     _scheduleInitialUrlSyncIfNeeded(controller);
     final hasBookmarks = ref
         .read(browserOmniboxProvider.select((value) => value.bookmarks))
@@ -185,10 +229,46 @@ class _BrowserOmniboxBarState extends ConsumerState<BrowserOmniboxBar> {
       _omniboxFocusNode.requestFocus();
 
       final text = _omniboxTextController.text;
+      _suppressTrackedTextSync = true;
       _omniboxTextController.selection = TextSelection(
         baseOffset: 0,
         extentOffset: text.length,
       );
+      _suppressTrackedTextSync = false;
+      _omniboxTextDirty = false;
+    });
+  }
+
+  // Reinstates the caret/selection and focus ownership this tab had when the
+  // user last left it. New tabs have no saved state, so they keep the
+  // select-all-and-focus treatment from _focusOmniboxForNewTab.
+  void _restoreOmniboxState(LadybirdController controller) {
+    final saved = _omniboxStateByTab[controller.viewId];
+    if (saved == null) return;
+
+    if (saved.text == _omniboxTextController.text &&
+        saved.selection.isValid &&
+        saved.selection.end <= saved.text.length) {
+      _suppressTrackedTextSync = true;
+      _omniboxTextController.selection = saved.selection;
+      _suppressTrackedTextSync = false;
+      _omniboxTextDirty = false;
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _trackedTabController != controller) return;
+      if (_omniboxTextController.text == saved.text) {
+        _suppressTrackedTextSync = true;
+        _omniboxTextController.selection = saved.selection;
+        _suppressTrackedTextSync = false;
+      }
+      if (saved.hadFocus) {
+        _omniboxFocusNode.requestFocus();
+      } else {
+        // Focus belonged to the page (and its text selection); leaving the
+        // omnibox focused would steal the keyboard away from it.
+        _omniboxFocusNode.unfocus();
+      }
     });
   }
 
@@ -586,10 +666,8 @@ class _BrowserOmniboxBarState extends ConsumerState<BrowserOmniboxBar> {
                 IconButton(
                   tooltip: 'Settings',
                   icon: const Icon(Icons.settings, size: 20),
-                  onPressed: () => _commitNavigation(
-                    currentTabController,
-                    'about:settings',
-                  ),
+                  onPressed: () =>
+                      _commitNavigation(currentTabController, 'about:settings'),
                 ),
                 const SizedBox(width: 6),
                 IconButton(
