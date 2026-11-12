@@ -69,6 +69,18 @@ if (VCPKG_TARGET_ANDROID)
     # vcpkg manifest mode at Ladybird's vcpkg.json.
     set(VCPKG_MANIFEST_DIR "${LADYBIRD_DIR}" CACHE PATH "" FORCE)
     set(VCPKG_MANIFEST_INSTALL ON CACHE BOOL "" FORCE)
+
+    # Gradle can only pass CMake variables, but Ladybird's vcpkg setup reads
+    # its roots from the environment. Point them at the Ladybird checkout and
+    # let environment.cmake derive VCPKG_ROOT (Build/vcpkg-<type>), the
+    # toolchain, and the overlay triplets from LADYBIRD_VCPKG_TYPE.
+    if (NOT DEFINED LADYBIRD_VCPKG_TYPE)
+        set(LADYBIRD_VCPKG_TYPE "release" CACHE STRING "" FORCE)
+    endif()
+    set(ENV{LADYBIRD_SOURCE_DIR} "${LADYBIRD_DIR}")
+    set(ENV{LADYBIRD_MAIN_SOURCE_DIR} "${LADYBIRD_DIR}")
+    include("${LADYBIRD_DIR}/Meta/CMake/environment.cmake")
+
     include("${LADYBIRD_DIR}/UI/Android/vcpkg_android.cmake")
 endif()
 

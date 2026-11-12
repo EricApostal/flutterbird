@@ -37,14 +37,15 @@ val lagomToolsStamp = layout.buildDirectory.file("generated/lagom-tools.stamp")
 data class Sdl3JavaInputs(val jar: File?, val sourceDirs: List<File>)
 
 fun Project.resolveSdl3JavaInputs(sourceDir: String): Sdl3JavaInputs {
-    val jar = fileTree("$sourceDir/Build/vcpkg/packages") {
+    val vcpkgRoot = "$sourceDir/Build/vcpkg-release"
+    val jar = fileTree("$vcpkgRoot/packages") {
         include("**/SDL3.jar")
         include("**/SDL3-*.jar")
         exclude("**/*-sources.jar")
     }.files.minByOrNull { it.path }
 
     val sourceDirs = if (jar == null) {
-        fileTree("$sourceDir/Build/vcpkg/buildtrees/sdl3") {
+        fileTree("$vcpkgRoot/buildtrees/sdl3") {
             include("**/android-project/app/src/main/java/**/*.java")
         }.files.mapNotNull { file ->
             var current: File? = file
@@ -62,7 +63,7 @@ fun Project.resolveSdl3JavaInputs(sourceDir: String): Sdl3JavaInputs {
 
 fun verifySdl3JavaInputs(inputs: Sdl3JavaInputs) {
     check(inputs.jar != null || inputs.sourceDirs.isNotEmpty()) {
-        "Unable to locate SDL Android Java sources. Expected either packaged SDL3 Java artifacts or unpacked SDL buildtree sources under Build/vcpkg."
+        "Unable to locate SDL Android Java sources. Expected either packaged SDL3 Java artifacts or unpacked SDL buildtree sources under Build/vcpkg-release."
     }
 }
 
@@ -237,8 +238,8 @@ configure<LibraryExtension> {
                         listOf(
                                 "-DANDROID_STL=c++_shared",
                                 "-DLADYBIRD_CACHE_DIR=$cacheDir",
-                                "-DVCPKG_ROOT=$sourceDir/Build/vcpkg",
                                 "-DVCPKG_TARGET_ANDROID=ON",
+                                "-DLADYBIRD_VCPKG_TYPE=release",
                                 // "-DCMAKE_SHARED_LINKER_FLAGS=-fuse-ld=mold", 
                                 // "-DCMAKE_EXE_LINKER_FLAGS=-fuse-ld=mold"
                         )
@@ -289,7 +290,7 @@ configure<LibraryExtension> {
 }
 
 dependencies {
-    implementation(fileTree("$sourceDir/Build/vcpkg/packages") {
+    implementation(fileTree("$sourceDir/Build/vcpkg-release/packages") {
         include("**/SDL3.jar")
         include("**/SDL3-*.jar")
         exclude("**/*-sources.jar")

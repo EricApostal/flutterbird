@@ -28,7 +28,9 @@ CMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE:-RelWithDebInfo}
 # (And this also works on macOS, despite the fact that $XDG_CACHE_HOME is a Linux-ism.)
 export XDG_CACHE_HOME="$CACHE_DIR"
 
-if [ ! -x "$LADYBIRD_SOURCE_DIR/Build/vcpkg/vcpkg" ]; then
+VCPKG_ROOT="${LADYBIRD_SOURCE_DIR}/Build/vcpkg-release"
+
+if [ ! -x "$VCPKG_ROOT/vcpkg" ]; then
     "$LADYBIRD_SOURCE_DIR"/Meta/ladybird.py vcpkg
 fi
 
@@ -42,10 +44,10 @@ cmake -S "${LADYBIRD_SOURCE_DIR}" -B "$BUILD_DIR/lagom-tools" \
     -DBUILD_SHARED_LIBS=OFF \
     -DLAGOM_TOOLS_ONLY=ON \
     -DINSTALL_LAGOM_TOOLS=ON \
-    -DCMAKE_TOOLCHAIN_FILE="$LADYBIRD_SOURCE_DIR/Build/vcpkg/scripts/buildsystems/vcpkg.cmake" \
+    -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" \
     -DVCPKG_INSTALL_OPTIONS="--no-print-usage" \
     -DVCPKG_OVERLAY_TRIPLETS="$LADYBIRD_SOURCE_DIR/Meta/CMake/vcpkg/release-triplets" \
-    -DVCPKG_ROOT="$LADYBIRD_SOURCE_DIR/Build/vcpkg" \
+    -DVCPKG_ROOT="$VCPKG_ROOT" \
     -DVCPKG_MANIFEST_DIR="$LADYBIRD_SOURCE_DIR"
 
 ninja -C "$BUILD_DIR/lagom-tools" install
