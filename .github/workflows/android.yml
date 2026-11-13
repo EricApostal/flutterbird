@@ -1,0 +1,149 @@
+name: Android APK
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      build_mode:
+        description: Flutter build mode
+        type: choice
+        options: [release, debug]
+        default: release
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  NDK_VERSION: 29.0.13599879
+  LADYBIRD_CACHE_DIR: ${{ github.workspace }}/.ladybird-cache
+  CCACHE_DIR: ${{ github.workspace }}/.ccache
+  CCACHE_MAXSIZE: 3G
+  BUILD_MODE: ${{ inputs.build_mode || 'release' }}
+
+jobs:
+  apk:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    permissions:
+      contents: write # needed to attach APKs to a release on tag builds
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # The Ladybird engine build (vcpkg + ffmpeg + angle + ...) needs far more
+      # than the ~14GB free on a stock runner.
+      - name: Free up disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost /opt/hostedtoolcache/CodeQL
+          sudo docker image prune --all --force || true
+          df -h /
+
+      - name: Install build dependencies
+        run: |
+          wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo tee /usr/share/keyrings/llvm-snapshot.asc >/dev/null
+          echo "deb [signed-by=/usr/share/keyrings/llvm-snapshot.asc] https://apt.llvm.org/noble/ llvm-toolchain-noble-22 main" \
+            | sudo tee /etc/apt/sources.list.d/llvm.list
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            autoconf autoconf-archive automake build-essential ccache clang-22 lld-22 \
+            cmake curl git glslang-tools libdrm-dev libgl1-mesa-dev libncurses-dev \
+            libpulse-dev libtool nasm ninja-build pkg-config python3-venv tar unzip zip
+          echo "CC=clang-22" >> "$GITHUB_ENV"
+          echo "CXX=clang++-22" >> "$GITHUB_ENV"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install Android SDK components
+        run: |
+          yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" \
+            "platforms;android-35" "platforms;android-36" "build-tools;35.0.0" \
+            "ndk;${NDK_VERSION}" "cmake;3.31.6"
+
+      # libbird's native-assets hook and Gradle build both clone the pinned
+      # Ladybird checkout on demand. Do it up front so the Rust toolchain and
+      # vcpkg can be prepared from it, and so we can key caches on its revision.
+      - name: Fetch Ladybird source
+        run: bash packages/libbird/tool/ensure_ladybird_source.sh
+
+      - name: Install Rust toolchain pinned by Ladybird
+        working-directory: packages/libbird/third_party/ladybird
+        run: |
+          CHANNEL=$(sed -n 's/^channel *= *"\(.*\)"/\1/p' rust-toolchain.toml)
+          rustup toolchain install "$CHANNEL" --profile minimal --target aarch64-linux-android
+          rustup default "$CHANNEL"
+          cargo --version
+
+      - name: Restore caches
+        uses: actions/cache/restore@v4
+        id: cache
+        with:
+          path: |
+            .ccache
+            .ladybird-cache
+            ~/.cargo/registry
+          key: android-${{ hashFiles('packages/libbird/third_party/ladybird.version') }}-${{ github.run_id }}
+          restore-keys: |
+            android-${{ hashFiles('packages/libbird/third_party/ladybird.version') }}-
+            android-
+
+      - name: Bootstrap vcpkg
+        working-directory: packages/libbird/third_party/ladybird
+        run: ./Meta/ladybird.py vcpkg --preset Release
+
+      - name: Flutter pub get
+        run: flutter pub get
+
+      - name: Build APK
+        run: flutter build apk --${{ env.BUILD_MODE }} --verbose
+        env:
+          GRADLE_OPTS: -Xmx4g
+
+      # Save even if the build failed: a partial ccache/vcpkg cache lets the
+      # next run resume instead of starting from scratch.
+      - name: Save caches
+        if: always() && steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            .ccache
+            .ladybird-cache
+            ~/.cargo/registry
+          key: android-${{ hashFiles('packages/libbird/third_party/ladybird.version') }}-${{ github.run_id }}
+
+      - name: Collect APKs
+        run: |
+          mkdir -p dist
+          find build/app/outputs/flutter-apk -name '*.apk' -exec cp {} dist/ \;
+          ls -lh dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: flutterbird-android-${{ env.BUILD_MODE }}
+          path: dist/*.apk
+          if-no-files-found: error
+
+      - name: Publish GitHub release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
