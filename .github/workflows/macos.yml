@@ -1,0 +1,157 @@
+name: macOS App
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CCACHE_DIR: ${{ github.workspace }}/.ccache
+  CCACHE_MAXSIZE: 3G
+  SCCACHE_DIR: ${{ github.workspace }}/.sccache
+  SCCACHE_CACHE_SIZE: 2G
+  SCCACHE_IDLE_TIMEOUT: '0'
+  HOMEBREW_NO_AUTO_UPDATE: '1'
+  HOMEBREW_NO_INSTALL_CLEANUP: '1'
+  LADYBIRD_DIR: packages/libbird/third_party/ladybird
+
+jobs:
+  app:
+    # Apple Silicon: libbird only builds arm64 (see ladybird.podspec).
+    runs-on: macos-26
+    timeout-minutes: 360
+    permissions:
+      contents: write # needed to attach the app to a release on tag builds
+
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      # Ladybird needs a recent Xcode (its own CI selects the latest). The
+      # README notes Xcode betas have bugs in release mode, so stay on stable.
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Install build dependencies
+        run: |
+          df -h /
+          brew install \
+            autoconf autoconf-archive automake bash ccache cmake coreutils \
+            libtool llvm@22 nasm ninja pkg-config sccache unzip
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          # 3.50 matches the Android workflow, which needs it for AGP 9's new DSL.
+          flutter-version: 3.50.0
+          channel: stable
+          cache: true
+
+      # The engine build clones the pinned Ladybird checkout on demand. Do it
+      # up front so the Rust toolchain can be prepared from it and so caches
+      # can be keyed on its revision.
+      - name: Fetch Ladybird source
+        run: bash packages/libbird/tool/ensure_ladybird_source.sh
+
+      - name: Install Rust toolchain pinned by Ladybird
+        working-directory: ${{ env.LADYBIRD_DIR }}
+        run: |
+          CHANNEL=$(sed -n 's/^channel *= *"\(.*\)"/\1/p' rust-toolchain.toml)
+          rustup toolchain install "$CHANNEL" --profile minimal
+          rustup default "$CHANNEL"
+          cargo --version
+
+      # Ladybird's setup action installs this for every non-Linux build.
+      - name: Install wasm-tools
+        run: |
+          VERSION=1.243.0
+          NAME="wasm-tools-${VERSION}-aarch64-macos"
+          curl --fail --location --retry 3 --output wasm-tools.tar.gz \
+            "https://github.com/bytecodealliance/wasm-tools/releases/download/v${VERSION}/${NAME}.tar.gz"
+          tar -xzf wasm-tools.tar.gz
+          echo "$GITHUB_WORKSPACE/$NAME" >> "$GITHUB_PATH"
+          rm wasm-tools.tar.gz
+
+      - name: Restore caches
+        uses: actions/cache/restore@v6
+        id: cache
+        with:
+          path: |
+            .ccache
+            .sccache
+            ${{ env.LADYBIRD_DIR }}/Build/caches
+            ~/.cargo/registry
+          key: macos-${{ hashFiles('packages/libbird/third_party/ladybird.version') }}-${{ github.run_id }}
+          restore-keys: |
+            macos-${{ hashFiles('packages/libbird/third_party/ladybird.version') }}-
+            macos-
+
+      - name: Flutter pub get
+        run: flutter pub get
+
+      # CocoaPods drives this: the ladybird pod's "Build Ladybird Engine"
+      # script phase runs cmake + Meta/ladybird.py build, then the "Deploy"
+      # phase copies the engine, helper processes and resources into the .app.
+      - name: Build macOS app
+        run: flutter build macos --release --verbose
+
+      # Save even if the build failed so a retry resumes from the caches.
+      - name: Save caches
+        if: always() && steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            .ccache
+            .sccache
+            ${{ env.LADYBIRD_DIR }}/Build/caches
+            ~/.cargo/registry
+          key: macos-${{ hashFiles('packages/libbird/third_party/ladybird.version') }}-${{ github.run_id }}
+
+      # vcpkg/autoconf logs only exist on the runner's disk, so keep them on failure.
+      - name: Upload native build logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-build-logs-macos
+          path: |
+            ${{ env.LADYBIRD_DIR }}/Build/vcpkg-release/buildtrees/**/*.log
+            !${{ env.LADYBIRD_DIR }}/Build/vcpkg-release/buildtrees/**/patch-*.log
+          if-no-files-found: warn
+          retention-days: 7
+
+      # `ditto` keeps symlinks, resource forks and code signatures intact,
+      # which a plain `zip` does not for an .app bundle.
+      - name: Package app
+        run: |
+          APP=$(ls -d build/macos/Build/Products/Release/*.app | head -n 1)
+          echo "Packaging $APP"
+          codesign --verify --deep --verbose=2 "$APP" || true
+          mkdir -p dist
+          ditto -c -k --sequesterRsrc --keepParent "$APP" "dist/flutterbird-macos-arm64.zip"
+          ls -lh dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: flutterbird-macos-arm64
+          path: dist/flutterbird-macos-arm64.zip
+          if-no-files-found: error
+
+      - name: Publish GitHub release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/flutterbird-macos-arm64.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
