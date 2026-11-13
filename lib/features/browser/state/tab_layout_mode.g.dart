@@ -54,7 +54,7 @@ abstract class _$BrowserTabLayoutModeController
   BrowserTabLayoutMode build();
   @$mustCallSuper
   @override
-  void runBuild() {
+  WhenComplete runBuild() {
     final ref = this.ref as $Ref<BrowserTabLayoutMode, BrowserTabLayoutMode>;
     final element =
         ref.element
@@ -64,6 +64,6 @@ abstract class _$BrowserTabLayoutModeController
               Object?,
               Object?
             >;
-    element.handleCreate(ref, build);
+    return element.handleCreate(ref, build);
   }
 }

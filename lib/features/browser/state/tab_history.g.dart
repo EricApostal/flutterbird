@@ -59,7 +59,7 @@ final class TabHistoryControllerProvider
 }
 
 String _$tabHistoryControllerHash() =>
-    r'a162e650bd85ccbe25924baaaf130efb7a1bc024';
+    r'21a210cfe7985b3061276bc44fc8e8010b407254';
 
 final class TabHistoryControllerFamily extends $Family
     with
@@ -93,7 +93,7 @@ abstract class _$TabHistoryController extends $Notifier<TabHistoryState> {
   TabHistoryState build(int viewId);
   @$mustCallSuper
   @override
-  void runBuild() {
+  WhenComplete runBuild() {
     final ref = this.ref as $Ref<TabHistoryState, TabHistoryState>;
     final element =
         ref.element
@@ -103,6 +103,6 @@ abstract class _$TabHistoryController extends $Notifier<TabHistoryState> {
               Object?,
               Object?
             >;
-    element.handleCreate(ref, () => build(_$args));
+    return element.handleCreate(ref, () => build(_$args));
   }
 }
