@@ -55,8 +55,14 @@ jobs:
             autoconf autoconf-archive automake build-essential ccache clang-22 lld-22 \
             cmake curl git glslang-tools libdrm-dev libgl1-mesa-dev libncurses-dev \
             libpulse-dev libtool nasm ninja-build pkg-config python3-venv tar unzip zip
-          echo "CC=clang-22" >> "$GITHUB_ENV"
-          echo "CXX=clang++-22" >> "$GITHUB_ENV"
+          # Make clang 22 the default *host* compiler (Ladybird needs C++23).
+          # Do NOT export CC/CXX: vcpkg honors them even when cross-compiling,
+          # so autoconf ports (ICU, ...) would try to build for Android with
+          # the host x86 clang instead of the NDK's.
+          sudo update-alternatives --install /usr/bin/cc cc /usr/bin/clang-22 100
+          sudo update-alternatives --install /usr/bin/c++ c++ /usr/bin/clang++-22 100
+          sudo update-alternatives --set cc /usr/bin/clang-22
+          sudo update-alternatives --set c++ /usr/bin/clang++-22
 
       - uses: actions/setup-java@v6
         with:
@@ -78,6 +84,16 @@ jobs:
           "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" \
             "platforms;android-35" "platforms;android-36" "build-tools;35.0.0" \
             "ndk;${NDK_VERSION}" "cmake;3.31.6"
+          # vcpkg's Android toolchain locates the NDK through these variables,
+          # while Gradle uses ndkVersion. The runner image presets them to its
+          # own NDK, so point them at the one Gradle will use.
+          NDK_PATH="$ANDROID_SDK_ROOT/ndk/${NDK_VERSION}"
+          test -x "$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/clang"
+          {
+            echo "ANDROID_NDK_HOME=$NDK_PATH"
+            echo "ANDROID_NDK_ROOT=$NDK_PATH"
+            echo "ANDROID_NDK=$NDK_PATH"
+          } >> "$GITHUB_ENV"
 
       # libbird's native-assets hook and Gradle build both clone the pinned
       # Ladybird checkout on demand. Do it up front so the Rust toolchain and
@@ -117,6 +133,19 @@ jobs:
         run: flutter build apk --${{ env.BUILD_MODE }} --verbose
         env:
           GRADLE_OPTS: -Xmx4g
+
+      # vcpkg/autoconf logs (e.g. ICU's config.log) only exist on the runner's
+      # disk and are not fully echoed into the job log, so keep them on failure.
+      - name: Upload native build logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-build-logs
+          path: |
+            packages/libbird/third_party/ladybird/Build/vcpkg-release/buildtrees/**/*.log
+            !packages/libbird/third_party/ladybird/Build/vcpkg-release/buildtrees/**/patch-*.log
+          if-no-files-found: warn
+          retention-days: 7
 
       # Save even if the build failed: a partial ccache/vcpkg cache lets the
       # next run resume instead of starting from scratch.
