@@ -1,25 +1,9 @@
 import com.android.build.api.dsl.LibraryExtension
+import com.android.build.api.variant.LibraryAndroidComponentsExtension
 import java.io.ByteArrayOutputStream
 
 group = "dev.flutterbird.ladybird"
 version = "1.0-SNAPSHOT"
-
-buildscript {
-    repositories {
-        google()
-        mavenCentral()
-    }
-    dependencies {
-        classpath("com.android.tools.build:gradle:9.3.1")
-    }
-}
-
-allprojects {
-    repositories {
-        google()
-        mavenCentral()
-    }
-}
 
 plugins {
     id("com.android.library")
@@ -276,19 +260,22 @@ configure<LibraryExtension> {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    sourceSets {
-        getByName("main") {
-            assets.directories.add(layout.buildDirectory.dir("generated/ladybirdAssets").get().asFile.absolutePath)
-            java.directories.add(generatedSdl3JavaDir)
-            jniLibs.srcDir(ladybirdHelperJniDir.get().asFile)
-        }
-    }
-
     packaging {
         jniLibs {
             useLegacyPackaging = true
             keepDebugSymbols.add("**/libWebContent.so")
         }
+    }
+}
+
+// Variant API instead of the `sourceSets` DSL: it works whether the host build
+// uses AGP's legacy or new DSL (android.newDsl), which `sourceSets` does not.
+extensions.configure<LibraryAndroidComponentsExtension> {
+    onVariants { variant ->
+        variant.sources.assets?.addStaticSourceDirectory(
+            layout.buildDirectory.dir("generated/ladybirdAssets").get().asFile.absolutePath)
+        variant.sources.java?.addStaticSourceDirectory(generatedSdl3JavaDir)
+        variant.sources.jniLibs?.addStaticSourceDirectory(ladybirdHelperJniDir.get().asFile.absolutePath)
     }
 }
 
