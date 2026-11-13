@@ -78,9 +78,9 @@ class _LadybirdViewState extends State<LadybirdView>
   double _lastSimX = 0;
   double _lastSimY = 0;
 
-  bool get _showFrameDiagnostics =>
-      defaultTargetPlatform == TargetPlatform.android;
-  // bool get _showFrameDiagnostics => false;
+  // bool get _showFrameDiagnostics =>
+  //     defaultTargetPlatform == TargetPlatform.android;
+  bool get _showFrameDiagnostics => false;
 
   void _onNativeResize() {
     if (!mounted) return;
