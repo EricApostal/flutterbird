@@ -42,10 +42,10 @@ class _MobileTabSwitcherState extends ConsumerState<MobileTabSwitcher> {
     return Scaffold(
       backgroundColor: theme.colorScheme.surfaceContainer,
       floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          context.pop();
-          BrowserTabActions.openNewTab(ref, context);
-        },
+        // Going to a route replaces the stack, which takes the switcher off it:
+        // no pop first, which would only have the router answer two navigations
+        // in one frame.
+        onPressed: () => BrowserTabActions.openNewTab(ref, context),
         child: const Icon(Icons.add),
       ),
       body: SafeArea(
@@ -86,7 +86,6 @@ class _MobileTabSwitcherState extends ConsumerState<MobileTabSwitcher> {
                         child: GestureDetector(
                           onTap: () {
                             if (isClosing) return;
-                            context.pop();
                             context.go('/browser/tab/${tab.viewId}');
                           },
                           child: MobileTabCard(

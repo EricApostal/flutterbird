@@ -171,7 +171,13 @@ class _BrowserWindowScreenState extends ConsumerState<BrowserWindowScreen> {
     }
 
     if (Platform.isAndroid) {
-      return withFullscreenBackHandling(MobileBrowserLayout(viewId: viewId));
+      return withFullscreenBackHandling(
+        // Keeps a snapshot of the tab for the tab switcher's cards.
+        TabPreviewCapturer(
+          controller: currentTabController,
+          child: MobileBrowserLayout(viewId: viewId),
+        ),
+      );
     }
 
     final padding = MediaQuery.paddingOf(context);

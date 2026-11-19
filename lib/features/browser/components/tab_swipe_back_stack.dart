@@ -19,13 +19,27 @@ import 'package:ladybird/ladybird.dart';
 //
 // Using Navigator pages (rather than a hand-rolled transition) means Android
 // gets real OS predictive-back preview for free.
-class TabSwipeBackStack extends ConsumerWidget {
+//
+// The caller keys this by the tab, so each tab has a Navigator of its own. Pages
+// are keyed by session history step, and one Navigator shared by every tab would
+// diff one tab's history against another's whenever the tab changed, pushing and
+// popping pages with a transition that has nothing to do with going anywhere.
+class TabSwipeBackStack extends ConsumerStatefulWidget {
   final int viewId;
 
   const TabSwipeBackStack({super.key, required this.viewId});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<TabSwipeBackStack> createState() => _TabSwipeBackStackState();
+}
+
+class _TabSwipeBackStackState extends ConsumerState<TabSwipeBackStack> {
+  final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
+
+  int get viewId => widget.viewId;
+
+  @override
+  Widget build(BuildContext context) {
     final historyState = ref.watch(tabHistoryControllerProvider(viewId));
     final isFullscreen = ref.watch(browserFullscreenModeControllerProvider);
 
@@ -73,11 +87,18 @@ class TabSwipeBackStack extends ConsumerWidget {
               ),
           ];
 
-    return Navigator(
-      pages: pages,
-      onDidRemovePage: (page) {
-        ref.read(tabHistoryControllerProvider(viewId).notifier).goBack();
-      },
+    // The system back button reaches only the route of the app's own router, not
+    // a Navigator nested in it. This hands it to ours first, while the tab has
+    // history to go back through, and otherwise lets it through to the router.
+    return NavigatorPopHandler(
+      onPopWithResult: (_) => _navigatorKey.currentState?.maybePop(),
+      child: Navigator(
+        key: _navigatorKey,
+        pages: pages,
+        onDidRemovePage: (page) {
+          ref.read(tabHistoryControllerProvider(viewId).notifier).goBack();
+        },
+      ),
     );
   }
 

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutterbird/features/browser/components/browser_context_menu.dart';
 import 'package:flutterbird/features/browser/state/tab_actions.dart';
+import 'package:flutterbird/features/browser/state/tab_preview_cache.dart';
 import 'package:flutterbird/features/browser/state/tab_layout_mode.dart';
 import 'package:flutterbird/features/browser/state/omnibox_state.dart';
 import 'package:go_router/go_router.dart';
@@ -1139,7 +1140,14 @@ class _MobileOmniboxBarState extends ConsumerState<MobileOmniboxBar> {
                               );
                               return InkWell(
                                 borderRadius: BorderRadius.circular(6),
-                                onTap: () {
+                                onTap: () async {
+                                  // The switcher shows each tab as it last was on
+                                  // screen, and this tab is on screen only until the
+                                  // switcher covers it, so its snapshot is taken now.
+                                  await TabPreviewCache.instance.capture(
+                                    currentTabController.viewId,
+                                  );
+                                  if (!context.mounted) return;
                                   context.push('/browser/mobile_tabs');
                                 },
                                 child: Container(

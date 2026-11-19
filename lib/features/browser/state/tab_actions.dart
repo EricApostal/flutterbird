@@ -43,12 +43,33 @@ class BrowserTabActions {
     return controller;
   }
 
+  // The tab that opened each tab that a page opened (a link that opens a new
+  // tab, window.open, view source), by view id. Going back from the start of such
+  // a tab closes it and returns to the one that opened it, as in a browser. A tab
+  // the user opened themselves has no opener, and going back from it leaves the
+  // app.
+  static final Map<int, int> _openerByTab = <int, int>{};
+
+  // The tab that opened [viewId], if both still exist.
+  static int? openerOf(WidgetRef ref, int viewId) {
+    final opener = _openerByTab[viewId];
+    if (opener == null) return null;
+    final exists = ref
+        .read(browserTabControllerProvider)
+        .any((tab) => tab.viewId == opener);
+    return exists ? opener : null;
+  }
+
   static LadybirdController openExistingTab(
     WidgetRef ref,
     BuildContext context,
     int existingViewId, {
     bool activate = true,
+    int? openerViewId,
   }) {
+    if (openerViewId != null && openerViewId != existingViewId) {
+      _openerByTab[existingViewId] = openerViewId;
+    }
     final controller = ref
         .read(browserTabControllerProvider.notifier)
         .addExisting(existingViewId);
@@ -63,6 +84,7 @@ class BrowserTabActions {
     required int currentViewId,
     required int closeViewId,
     required List<LadybirdController> tabs,
+    int? destinationViewId,
   }) {
     final index = tabs.indexWhere((tab) => tab.viewId == closeViewId);
     if (index < 0) return false;
@@ -72,7 +94,12 @@ class BrowserTabActions {
         exit(0);
       }
 
-      final destinationIndex = index == 0 ? 1 : index - 1;
+      final preferredIndex = destinationViewId == null
+          ? -1
+          : tabs.indexWhere((tab) => tab.viewId == destinationViewId);
+      final destinationIndex = preferredIndex >= 0 && preferredIndex != index
+          ? preferredIndex
+          : (index == 0 ? 1 : index - 1);
       context.go('/browser/tab/${tabs[destinationIndex].viewId}');
     }
 
@@ -91,6 +118,12 @@ class BrowserTabActions {
 
   static bool get hasClosedTabs => _closedTabs.isNotEmpty;
 
+  // A closed tab neither has an opener nor is one.
+  static void _forgetOpener(int viewId) {
+    _openerByTab.remove(viewId);
+    _openerByTab.removeWhere((_, opener) => opener == viewId);
+  }
+
   static void _rememberClosedTab(LadybirdController? controller) {
     if (controller == null) return;
     final url = controller.urlNotifier.value;
@@ -104,6 +137,7 @@ class BrowserTabActions {
   }
 
   static void commitCloseTab(WidgetRef ref, int viewId) {
+    _forgetOpener(viewId);
     _rememberClosedTab(ref.read(browserTabProvider(viewId)));
     ref.read(browserTabControllerProvider.notifier).remove(viewId);
     ref.read(closingTabsProvider.notifier).finish(viewId);
@@ -113,6 +147,7 @@ class BrowserTabActions {
 
   // The same, for a caller whose widget may be gone by the time it runs.
   static void _commitCloseTabWith(ProviderContainer container, int viewId) {
+    _forgetOpener(viewId);
     _rememberClosedTab(container.read(browserTabProvider(viewId)));
     container.read(browserTabControllerProvider.notifier).remove(viewId);
     container.read(closingTabsProvider.notifier).finish(viewId);
@@ -128,6 +163,7 @@ class BrowserTabActions {
     BuildContext context, {
     required int currentViewId,
     required int closeViewId,
+    int? destinationViewId,
   }) async {
     // Closing a tab can navigate away from the widget that asked, so nothing
     // after the first await may touch `context`.
@@ -139,6 +175,7 @@ class BrowserTabActions {
       currentViewId: currentViewId,
       closeViewId: closeViewId,
       tabs: container.read(browserTabControllerProvider),
+      destinationViewId: destinationViewId,
     );
     if (!canClose) return;
 

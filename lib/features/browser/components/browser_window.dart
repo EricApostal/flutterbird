@@ -115,6 +115,7 @@ class _BrowserWindowState extends ConsumerState<BrowserWindow> {
       context,
       newViewId,
       activate: activateTab,
+      openerViewId: widget.viewId,
     );
   }
 

@@ -1,8 +1,10 @@
+import 'dart:ui' as ui;
+
 import 'package:bird_core/bird_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:ladybird/ladybird.dart';
 import 'package:flutterbird/features/browser/state/tab_actions.dart';
+import 'package:flutterbird/features/browser/state/tab_preview_cache.dart';
 
 class MobileTabCard extends ConsumerWidget {
   final int viewId;
@@ -14,7 +16,6 @@ class MobileTabCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final controller = ref.watch(browserTabProvider(viewId));
     final theme = Theme.of(context);
-    final screenSize = MediaQuery.sizeOf(context);
 
     if (controller == null) return const SizedBox.shrink();
 
@@ -76,42 +77,37 @@ class MobileTabCard extends ConsumerWidget {
               ],
             ),
           ),
-          // Body (Preview)
+          // Body (Preview): the last snapshot taken of the page while it was on
+          // screen, filling the card from the top and clipped to it, so a tall
+          // page shows its top part at full width instead of being shrunk to fit.
+          // A live view per card would need a whole texture for each tab.
           Expanded(
-            child: IgnorePointer(
-              child: ExcludeFocus(
-                child: Container(
-                  color: Colors.white,
-                  child: ClipRect(
-                    child: FittedBox(
-                      fit: BoxFit.cover,
-                      alignment: Alignment.topCenter,
-                      child: Builder(
-                        builder: (context) {
-                          final density = MediaQuery.devicePixelRatioOf(
-                            context,
-                          );
-                          final surfaceW =
-                              controller.getSurfaceWidth() / density;
-                          final surfaceH =
-                              controller.getSurfaceHeight() / density;
-
-                          final w = surfaceW > 0 ? surfaceW : screenSize.width;
-                          final h = surfaceH > 0 ? surfaceH : screenSize.height;
-
-                          return SizedBox(
-                            width: w,
-                            height: h,
-                            child: AbsorbPointer(
-                              child: LadybirdView(controller: controller),
-                            ),
-                          );
-                        },
+            child: ValueListenableBuilder<ui.Image?>(
+              valueListenable: TabPreviewCache.instance.listenableFor(viewId),
+              builder: (context, image, child) {
+                if (image == null) {
+                  return ColoredBox(
+                    color: theme.colorScheme.surface,
+                    child: Center(
+                      child: Icon(
+                        Icons.public,
+                        size: 36,
+                        color: theme.colorScheme.onSurfaceVariant,
                       ),
                     ),
+                  );
+                }
+                return ClipRect(
+                  child: SizedBox.expand(
+                    child: RawImage(
+                      image: image,
+                      fit: BoxFit.cover,
+                      alignment: Alignment.topCenter,
+                      filterQuality: FilterQuality.medium,
+                    ),
                   ),
-                ),
-              ),
+                );
+              },
             ),
           ),
         ],

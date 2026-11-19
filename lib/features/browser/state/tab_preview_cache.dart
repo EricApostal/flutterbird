@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:collection';
+import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
@@ -17,11 +18,13 @@ class TabPreviewCache {
   TabPreviewCache._();
   static final TabPreviewCache instance = TabPreviewCache._();
 
-  // The width, in physical pixels, a snapshot is taken at. The popup shows it
-  // at 320 logical pixels, so this covers a 2x display without a resample.
-  static const double snapshotWidth = 640;
+  // The width, in physical pixels, a snapshot is taken at. The desktop popup
+  // shows it at 320 logical pixels, so this covers a 2x display without a
+  // resample. A phone's page is much taller than a desktop window, and its cards
+  // are about 500 physical pixels wide, so it takes smaller ones.
+  static double get snapshotWidth => Platform.isAndroid ? 480 : 640;
 
-  static const int _maxEntries = 32;
+  static int get _maxEntries => Platform.isAndroid ? 16 : 32;
 
   // Insertion order == LRU order.
   final LinkedHashMap<int, ValueNotifier<ui.Image?>> _entries =

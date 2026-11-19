@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/widgets.dart';
 import 'package:flutterbird/features/browser/state/tab_preview_cache.dart';
@@ -27,7 +28,11 @@ class TabPreviewCapturer extends StatefulWidget {
 }
 
 class _TabPreviewCapturerState extends State<TabPreviewCapturer> {
-  static const Duration _periodicInterval = Duration(seconds: 3);
+  // A phone has the tab switcher snapshot the tab as it opens, so this is only
+  // how stale a tab's card gets when the page changes without a load.
+  static final Duration _periodicInterval = Platform.isAndroid
+      ? const Duration(seconds: 8)
+      : const Duration(seconds: 3);
   static const Duration _settleDelay = Duration(milliseconds: 700);
 
   Timer? _periodic;
