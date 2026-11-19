@@ -1,0 +1,423 @@
+name: Native artifacts
+
+# Builds libbird's native code (Ladybird and the engine) for macOS and Android
+# and attaches it to the release `libbird-native-<fingerprint>`, where
+# LIBBIRD_NATIVE_MODE=prebuilt and =auto fetch it from instead of compiling it
+# (see "Native builds" in packages/libbird/README.md).
+#
+# The fingerprint covers the pinned Ladybird revision and the engine's sources,
+# so a release exists per version of the native code and a build only ever finds
+# the copy made from the source it has. A platform that already has a copy for
+# the current fingerprint is skipped, unless `force` is set.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'packages/libbird/cpp/**'
+      - 'packages/libbird/android/CMakeLists.txt'
+      - 'packages/libbird/android/src/main/cpp/**'
+      - 'packages/libbird/macos/ladybird.podspec'
+      - 'packages/libbird/third_party/ladybird.version'
+      - 'packages/libbird/tool/libbird_native.sh'
+      - '.github/workflows/native-artifacts.yml'
+  workflow_dispatch:
+    inputs:
+      platforms:
+        description: Which platforms to build
+        type: choice
+        options: [all, macos, android]
+        default: all
+      force:
+        description: Rebuild a platform even if the release already has its artifact
+        type: boolean
+        default: false
+
+# A newer push has a newer fingerprint, which makes a build that is still going
+# one for source nobody will ask for.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  LADYBIRD_DIR: packages/libbird/third_party/ladybird
+  NATIVE_TOOL: packages/libbird/tool/libbird_native.sh
+
+jobs:
+  # Works out what there is to build, so that the expensive jobs only run for
+  # what is missing.
+  plan:
+    runs-on: ubuntu-24.04
+    outputs:
+      fingerprint: ${{ steps.plan.outputs.fingerprint }}
+      tag: ${{ steps.plan.outputs.tag }}
+      macos_asset: ${{ steps.plan.outputs.macos_asset }}
+      android_asset: ${{ steps.plan.outputs.android_asset }}
+      build_macos: ${{ steps.plan.outputs.build_macos }}
+      build_android: ${{ steps.plan.outputs.build_android }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - name: Plan
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PLATFORMS: ${{ inputs.platforms || 'all' }}
+          FORCE: ${{ inputs.force || 'false' }}
+        run: |
+          set -euo pipefail
+          FINGERPRINT=$(bash "$NATIVE_TOOL" fingerprint)
+          TAG=$(bash "$NATIVE_TOOL" tag)
+          MACOS_ASSET=$(bash "$NATIVE_TOOL" asset-name macos-arm64)
+          ANDROID_ASSET=$(bash "$NATIVE_TOOL" asset-name android-arm64-v8a)
+
+          # The assets the release has, if it exists yet.
+          EXISTING=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" \
+            --json assets --jq '.assets[].name' 2>/dev/null || true)
+
+          wanted() {
+            local platform="$1" asset="$2"
+            if [ "$PLATFORMS" != all ] && [ "$PLATFORMS" != "$platform" ]; then
+              echo false
+            elif [ "$FORCE" != true ] && grep -qx "$asset" <<<"$EXISTING"; then
+              echo false
+            else
+              echo true
+            fi
+          }
+          BUILD_MACOS=$(wanted macos "$MACOS_ASSET")
+          BUILD_ANDROID=$(wanted android "$ANDROID_ASSET")
+
+          {
+            echo "fingerprint=$FINGERPRINT"
+            echo "tag=$TAG"
+            echo "macos_asset=$MACOS_ASSET"
+            echo "android_asset=$ANDROID_ASSET"
+            echo "build_macos=$BUILD_MACOS"
+            echo "build_android=$BUILD_ANDROID"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "### Native artifacts for \`$FINGERPRINT\`"
+            echo
+            echo "Release: \`$TAG\`"
+            echo
+            echo "| Platform | Build |"
+            echo "|---|---|"
+            echo "| macOS arm64 | $BUILD_MACOS |"
+            echo "| Android arm64-v8a | $BUILD_ANDROID |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  macos:
+    needs: plan
+    if: needs.plan.outputs.build_macos == 'true'
+    # Apple Silicon: libbird only builds arm64 (see ladybird.podspec).
+    runs-on: macos-26
+    timeout-minutes: 360
+    env:
+      # Ladybird builds for macOS 14.4 and up, and the app that embeds it cannot
+      # target less (the pod says the same). The pod build gets this from Xcode.
+      MACOSX_DEPLOYMENT_TARGET: '14.4'
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
+      CCACHE_MAXSIZE: 3G
+      SCCACHE_DIR: ${{ github.workspace }}/.sccache
+      SCCACHE_CACHE_SIZE: 2G
+      SCCACHE_IDLE_TIMEOUT: '0'
+      HOMEBREW_NO_AUTO_UPDATE: '1'
+      HOMEBREW_NO_INSTALL_CLEANUP: '1'
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      # Ladybird needs a recent Xcode. Xcode betas have bugs in release mode, so
+      # stay on stable.
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Install build dependencies
+        run: |
+          df -h /
+          brew install \
+            autoconf autoconf-archive automake bash ccache cmake coreutils \
+            libtool llvm@22 nasm ninja pkg-config sccache unzip
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      # The engine build clones the pinned Ladybird checkout on demand. Do it up
+      # front so the Rust toolchain can be prepared from it.
+      - name: Fetch Ladybird source
+        run: bash packages/libbird/tool/ensure_ladybird_source.sh
+
+      - name: Install Rust toolchain pinned by Ladybird
+        working-directory: ${{ env.LADYBIRD_DIR }}
+        run: |
+          CHANNEL=$(sed -n 's/^channel *= *"\(.*\)"/\1/p' rust-toolchain.toml)
+          rustup toolchain install "$CHANNEL" --profile minimal
+          rustup default "$CHANNEL"
+          cargo --version
+
+      # Ladybird's setup action installs this for every non-Linux build.
+      - name: Install wasm-tools
+        run: |
+          VERSION=1.243.0
+          NAME="wasm-tools-${VERSION}-aarch64-macos"
+          curl --fail --location --retry 3 --output wasm-tools.tar.gz \
+            "https://github.com/bytecodealliance/wasm-tools/releases/download/v${VERSION}/${NAME}.tar.gz"
+          tar -xzf wasm-tools.tar.gz
+          echo "$GITHUB_WORKSPACE/$NAME" >> "$GITHUB_PATH"
+          rm wasm-tools.tar.gz
+
+      - name: Restore caches
+        uses: actions/cache/restore@v6
+        id: cache
+        with:
+          path: |
+            .ccache
+            .sccache
+            ${{ env.LADYBIRD_DIR }}/Build/caches
+            ~/.cargo/registry
+          key: native-macos-${{ needs.plan.outputs.fingerprint }}-${{ github.run_id }}
+          restore-keys: |
+            native-macos-${{ hashFiles('packages/libbird/third_party/ladybird.version') }}-
+            native-macos-
+
+      # The same build the pod's "Build Ladybird Engine" script phase runs:
+      # cpp/CMakeLists.txt drives Ladybird's own build, links the engine, and
+      # gathers everything into cpp/build/LadybirdBundle.
+      - name: Build the engine and Ladybird
+        working-directory: packages/libbird/cpp
+        run: |
+          mkdir -p build
+          cd build
+          cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES=arm64 ..
+          make -j"$(sysctl -n hw.ncpu)"
+
+      # Save even if the build failed so a retry resumes from the caches.
+      - name: Save caches
+        if: always() && steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            .ccache
+            .sccache
+            ${{ env.LADYBIRD_DIR }}/Build/caches
+            ~/.cargo/registry
+          key: native-macos-${{ needs.plan.outputs.fingerprint }}-${{ github.run_id }}
+
+      # vcpkg/autoconf logs only exist on the runner's disk, so keep them on failure.
+      - name: Upload native build logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-build-logs-macos
+          path: |
+            ${{ env.LADYBIRD_DIR }}/Build/vcpkg-release/buildtrees/**/*.log
+            !${{ env.LADYBIRD_DIR }}/Build/vcpkg-release/buildtrees/**/patch-*.log
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Package
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          ARCHIVE=$(bash "$NATIVE_TOOL" package macos-arm64 packages/libbird/cpp/build/LadybirdBundle dist)
+          # The name carries the fingerprint, so a runner that computed another
+          # one (a different file set) would publish what nobody asks for.
+          test "$(basename "$ARCHIVE")" = "${{ needs.plan.outputs.macos_asset }}"
+          ls -lh dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: libbird-native-macos
+          path: dist/*
+          if-no-files-found: error
+
+  android:
+    needs: plan
+    if: needs.plan.outputs.build_android == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    env:
+      NDK_VERSION: 29.0.13599879
+      LADYBIRD_CACHE_DIR: ${{ github.workspace }}/.ladybird-cache
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
+      CCACHE_MAXSIZE: 3G
+      # This job exists to compile: whatever a developer's setting says.
+      LIBBIRD_NATIVE_MODE: local
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      # The Ladybird engine build (vcpkg + ffmpeg + angle + ...) needs far more
+      # than the ~14GB free on a stock runner.
+      - name: Free up disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost /opt/hostedtoolcache/CodeQL
+          sudo docker image prune --all --force || true
+          df -h /
+
+      - name: Install build dependencies
+        run: |
+          wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo tee /usr/share/keyrings/llvm-snapshot.asc >/dev/null
+          echo "deb [signed-by=/usr/share/keyrings/llvm-snapshot.asc] https://apt.llvm.org/noble/ llvm-toolchain-noble-22 main" \
+            | sudo tee /etc/apt/sources.list.d/llvm.list
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            autoconf autoconf-archive automake build-essential ccache clang-22 lld-22 \
+            cmake curl git glslang-tools libdrm-dev libgl1-mesa-dev libncurses-dev \
+            libpulse-dev libtool nasm ninja-build pkg-config python3-venv tar unzip zip
+          # Make clang 22 the default *host* compiler (Ladybird needs C++23).
+          # Do NOT export CC/CXX: vcpkg honors them even when cross-compiling,
+          # so autoconf ports (ICU, ...) would try to build for Android with
+          # the host x86 clang instead of the NDK's.
+          sudo update-alternatives --install /usr/bin/cc cc /usr/bin/clang-22 100
+          sudo update-alternatives --install /usr/bin/c++ c++ /usr/bin/clang++-22 100
+          sudo update-alternatives --set cc /usr/bin/clang-22
+          sudo update-alternatives --set c++ /usr/bin/clang++-22
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v6
+
+      - uses: subosito/flutter-action@v2
+        with:
+          # 3.50 is the first release whose Gradle plugin supports AGP 9's new DSL.
+          flutter-version: 3.50.0
+          channel: stable
+          cache: true
+
+      - name: Install Android SDK components
+        run: |
+          yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" \
+            "platforms;android-35" "platforms;android-36" "build-tools;35.0.0" \
+            "ndk;${NDK_VERSION}" "cmake;3.31.6"
+          # vcpkg's Android toolchain locates the NDK through these variables,
+          # while Gradle uses ndkVersion. The runner image presets them to its
+          # own NDK, so point them at the one Gradle will use.
+          NDK_PATH="$ANDROID_SDK_ROOT/ndk/${NDK_VERSION}"
+          test -x "$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/clang"
+          {
+            echo "ANDROID_NDK_HOME=$NDK_PATH"
+            echo "ANDROID_NDK_ROOT=$NDK_PATH"
+            echo "ANDROID_NDK=$NDK_PATH"
+          } >> "$GITHUB_ENV"
+
+      - name: Fetch Ladybird source
+        run: bash packages/libbird/tool/ensure_ladybird_source.sh
+
+      - name: Install Rust toolchain pinned by Ladybird
+        working-directory: ${{ env.LADYBIRD_DIR }}
+        run: |
+          CHANNEL=$(sed -n 's/^channel *= *"\(.*\)"/\1/p' rust-toolchain.toml)
+          rustup toolchain install "$CHANNEL" --profile minimal --target aarch64-linux-android
+          rustup default "$CHANNEL"
+          cargo --version
+
+      - name: Restore caches
+        uses: actions/cache/restore@v6
+        id: cache
+        with:
+          path: |
+            .ccache
+            .ladybird-cache
+            ~/.cargo/registry
+          key: native-android-${{ needs.plan.outputs.fingerprint }}-${{ github.run_id }}
+          restore-keys: |
+            native-android-${{ hashFiles('packages/libbird/third_party/ladybird.version') }}-
+            native-android-
+            android-${{ hashFiles('packages/libbird/third_party/ladybird.version') }}-
+            android-
+
+      - name: Bootstrap vcpkg
+        working-directory: ${{ env.LADYBIRD_DIR }}
+        run: ./Meta/ladybird.py vcpkg --preset Release
+
+      - name: Flutter pub get
+        run: flutter pub get
+
+      # The native code is built by libbird's Gradle module, as part of an app. A
+      # release APK is the app, and where the stripped libraries to package are.
+      - name: Build APK
+        run: flutter build apk --release --verbose
+        env:
+          GRADLE_OPTS: -Xmx4g
+
+      - name: Save caches
+        if: always() && steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            .ccache
+            .ladybird-cache
+            ~/.cargo/registry
+          key: native-android-${{ needs.plan.outputs.fingerprint }}-${{ github.run_id }}
+
+      - name: Upload native build logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-build-logs-android
+          path: |
+            ${{ env.LADYBIRD_DIR }}/Build/vcpkg-release/buildtrees/**/*.log
+            !${{ env.LADYBIRD_DIR }}/Build/vcpkg-release/buildtrees/**/patch-*.log
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Package
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          ARCHIVE=$(bash "$NATIVE_TOOL" package android-arm64-v8a build dist)
+          test "$(basename "$ARCHIVE")" = "${{ needs.plan.outputs.android_asset }}"
+          ls -lh dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: libbird-native-android
+          path: dist/*
+          if-no-files-found: error
+
+  # Attaches whatever was built to the release for this fingerprint, creating it
+  # if need be. A platform that failed does not hold back one that did: lookups
+  # are per platform, so a release with only one of them is a fine release.
+  publish:
+    needs: [plan, macos, android]
+    if: ${{ !cancelled() && (needs.macos.result == 'success' || needs.android.result == 'success') }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ needs.plan.outputs.tag }}
+      FINGERPRINT: ${{ needs.plan.outputs.fingerprint }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: libbird-native-*
+          path: dist
+          merge-multiple: true
+
+      - name: Publish release assets
+        run: |
+          set -euo pipefail
+          ls -lh dist
+          if ! gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            # A pre-release that is not "latest", so that it never stands in for
+            # an app release (the v* tags).
+            gh release create "$TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --target "$GITHUB_SHA" \
+              --title "libbird native $FINGERPRINT" \
+              --notes "Prebuilt native code for libbird's source fingerprint \`$FINGERPRINT\`, used by \`LIBBIRD_NATIVE_MODE=prebuilt\` and \`auto\`. Built from $GITHUB_SHA." \
+              --prerelease \
+              --latest=false
+          fi
+          gh release upload "$TAG" dist/* --repo "$GITHUB_REPOSITORY" --clobber

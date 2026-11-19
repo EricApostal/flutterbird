@@ -1,6 +1,9 @@
 #
 # ladybird.podspec
 #
+# The native code is either compiled here or unpacked from a prebuilt copy, see
+# tool/libbird_native.sh and the README's "Native builds" section.
+#
 # Build strategy mirrors the Linux CMakeLists.txt:
 #   - A before_compile script phase drives cmake in packages/libbird/cpp/build
 #     (cpp/CMakeLists.txt runs ensure_ladybird_source.sh, builds Ladybird via
@@ -81,13 +84,36 @@ Pod::Spec.new do |s|
   }
 
   s.script_phases = [
-    # ── Phase 1: build engine (mirrors Linux add_subdirectory(../cpp)) ──────
+    # ── Phase 1: get the engine (mirrors Linux add_subdirectory(../cpp)) ────
+    #
+    # Either compile it here, or unpack the copy CI built for exactly this
+    # source. tool/libbird_native.sh decides (LIBBIRD_NATIVE_MODE, or the
+    # native_mode.local file, see the README) and both ways end with the same
+    # thing in cpp/build/LadybirdBundle, which the link and the deploy phase
+    # below read.
     {
       :name               => 'Build Ladybird Engine',
       :execution_position => :before_compile,
       :script             => <<~SCRIPT
         set -e
-        CPP_DIR="${PODS_TARGET_SRCROOT}/../cpp"
+        PLUGIN_ROOT="${PODS_TARGET_SRCROOT}/.."
+        CPP_DIR="${PLUGIN_ROOT}/cpp"
+        BUNDLE_DIR="${CPP_DIR}/build/LadybirdBundle"
+        NATIVE_TOOL="${PLUGIN_ROOT}/tool/libbird_native.sh"
+
+        if [ "$(bash "${NATIVE_TOOL}" mode macos-arm64)" = "prebuilt" ]; then
+          bash "${NATIVE_TOOL}" fetch macos-arm64 "${BUNDLE_DIR}"
+          exit 0
+        fi
+
+        # Back to compiling after a prebuilt copy: the bundle holds that copy's
+        # files, which the build below would not replace on its own (the engine
+        # is only copied into it when it relinks, the rest when the Ladybird
+        # build changes). Clear it, and the engine so that it relinks.
+        if [ -f "${BUNDLE_DIR}/.libbird-native-fingerprint" ]; then
+          rm -rf "${BUNDLE_DIR}" "${CPP_DIR}/build/LadybirdBundle.stamp" "${CPP_DIR}/build/libengine.dylib"
+        fi
+
         mkdir -p "${CPP_DIR}/build"
         cd "${CPP_DIR}/build"
         cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES=arm64 ..

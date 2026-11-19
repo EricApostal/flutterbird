@@ -19,6 +19,58 @@ val ladybirdVersionFile = layout.projectDirectory.file("../third_party/ladybird.
 val ensureLadybirdSourceStamp = layout.buildDirectory.file("generated/ensureLadybirdSource.stamp")
 val lagomToolsStamp = layout.buildDirectory.file("generated/lagom-tools.stamp")
 
+// Whether the native code (Ladybird and the engine) is compiled here or comes as
+// a prebuilt copy built by CI for exactly this source. tool/libbird_native.sh
+// decides, from LIBBIRD_NATIVE_MODE or packages/libbird/native_mode.local, so
+// that every platform makes the choice the same way (see the README).
+val libbirdNativeTool = layout.projectDirectory.file("../tool/libbird_native.sh").asFile
+val libbirdNativePlatform = "android-arm64-v8a"
+val usePrebuiltNative: Boolean = run {
+    val process = ProcessBuilder("bash", libbirdNativeTool.absolutePath, "mode", libbirdNativePlatform)
+        .directory(layout.projectDirectory.asFile)
+        .redirectError(ProcessBuilder.Redirect.INHERIT)
+        .start()
+    val output = process.inputStream.bufferedReader().readText().trim()
+    if (process.waitFor() != 0) {
+        throw GradleException(
+            "tool/libbird_native.sh could not decide between a prebuilt and a locally compiled native build."
+        )
+    }
+    output == "prebuilt"
+}
+logger.lifecycle(
+    "libbird: " + if (usePrebuiltNative) "using the prebuilt native code"
+    else "compiling the native code locally"
+)
+
+// A prebuilt copy is unpacked into the generated directories that a local build
+// fills (the helper processes and engine libraries, the assets, the SDL3 Java
+// sources), so everything after this point treats the two alike.
+val fetchPrebuiltNative = tasks.register<Exec>("fetchPrebuiltNative") {
+    group = "libbird"
+    description = "Unpacks the prebuilt native copy that matches this source."
+    workingDir = layout.projectDirectory.asFile
+    commandLine = listOf(
+        "bash",
+        libbirdNativeTool.absolutePath,
+        "fetch",
+        libbirdNativePlatform,
+        layout.buildDirectory.dir("generated").get().asFile.absolutePath,
+    )
+    inputs.file(libbirdNativeTool)
+    inputs.file(layout.projectDirectory.file("../third_party/ladybird.version"))
+    // The script knows whether the right copy is already in place, and does
+    // nothing when it is.
+    outputs.upToDateWhen { false }
+}
+
+if (!usePrebuiltNative) {
+    // A local build overwrites what a prebuilt copy put in these directories, so
+    // the copy is no longer what the fetch's stamp says. Forget the stamp, so
+    // that going back to prebuilt unpacks it again.
+    layout.buildDirectory.file("generated/.libbird-native-fingerprint").get().asFile.delete()
+}
+
 data class Sdl3JavaInputs(val jar: File?, val sourceDirs: List<File>)
 
 fun Project.resolveSdl3JavaInputs(sourceDir: String): Sdl3JavaInputs {
@@ -205,27 +257,46 @@ val verifySdl3JavaInputsTask = tasks.register("verifySdl3JavaInputs") {
     doLast { verifySdl3JavaInputs(resolveSdl3JavaInputs(sourceDir)) }
 }
 
-tasks.matching { it.name == "preBuild" }.configureEach {
-    // dependsOn(buildLagomTools)
-    dependsOn(packageLadybirdAssets)
-}
+if (usePrebuiltNative) {
+    // Nothing is compiled: what the native build would have produced is
+    // unpacked first, before anything reads those directories.
+    tasks.matching { it.name == "preBuild" }.configureEach {
+        dependsOn(fetchPrebuiltNative)
+    }
 
-tasks.matching { it.name.startsWith("merge") && it.name.endsWith("Assets") }.configureEach {
-    dependsOn(packageLadybirdAssets)
-}
+    tasks.matching {
+        (it.name.startsWith("merge") &&
+                (it.name.endsWith("Assets") || it.name.endsWith("JniLibFolders")))
+    }.configureEach {
+        dependsOn(fetchPrebuiltNative)
+    }
 
-tasks.withType<JavaCompile>().configureEach {
-    dependsOn(prepareSdl3Java)
+    tasks.withType<JavaCompile>().configureEach {
+        dependsOn(fetchPrebuiltNative)
+    }
+} else {
+    tasks.matching { it.name == "preBuild" }.configureEach {
+        // dependsOn(buildLagomTools)
+        dependsOn(packageLadybirdAssets)
+    }
 
-    val variantName = javaCompileVariantName(name) ?: return@configureEach
-    dependsOn(tasks.matching {
-        it.name == "generateJsonModel$variantName" ||
-                it.name == "externalNativeBuild$variantName"
-    })
-}
+    tasks.matching { it.name.startsWith("merge") && it.name.endsWith("Assets") }.configureEach {
+        dependsOn(packageLadybirdAssets)
+    }
 
-tasks.matching { it.name.startsWith("buildCMake") || it.name.startsWith("externalNativeBuild") }.configureEach {
-    finalizedBy(verifySdl3JavaInputsTask)
+    tasks.withType<JavaCompile>().configureEach {
+        dependsOn(prepareSdl3Java)
+
+        val variantName = javaCompileVariantName(name) ?: return@configureEach
+        dependsOn(tasks.matching {
+            it.name == "generateJsonModel$variantName" ||
+                    it.name == "externalNativeBuild$variantName"
+        })
+    }
+
+    tasks.matching { it.name.startsWith("buildCMake") || it.name.startsWith("externalNativeBuild") }.configureEach {
+        finalizedBy(verifySdl3JavaInputsTask)
+    }
 }
 
 configure<LibraryExtension> {
@@ -236,32 +307,34 @@ configure<LibraryExtension> {
     defaultConfig {
         minSdk = 30
         consumerProguardFiles("consumer-rules.pro")
-        externalNativeBuild {
-            cmake {
-                cppFlags += "-std=c++23"
-                arguments +=
-                        listOf(
-                                "-DANDROID_STL=c++_shared",
-                                "-DLADYBIRD_CACHE_DIR=$cacheDir",
-                                "-DLADYBIRD_HELPER_JNI_DIR=${ladybirdHelperJniDir.get().asFile.absolutePath}",
-                                "-DVCPKG_TARGET_ANDROID=ON",
-                                "-DLADYBIRD_VCPKG_TYPE=release",
-                                // "-DCMAKE_SHARED_LINKER_FLAGS=-fuse-ld=mold", 
-                                // "-DCMAKE_EXE_LINKER_FLAGS=-fuse-ld=mold"
-                        )
-                targets +=
-                        listOf(
-                                "ladybird_plugin",
-                                "engine",
-                                "AudioServer",
-                                "Compositor",
-                                "ImageDecoder",
-                                "MediaServer",
-                                "RequestServer",
-                                "SystemProbe",
-                                "VideoDecoderServer",
-                                "WebContent"
-                        )
+        if (!usePrebuiltNative) {
+            externalNativeBuild {
+                cmake {
+                    cppFlags += "-std=c++23"
+                    arguments +=
+                            listOf(
+                                    "-DANDROID_STL=c++_shared",
+                                    "-DLADYBIRD_CACHE_DIR=$cacheDir",
+                                    "-DLADYBIRD_HELPER_JNI_DIR=${ladybirdHelperJniDir.get().asFile.absolutePath}",
+                                    "-DVCPKG_TARGET_ANDROID=ON",
+                                    "-DLADYBIRD_VCPKG_TYPE=release",
+                                    // "-DCMAKE_SHARED_LINKER_FLAGS=-fuse-ld=mold", 
+                                    // "-DCMAKE_EXE_LINKER_FLAGS=-fuse-ld=mold"
+                            )
+                    targets +=
+                            listOf(
+                                    "ladybird_plugin",
+                                    "engine",
+                                    "AudioServer",
+                                    "Compositor",
+                                    "ImageDecoder",
+                                    "MediaServer",
+                                    "RequestServer",
+                                    "SystemProbe",
+                                    "VideoDecoderServer",
+                                    "WebContent"
+                            )
+                }
             }
         }
         ndk {
@@ -269,10 +342,12 @@ configure<LibraryExtension> {
         }
     }
 
-    externalNativeBuild {
-        cmake {
-            path("CMakeLists.txt")
-            version = "3.25.0+"
+    if (!usePrebuiltNative) {
+        externalNativeBuild {
+            cmake {
+                path("CMakeLists.txt")
+                version = "3.25.0+"
+            }
         }
     }
 
