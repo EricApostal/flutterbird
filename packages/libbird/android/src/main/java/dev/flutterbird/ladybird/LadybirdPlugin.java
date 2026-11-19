@@ -126,14 +126,46 @@ public final class LadybirdPlugin implements FlutterPlugin, MethodCallHandler {
     }
 
     private void createTexture(MethodCall call, Result result) {
-        if (!(call.arguments instanceof Number) || textureRegistry == null) {
-            result.error("INVALID_ARGS", "Expected numeric view ID", null);
+        if (textureRegistry == null) {
+            result.error("UNAVAILABLE", "Texture registry is null", null);
             return;
         }
 
-        int viewId = ((Number) call.arguments).intValue();
+        // The view says which view this is for and how large the texture is: a
+        // map with "viewId", "width" and "height" (the canvas, in physical
+        // pixels). A bare view ID gets a canvas the size of the display.
+        int viewId;
+        int canvasWidth;
+        int canvasHeight;
+        if (call.arguments instanceof Number) {
+            viewId = ((Number) call.arguments).intValue();
+            android.util.DisplayMetrics metrics = android.content.res.Resources.getSystem().getDisplayMetrics();
+            canvasWidth = metrics.widthPixels;
+            canvasHeight = metrics.heightPixels;
+        } else if (call.arguments instanceof Map) {
+            Object viewIdArgument = call.argument("viewId");
+            Object widthArgument = call.argument("width");
+            Object heightArgument = call.argument("height");
+            if (!(viewIdArgument instanceof Number)
+                    || !(widthArgument instanceof Number)
+                    || !(heightArgument instanceof Number)) {
+                result.error("INVALID_ARGS", "Expected viewId, width and height", null);
+                return;
+            }
+            viewId = ((Number) viewIdArgument).intValue();
+            canvasWidth = ((Number) widthArgument).intValue();
+            canvasHeight = ((Number) heightArgument).intValue();
+        } else {
+            result.error("INVALID_ARGS", "Expected a view ID, or a map with viewId, width and height", null);
+            return;
+        }
+        if (canvasWidth <= 0 || canvasHeight <= 0) {
+            result.error("INVALID_ARGS", "The canvas has to have a size", null);
+            return;
+        }
+
         TextureRegistry.SurfaceProducer producer = textureRegistry.createSurfaceProducer();
-        TextureContext textureContext = new TextureContext(viewId, producer);
+        TextureContext textureContext = new TextureContext(viewId, producer, canvasWidth, canvasHeight);
         producer.setCallback(new TextureRegistry.SurfaceProducer.Callback() {
             @Override
             public void onSurfaceDestroyed() {
@@ -217,6 +249,7 @@ public final class LadybirdPlugin implements FlutterPlugin, MethodCallHandler {
                             + " generation=" + generation
                             + " size=" + nativeGetSurfaceWidth(textureContext.viewId)
                             + "x" + nativeGetSurfaceHeight(textureContext.viewId)
+                            + " canvas=" + textureContext.canvasWidth + "x" + textureContext.canvasHeight
                             + " pumps=" + textureContext.nativeFrameCallbacks
                             + " delivered=" + textureContext.deliveredFrames
                             + " drops=" + textureContext.queuedDrops);
@@ -239,7 +272,11 @@ public final class LadybirdPlugin implements FlutterPlugin, MethodCallHandler {
             return;
         }
 
-        textureContext.ensureFrameStorage(width, height);
+        // The texture is never resized: it is the same size from creation to
+        // release, and each frame is drawn into it at its own size (below). A
+        // texture that followed the page's size could not be told apart, at any one
+        // moment, from the frames and the box it is shown in, and whenever they
+        // differed the page was stretched to fit.
 
         final HardwareBuffer buffer = nativeGetHardwareBuffer(textureContext.viewId);
         if (buffer == null) {
@@ -269,8 +306,11 @@ public final class LadybirdPlugin implements FlutterPlugin, MethodCallHandler {
                         canvas.drawColor(Color.TRANSPARENT, PorterDuff.Mode.CLEAR);
                         Bitmap bitmap = Bitmap.wrapHardwareBuffer(buffer, ColorSpace.get(ColorSpace.Named.SRGB));
                         if (bitmap != null) {
-                            Rect src = new Rect(0, 0, width, height);
-                            Rect dst = new Rect(0, 0, width, height);
+                            // 1:1 at the top-left corner, whatever size the frame
+                            // is: a frame smaller than the canvas leaves the rest
+                            // clear, a larger one is cropped, and none is scaled.
+                            Rect src = new Rect(0, 0, Math.min(width, bitmap.getWidth()), Math.min(height, bitmap.getHeight()));
+                            Rect dst = new Rect(src);
                             canvas.drawBitmap(bitmap, src, dst, null);
                         } else {
                             android.util.Log.e("LadybirdPlugin", "Bitmap.wrapHardwareBuffer returned null!");
@@ -321,28 +361,24 @@ public final class LadybirdPlugin implements FlutterPlugin, MethodCallHandler {
 
         boolean active = true;
         volatile boolean frameNotifyQueued = false;
-        int width = 0;
-        int height = 0;
+        // The size of the canvas the texture was made with, in physical pixels.
+        // It does not change.
+        final int canvasWidth;
+        final int canvasHeight;
         long lastFrameGeneration = 0;
         long nativeFrameCallbacks = 0;
         long queuedDrops = 0;
         long deliveredFrames = 0;
         long lastDiagnosticLogMs = 0;
 
-        TextureContext(int viewId, TextureRegistry.SurfaceProducer producer) {
+        TextureContext(int viewId, TextureRegistry.SurfaceProducer producer, int canvasWidth, int canvasHeight) {
             this.viewId = viewId;
             this.producer = producer;
             this.textureId = producer.id();
-        }
-
-        void ensureFrameStorage(int nextWidth, int nextHeight) {
-            if (nextWidth == width && nextHeight == height) {
-                return;
-            }
-
-            width = nextWidth;
-            height = nextHeight;
-            producer.setSize(width, height);
+            this.canvasWidth = canvasWidth;
+            this.canvasHeight = canvasHeight;
+            // Once, here, and never again.
+            producer.setSize(canvasWidth, canvasHeight);
         }
 
         void release() {

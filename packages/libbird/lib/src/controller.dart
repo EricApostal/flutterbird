@@ -981,15 +981,72 @@ class LadybirdController {
   /// The texture this view renders into, if one has been created.
   int? get textureId => _textureId;
 
-  Future<int> acquireTexture() async {
+  // The size, in physical pixels, of the canvas the texture was made with, on a
+  // platform where a texture is a fixed-size canvas that the page is drawn into
+  // (Android); null elsewhere.
+  Size? _textureCanvasSize;
+
+  /// The fixed size of the current texture, in physical pixels, or null where a
+  /// texture takes the size of the page.
+  Size? get textureCanvasSize => _textureCanvasSize;
+
+  /// Whether a texture is a canvas of a fixed size that the view makes the
+  /// size of, rather than something that follows the size of the page.
+  ///
+  /// A texture that follows the page's size is resized while frames of the sizes
+  /// before it are still on their way, and the box it is shown in is sized on
+  /// another thread's schedule again, so at any moment the three can disagree and
+  /// the page is stretched to make up the difference. A canvas that never changes
+  /// size cannot disagree with anything: frames are drawn into it unscaled, and
+  /// the view clips it to the page.
+  static bool get usesFixedCanvasTextures => Platform.isAndroid;
+
+  /// Creates the texture this view renders into, if it has none.
+  ///
+  /// [canvasSize], in physical pixels, is how large the texture is where a
+  /// texture is a fixed canvas (see [usesFixedCanvasTextures]), and it should be
+  /// at least as large as the view is ever laid out. It is ignored elsewhere.
+  Future<int> acquireTexture({Size? canvasSize}) async {
     final existing = _textureId;
     if (existing != null) return existing;
 
-    final created = await _channel.invokeMethod<int>('createTexture', _viewId);
-    if (created == null)
+    final canvas = usesFixedCanvasTextures ? canvasSize : null;
+    final created = await _channel.invokeMethod<int>(
+      'createTexture',
+      canvas == null
+          ? _viewId
+          : <String, Object>{
+              'viewId': _viewId,
+              'width': canvas.width.round(),
+              'height': canvas.height.round(),
+            },
+    );
+    if (created == null) {
       throw StateError('the platform returned no texture for view $_viewId');
+    }
     _textureId = created;
+    _textureCanvasSize = canvas;
     return created;
+  }
+
+  /// Makes a new texture with a canvas of another size and makes it this view's
+  /// texture, instead of resizing the one it has: a texture keeps its size for
+  /// as long as it lives. The texture it had is not released, so that the view
+  /// can stop showing it first; it is returned for the caller to pass to
+  /// [unregisterTexture].
+  Future<({int textureId, int? previousTextureId})> replaceTexture(
+    Size canvasSize,
+  ) async {
+    final previous = _textureId;
+    _textureId = null;
+    try {
+      final created = await acquireTexture(canvasSize: canvasSize);
+      return (textureId: created, previousTextureId: previous);
+    } catch (_) {
+      // Nothing was made: the view goes on with the texture it had.
+      _textureId ??= previous;
+      rethrow;
+    }
   }
 
   Future<void> createTexture() async {

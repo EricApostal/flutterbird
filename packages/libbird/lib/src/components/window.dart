@@ -51,6 +51,11 @@ const TextEditingValue _kBaselineEditingValue = TextEditingValue(
 class _LadybirdViewState extends State<LadybirdView>
     with SingleTickerProviderStateMixin, TextInputClient, DeltaTextInputClient {
   int? _textureId;
+  // Where a texture is a canvas of a fixed size (see
+  // LadybirdController.usesFixedCanvasTextures), its size in physical pixels, and
+  // whether a larger one is being made. Null where a texture follows the page.
+  Size? _canvasPhysicalSize;
+  bool _replacingTexture = false;
   // The frame this view last presented, held for as long as the live texture
   // cannot be trusted to fill the box (see LadybirdView.lastFrameProvider) and
   // disposed with the widget.
@@ -329,6 +334,7 @@ class _LadybirdViewState extends State<LadybirdView>
     widget.controller.setViewFocused(true);
 
     _textureId = widget.controller.textureId;
+    _canvasPhysicalSize = widget.controller.textureCanvasSize;
     if (_textureId == null) _recreateTexture();
   }
 
@@ -350,18 +356,89 @@ class _LadybirdViewState extends State<LadybirdView>
       _resolvePreviousFrame(widget.controller);
 
       _textureId = widget.controller.textureId;
+      _canvasPhysicalSize = widget.controller.textureCanvasSize;
       if (_textureId == null) _recreateTexture();
     }
   }
 
+  // The physical size of the window this view is in, which no box the view is
+  // laid out in is larger than (in the orientation it has now).
+  Size? _windowPhysicalSize() {
+    final dispatcher = WidgetsBinding.instance.platformDispatcher;
+    final view =
+        dispatcher.implicitView ??
+        (dispatcher.views.isEmpty ? null : dispatcher.views.first);
+    return view?.physicalSize;
+  }
+
   Future<void> _recreateTexture() async {
-    final textureId = await widget.controller.acquireTexture();
+    // Where a texture is a canvas, it is made as large as the window: the page
+    // is then never laid out in a box that does not fit it, whatever the soft
+    // keyboard or anything else does to the box.
+    final canvasSize = LadybirdController.usesFixedCanvasTextures
+        ? _windowPhysicalSize()
+        : null;
+    final textureId = await widget.controller.acquireTexture(
+      canvasSize: canvasSize,
+    );
     if (!mounted) return;
 
     setState(() {
       _textureId = textureId;
+      _canvasPhysicalSize = widget.controller.textureCanvasSize;
     });
     _startFrameDiagnosticsIfNeeded();
+  }
+
+  // A texture is never resized (a texture that follows the page's size is what
+  // makes a page stretch while its size changes), so a box that outgrows the
+  // canvas, which takes a change of orientation or of the window, gets a new
+  // texture with a canvas that fits it. The old one goes on showing until the
+  // new one is in place, and is released after.
+  void _ensureCanvasFits(Size physicalSize) {
+    final canvas = _canvasPhysicalSize;
+    if (canvas == null || _replacingTexture) return;
+    if (physicalSize.width <= canvas.width + 0.5 &&
+        physicalSize.height <= canvas.height + 0.5) {
+      return;
+    }
+
+    final window = _windowPhysicalSize() ?? Size.zero;
+    _replaceTexture(
+      Size(
+        physicalSize.width > window.width ? physicalSize.width : window.width,
+        physicalSize.height > window.height
+            ? physicalSize.height
+            : window.height,
+      ),
+    );
+  }
+
+  Future<void> _replaceTexture(Size canvasSize) async {
+    _replacingTexture = true;
+    try {
+      final controller = widget.controller;
+      final replaced = await controller.replaceTexture(canvasSize);
+      final previous = replaced.previousTextureId;
+      if (mounted && identical(controller, widget.controller)) {
+        setState(() {
+          _textureId = replaced.textureId;
+          _canvasPhysicalSize = controller.textureCanvasSize;
+        });
+        _startFrameDiagnosticsIfNeeded();
+      }
+      if (previous != null) {
+        // After the frames that still show it have gone out.
+        Future<void>.delayed(
+          const Duration(milliseconds: 250),
+          () => controller.unregisterTexture(previous).ignore(),
+        );
+      }
+    } catch (error) {
+      debugPrint('LadybirdView: could not make a larger texture: $error');
+    } finally {
+      _replacingTexture = false;
+    }
   }
 
   // Pushes this view's viewport to the engine, called from build -- before the
@@ -376,6 +453,7 @@ class _LadybirdViewState extends State<LadybirdView>
 
     widget.controller.updateDevicePixelRatio(density);
     widget.controller.resizeWindow(physicalSize);
+    _ensureCanvasFits(physicalSize);
 
     _onLayoutSettled();
   }
@@ -867,10 +945,20 @@ class _LadybirdViewState extends State<LadybirdView>
             _onSizeChanged(contentBox, density);
           });
 
-          // The engine's surface is drawn at the size it was presented at; it
-          // can be larger than the viewport (the engine pads while a window is
-          // being resized), and the clip below crops it.
-          final engineSurface = _engineSurfaceSize(density);
+          // Where a texture is a fixed canvas, the box it is shown in is that
+          // canvas, always: the texture, the box and the frames drawn into it
+          // never have to agree about a size that changes, so the page cannot be
+          // stretched to make them agree. The viewport is a window onto it,
+          // cropped by the clip below.
+          //
+          // Elsewhere the texture follows the page: the engine's surface is drawn
+          // at the size it was presented at, which can be larger than the
+          // viewport (the engine pads while a window is being resized), and the
+          // clip crops it.
+          final canvas = _canvasPhysicalSize;
+          final engineSurface = canvas == null
+              ? _engineSurfaceSize(density)
+              : Size(canvas.width / density, canvas.height / density);
           final textureId = _textureId;
           final paddedWidth = engineSurface?.width ?? contentBox.width;
           final paddedHeight = engineSurface?.height ?? contentBox.height;
