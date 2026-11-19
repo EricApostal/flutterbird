@@ -42,10 +42,7 @@ class DownloadsPanel extends StatelessWidget {
                 ],
               ),
             ),
-            Divider(
-              height: 1,
-              color: theme.colorScheme.outline.withAlpha(50),
-            ),
+            Divider(height: 1, color: theme.colorScheme.outline.withAlpha(50)),
             Flexible(
               child: downloads.isEmpty
                   ? Padding(
@@ -73,8 +70,10 @@ class DownloadsPanel extends StatelessWidget {
                               LadybirdController.cancelDownload(download.id),
                           onOpen: () =>
                               LadybirdController.openDownload(download.id),
-                          onShowInFolder: () => LadybirdController
-                              .showDownloadInFolder(download.id),
+                          onShowInFolder: () =>
+                              LadybirdController.showDownloadInFolder(
+                                download.id,
+                              ),
                           onDismiss: () => _dismiss(download.id),
                         );
                       },

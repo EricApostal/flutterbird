@@ -67,7 +67,9 @@ class _MobileTabSwitcherState extends ConsumerState<MobileTabSwitcher> {
                   ),
                   itemCount: tabs.length,
                   onReorder: (oldIndex, newIndex) {
-                    ref.read(browserTabControllerProvider.notifier).reorder(oldIndex, newIndex);
+                    ref
+                        .read(browserTabControllerProvider.notifier)
+                        .reorder(oldIndex, newIndex);
                   },
                   itemBuilder: (context, index) {
                     final tab = tabs[index];

@@ -42,7 +42,11 @@ class MobileTabCard extends ConsumerWidget {
                         filterQuality: FilterQuality.high,
                       );
                     }
-                    return Icon(Icons.public, size: 16, color: theme.colorScheme.onSurface);
+                    return Icon(
+                      Icons.public,
+                      size: 16,
+                      color: theme.colorScheme.onSurface,
+                    );
                   },
                 ),
                 const SizedBox(width: 8),
@@ -84,9 +88,13 @@ class MobileTabCard extends ConsumerWidget {
                       alignment: Alignment.topCenter,
                       child: Builder(
                         builder: (context) {
-                          final density = MediaQuery.devicePixelRatioOf(context);
-                          final surfaceW = controller.getSurfaceWidth() / density;
-                          final surfaceH = controller.getSurfaceHeight() / density;
+                          final density = MediaQuery.devicePixelRatioOf(
+                            context,
+                          );
+                          final surfaceW =
+                              controller.getSurfaceWidth() / density;
+                          final surfaceH =
+                              controller.getSurfaceHeight() / density;
 
                           final w = surfaceW > 0 ? surfaceW : screenSize.width;
                           final h = surfaceH > 0 ? surfaceH : screenSize.height;

@@ -75,12 +75,15 @@ class _BrowserWindowScreenState extends ConsumerState<BrowserWindowScreen> {
   }
 
   void _closeCurrentTab() {
-    BrowserTabActions.closeTabImmediately(
-      ref,
+    BrowserTabActions.closeTab(
       context,
       currentViewId: widget.viewId,
       closeViewId: widget.viewId,
     );
+  }
+
+  void _reopenClosedTab() {
+    BrowserTabActions.reopenClosedTab(ref, context);
   }
 
   void _toggleTabLayoutMode() {
@@ -109,7 +112,12 @@ class _BrowserWindowScreenState extends ConsumerState<BrowserWindowScreen> {
     if (!_isPrimaryShortcutModifierPressed()) return false;
 
     if (event.logicalKey == LogicalKeyboardKey.keyT) {
-      _openNewTab();
+      // Shift+T brings the last closed tab back instead of opening a blank one.
+      if (_isShiftPressed()) {
+        _reopenClosedTab();
+      } else {
+        _openNewTab();
+      }
       return true;
     }
 

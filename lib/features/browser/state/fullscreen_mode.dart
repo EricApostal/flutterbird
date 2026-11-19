@@ -82,7 +82,9 @@ class BrowserFullscreenModeController extends _$BrowserFullscreenModeController
     LadybirdController controller,
     bool isFullscreen,
   ) async {
-    print('[Fullscreen] syncFromEngine isFullscreen=$isFullscreen (was $state)');
+    print(
+      '[Fullscreen] syncFromEngine isFullscreen=$isFullscreen (was $state)',
+    );
     if (state == isFullscreen) return;
     state = isFullscreen;
     if (isFullscreen) {
@@ -131,8 +133,10 @@ class BrowserFullscreenModeController extends _$BrowserFullscreenModeController
   Future<void> _requestPlatformFullscreen(bool enabled) async {
     if (_isDesktopPlatform) {
       if (_osTransitionPending) {
-        print('[Fullscreen] queueing platform request enabled=$enabled '
-            '(transition already in flight)');
+        print(
+          '[Fullscreen] queueing platform request enabled=$enabled '
+          '(transition already in flight)',
+        );
         _pendingPlatformTarget = enabled;
         return;
       }
@@ -160,10 +164,14 @@ class BrowserFullscreenModeController extends _$BrowserFullscreenModeController
     print('[Fullscreen] _applyPlatformFullscreen enabled=$enabled');
     if (_isDesktopPlatform) {
       final before = await windowManager.isFullScreen();
-      print('[Fullscreen] windowManager.isFullScreen() before setFullScreen($enabled) = $before');
+      print(
+        '[Fullscreen] windowManager.isFullScreen() before setFullScreen($enabled) = $before',
+      );
       await windowManager.setFullScreen(enabled);
       final after = await windowManager.isFullScreen();
-      print('[Fullscreen] windowManager.isFullScreen() after setFullScreen($enabled) = $after');
+      print(
+        '[Fullscreen] windowManager.isFullScreen() after setFullScreen($enabled) = $after',
+      );
       return;
     }
 
@@ -190,7 +198,9 @@ class BrowserFullscreenModeController extends _$BrowserFullscreenModeController
   // happened, mirroring Qt's changeEvent(QEvent::WindowStateChange).
   @override
   void onWindowEnterFullScreen() {
-    print('[Fullscreen] onWindowEnterFullScreen (activeController=${_activeController != null})');
+    print(
+      '[Fullscreen] onWindowEnterFullScreen (activeController=${_activeController != null})',
+    );
     state = true;
     _activeController?.confirmFullscreenState(true);
     _replayPendingPlatformTarget(true);

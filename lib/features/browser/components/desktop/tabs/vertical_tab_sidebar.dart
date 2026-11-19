@@ -46,7 +46,6 @@ class _BrowserVerticalTabSidebarState
   // id (never by position), the rows below keep their height through the
   // reorder and the state of the list cannot be scrambled by it.
   final Set<int> _expandedViewIds = <int>{};
-  final Set<int> _closingViewIds = <int>{};
 
   @override
   void initState() {
@@ -72,7 +71,7 @@ class _BrowserVerticalTabSidebarState
     super.dispose();
   }
 
-  /// Brings [_expandedViewIds]/[_closingViewIds] in line with the open tabs.
+  /// Brings [_expandedViewIds] in line with the open tabs.
   ///
   /// Rows that are gone are dropped; rows that are already accounted for are
   /// left alone, so reordering the list does not touch this state at all. A
@@ -83,13 +82,10 @@ class _BrowserVerticalTabSidebarState
   void _syncRowExpandState(Iterable<int> viewIds) {
     final present = viewIds.toSet();
     _expandedViewIds.removeWhere((id) => !present.contains(id));
-    _closingViewIds.removeWhere((id) => !present.contains(id));
 
     final toExpand = <int>[];
     for (final id in present) {
-      if (_expandedViewIds.contains(id) || _closingViewIds.contains(id)) {
-        continue;
-      }
+      if (_expandedViewIds.contains(id)) continue;
       if (!_animateNewTabs) {
         _expandedViewIds.add(id);
       } else {
@@ -106,33 +102,21 @@ class _BrowserVerticalTabSidebarState
     });
   }
 
-  /// Collapses [viewId]'s row first and closes the tab once that animation has
-  /// run, so closing animates instead of the row vanishing mid-frame.
-  Future<void> _closeTab(int viewId) async {
-    if (_closingViewIds.contains(viewId)) return;
-
+  /// Closes [viewId]'s tab. Its row collapses first and the tab goes away once
+  /// that has run; see [closingTabsProvider], which every close path shares.
+  void _closeTab(int viewId) {
     HapticFeedback.lightImpact();
-    final canClose = BrowserTabActions.prepareCloseTabNavigation(
+    BrowserTabActions.closeTab(
       context,
       currentViewId: widget.currentViewId,
       closeViewId: viewId,
-      tabs: ref.read(browserTabControllerProvider),
     );
-    if (!canClose) return;
-
-    setState(() {
-      _closingViewIds.add(viewId);
-      _expandedViewIds.remove(viewId);
-    });
-
-    await Future<void>.delayed(_kSidebarTabAnimationDuration);
-    if (!mounted) return;
-    BrowserTabActions.commitCloseTab(ref, viewId);
   }
 
   @override
   Widget build(BuildContext context) {
     final tabs = ref.watch(browserTabControllerProvider);
+    final closingViewIds = ref.watch(closingTabsProvider);
     _syncRowExpandState(tabs.map((tab) => tab.viewId));
     final theme = Theme.of(context);
     final padding = MediaQuery.paddingOf(context);
@@ -195,7 +179,9 @@ class _BrowserVerticalTabSidebarState
                         index: index,
                         viewId: id,
                         selected: id == widget.currentViewId,
-                        expanded: _expandedViewIds.contains(id),
+                        expanded:
+                            _expandedViewIds.contains(id) &&
+                            !closingViewIds.contains(id),
                         width: _kSidebarWidth - 16,
                         height: _kTabHeight,
                         onTabClosed: () => _closeTab(id),

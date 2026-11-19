@@ -40,16 +40,14 @@ class _BrowserWindowState extends ConsumerState<BrowserWindow> {
   LadybirdController? _boundController;
 
   Future<ui.Image?> _captureSnapshot({double? maxWidth}) async {
-    final renderObject = _repaintBoundaryKey.currentContext
-        ?.findRenderObject();
+    final renderObject = _repaintBoundaryKey.currentContext?.findRenderObject();
     if (renderObject is! RenderRepaintBoundary) return null;
     if (!renderObject.attached || renderObject.debugNeedsPaint) return null;
 
     try {
-      var pixelRatio =
-          _repaintBoundaryKey.currentContext != null
-              ? MediaQuery.devicePixelRatioOf(_repaintBoundaryKey.currentContext!)
-              : 1.0;
+      var pixelRatio = _repaintBoundaryKey.currentContext != null
+          ? MediaQuery.devicePixelRatioOf(_repaintBoundaryKey.currentContext!)
+          : 1.0;
       final width = renderObject.size.width;
       if (maxWidth != null && width > 0 && width * pixelRatio > maxWidth) {
         pixelRatio = maxWidth / width;
@@ -83,12 +81,16 @@ class _BrowserWindowState extends ConsumerState<BrowserWindow> {
 
   void _onFullscreenChange(bool isFullscreen) {
     if (!mounted) {
-      print('[Fullscreen] BrowserWindow._onFullscreenChange dropped: not mounted');
+      print(
+        '[Fullscreen] BrowserWindow._onFullscreenChange dropped: not mounted',
+      );
       return;
     }
     final controller = _boundController;
     if (controller == null) {
-      print('[Fullscreen] BrowserWindow._onFullscreenChange dropped: no bound controller');
+      print(
+        '[Fullscreen] BrowserWindow._onFullscreenChange dropped: no bound controller',
+      );
       return;
     }
     ref

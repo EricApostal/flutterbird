@@ -75,6 +75,8 @@
 #include <LibWebView/URL.h>
 #include <LibWebView/ViewImplementation.h>
 #include <LibWebView/WebContentPage.h>
+#include <LibWebView/WebUI.h>
+#include <LibWebView/WebUI/ApplicationWebUI.h>
 #ifndef __APPLE__
 #include <unistd.h>
 #endif
@@ -141,6 +143,151 @@ static void create_engine_stores() {
     g_favicon_store = WebView::FaviconStore::create();
     g_history_store = WebView::HistoryStore::create(*g_favicon_store);
   }
+}
+
+// ---------------------------------------------------------------------------
+// about:history
+//
+// The page itself ships with Ladybird, but it has no data of its own: it asks
+// its frontend for entries over the WebUI message channel and shows "Loading
+// history..." until they arrive. Qt answers from UI/Qt/HistoryPage.cpp, going
+// through the Hub; FlutterBird has no Hub, so the engine answers here, in
+// process, from the same history store (see create_engine_stores()).
+// ---------------------------------------------------------------------------
+static constexpr size_t DEFAULT_HISTORY_PAGE_SIZE = 50;
+static constexpr size_t MAX_HISTORY_PAGE_SIZE = 100;
+
+// The open about:history pages, and whether each belongs to a private view.
+static HashMap<u64, WebView::IsPrivate> g_history_pages;
+
+static Optional<String>
+history_site_key_for_entry(WebView::HistoryEntry const &entry) {
+  auto parsed_url = URL::Parser::basic_parse(entry.url);
+  if (!parsed_url.has_value())
+    return {};
+
+  if (!parsed_url->host().has_value() || parsed_url->host()->is_empty_host())
+    return {};
+
+  if (auto registrable_domain = parsed_url->host()->registrable_domain();
+      registrable_domain.has_value())
+    return registrable_domain.release_value();
+
+  return MUST(String::from_utf8(parsed_url->serialized_host()));
+}
+
+static JsonObject serialize_history_entry(WebView::HistoryEntry const &entry) {
+  String favicon_base64_png;
+  if (entry.favicon_png.has_value()) {
+    if (auto encoded = encode_base64(entry.favicon_png->bytes());
+        !encoded.is_error())
+      favicon_base64_png = encoded.release_value();
+  }
+
+  JsonObject serialized;
+  serialized.set("url"sv, entry.url);
+  serialized.set("title"sv, entry.title.value_or(String{}));
+  serialized.set("faviconBase64Png"sv, move(favicon_base64_png));
+  serialized.set("visitCount"sv, entry.visit_count);
+  serialized.set("lastVisitedTime"sv,
+                 entry.last_visited_time.milliseconds_since_epoch());
+  serialized.set("siteKey"sv,
+                 history_site_key_for_entry(entry).value_or(String{}));
+  return serialized;
+}
+
+static void load_history_entries(u64 web_ui_id, WebView::IsPrivate is_private,
+                                 JsonValue const &data) {
+  if (!data.is_object())
+    return;
+
+  auto const &object = data.as_object();
+
+  auto offset = object.get_integer<size_t>("offset"sv).value_or(0);
+  auto limit = object.get_integer<size_t>("limit"sv);
+  auto request_id = object.get_integer<i64>("requestId"sv).value_or(0);
+  auto query = object.get_string("query"sv).value_or(String{});
+
+  if (limit.has_value())
+    limit = min(*limit, MAX_HISTORY_PAGE_SIZE);
+  else
+    limit = DEFAULT_HISTORY_PAGE_SIZE;
+
+  // A private view keeps no history, so its page shows none of the normal
+  // views' history either.
+  Vector<WebView::HistoryEntry> entries;
+  if (is_private == WebView::IsPrivate::No && g_history_store)
+    entries = g_history_store->list_entries(query, offset, *limit + 1);
+  auto has_more = entries.size() > *limit;
+  if (has_more)
+    entries.resize(*limit);
+
+  JsonArray serialized_entries;
+  serialized_entries.ensure_capacity(entries.size());
+  for (auto const &entry : entries)
+    serialized_entries.must_append(serialize_history_entry(entry));
+
+  JsonObject result;
+  result.set("requestId"sv, request_id);
+  result.set("query"sv, query);
+  result.set("offset"sv, offset);
+  result.set("hasMore"sv, has_more);
+  result.set("entries"sv, move(serialized_entries));
+
+  if (auto *web_ui = WebView::ApplicationWebUI::find(web_ui_id))
+    web_ui->send_to_page("loadHistoryEntries"_string, move(result));
+}
+
+static Optional<URL::URL> history_url_from_message(JsonValue const &data) {
+  if (!data.is_object())
+    return {};
+  auto url = data.as_object().get_string("url"sv);
+  if (!url.has_value())
+    return {};
+  return URL::Parser::basic_parse(*url);
+}
+
+static void handle_history_page_message(u64 web_ui_id, String const &name,
+                                        JsonValue const &data) {
+  auto page = g_history_pages.get(web_ui_id);
+  if (!page.has_value())
+    return;
+
+  if (name == "loadHistoryEntries"sv) {
+    load_history_entries(web_ui_id, *page, data);
+    return;
+  }
+
+  if (*page == WebView::IsPrivate::Yes || !g_history_store)
+    return;
+
+  if (name == "removeHistoryEntry"sv) {
+    if (auto url = history_url_from_message(data); url.has_value())
+      g_history_store->remove_entry_for_url(
+          *url, WebView::RemoveHistoryEntryEngagements::Yes);
+  } else if (name == "forgetHistorySite"sv) {
+    if (auto url = history_url_from_message(data); url.has_value())
+      g_history_store->remove_entries_for_same_site(*url);
+  }
+}
+
+// Makes about:history a page this process answers. Without the callbacks, the
+// page opens and its messages go nowhere.
+static void register_history_page() {
+  WebView::WebUI::add_application_page("history"_string, "History"_string);
+
+  WebView::ApplicationWebUI::set_callbacks({
+      .on_open =
+          [](u64 id, String const &host, WebView::IsPrivate is_private) {
+            if (host == "history"sv)
+              g_history_pages.set(id, is_private);
+          },
+      .on_message =
+          [](u64 id, String name, JsonValue data) {
+            handle_history_page_message(id, name, data);
+          },
+      .on_close = [](u64 id) { g_history_pages.remove(id); },
+  });
 }
 
 AskUserForDownloadPathCallback g_ask_user_for_download_path_callback = nullptr;
@@ -1002,7 +1149,7 @@ public:
 
     if (has_traversable())
       ViewImplementation::set_display_metadata(m_display_id,
-                                               m_maximum_frames_per_second);
+                                               m_maximum_frames_per_second, false);
   }
 
   // The engine asks for the system theme when a page starts hosting the tab.
@@ -1872,6 +2019,7 @@ void init_ladybird() {
   }
   s_app = app.release_value();
   create_engine_stores();
+  register_history_page();
   g_download_observer = make<FlutterFileDownloaderObserver>();
   g_engine_ready = true;
 }

@@ -328,6 +328,12 @@ class _BrowserOmniboxBarState extends ConsumerState<BrowserOmniboxBar> {
     controller.navigate(target);
   }
 
+  /// Settings opens beside the page being viewed, never over it.
+  void _openSettingsInNewTab() {
+    _omniboxFocusNode.unfocus();
+    BrowserTabActions.openUrlInNewTab(ref, context, 'about:settings');
+  }
+
   void _handleOmniboxSubmitted(
     BrowserOmnibox omnibox,
     LadybirdController controller,
@@ -512,8 +518,7 @@ class _BrowserOmniboxBarState extends ConsumerState<BrowserOmniboxBar> {
         BrowserTabActions.openNewTab(ref, context);
         break;
       case _ToolbarMenuAction.closeCurrentTab:
-        BrowserTabActions.closeTabImmediately(
-          ref,
+        BrowserTabActions.closeTab(
           context,
           currentViewId: currentTabController.viewId,
           closeViewId: currentTabController.viewId,
@@ -561,7 +566,7 @@ class _BrowserOmniboxBarState extends ConsumerState<BrowserOmniboxBar> {
         ref.read(browserTabLayoutModeControllerProvider.notifier).toggle();
         break;
       case _ToolbarMenuAction.settings:
-        _commitNavigation(currentTabController, 'about:settings');
+        _openSettingsInNewTab();
         break;
     }
   }
@@ -666,8 +671,7 @@ class _BrowserOmniboxBarState extends ConsumerState<BrowserOmniboxBar> {
                 IconButton(
                   tooltip: 'Settings',
                   icon: const Icon(Icons.settings, size: 20),
-                  onPressed: () =>
-                      _commitNavigation(currentTabController, 'about:settings'),
+                  onPressed: _openSettingsInNewTab,
                 ),
                 const SizedBox(width: 6),
                 IconButton(

@@ -52,7 +52,6 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar>
   // again, since a rebuilt `AnimatedContainer` does not animate from its
   // previous height). Held here, a reorder leaves it untouched.
   final Set<int> _expandedViewIds = <int>{};
-  final Set<int> _closingViewIds = <int>{};
 
   @override
   void initState() {
@@ -96,7 +95,7 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar>
   @override
   void onWindowRestore() => _refreshWindowState();
 
-  /// Brings [_expandedViewIds]/[_closingViewIds] in line with the open tabs:
+  /// Brings [_expandedViewIds] in line with the open tabs:
   /// gone rows are dropped, rows already accounted for are left alone (so a
   /// reorder never touches this), and a tab seen for the first time is expanded
   /// immediately when it predates the first frame or one frame later when it
@@ -104,13 +103,10 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar>
   void _syncRowExpandState(Iterable<int> viewIds) {
     final present = viewIds.toSet();
     _expandedViewIds.removeWhere((id) => !present.contains(id));
-    _closingViewIds.removeWhere((id) => !present.contains(id));
 
     final toExpand = <int>[];
     for (final id in present) {
-      if (_expandedViewIds.contains(id) || _closingViewIds.contains(id)) {
-        continue;
-      }
+      if (_expandedViewIds.contains(id)) continue;
       if (!_animateNewTabs) {
         _expandedViewIds.add(id);
       } else {
@@ -127,28 +123,15 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar>
     });
   }
 
-  /// Collapses [viewId]'s row first and closes the tab once that animation has
-  /// run, so closing animates instead of the row vanishing mid-frame.
-  Future<void> _closeTab(int viewId) async {
-    if (_closingViewIds.contains(viewId)) return;
-
+  /// Closes [viewId]'s tab. Its row collapses first and the tab goes away once
+  /// that has run; see [closingTabsProvider], which every close path shares.
+  void _closeTab(int viewId) {
     HapticFeedback.lightImpact();
-    final canClose = BrowserTabActions.prepareCloseTabNavigation(
+    BrowserTabActions.closeTab(
       context,
       currentViewId: widget.currentViewId,
       closeViewId: viewId,
-      tabs: ref.read(browserTabControllerProvider),
     );
-    if (!canClose) return;
-
-    setState(() {
-      _closingViewIds.add(viewId);
-      _expandedViewIds.remove(viewId);
-    });
-
-    await Future<void>.delayed(_kTabAnimationConfig.sizeDuration);
-    if (!mounted) return;
-    BrowserTabActions.commitCloseTab(ref, viewId);
   }
 
   @override
@@ -157,6 +140,7 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar>
     final tabListPadding = const EdgeInsets.only(top: 4, bottom: 4);
 
     final tabs = ref.watch(browserTabControllerProvider);
+    final closingViewIds = ref.watch(closingTabsProvider);
     _syncRowExpandState(tabs.map((tab) => tab.viewId));
     final currentTabController = ref.watch(
       browserTabProvider(widget.currentViewId),
@@ -269,7 +253,9 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar>
                             index: index,
                             viewId: tabs[index].viewId,
                             selected: id == widget.currentViewId,
-                            expanded: _expandedViewIds.contains(id),
+                            expanded:
+                                _expandedViewIds.contains(id) &&
+                                !closingViewIds.contains(id),
                             minWidth: _kMinTabWidth,
                             width: adaptiveTabWidth,
                             animationConfig: _kTabAnimationConfig,
