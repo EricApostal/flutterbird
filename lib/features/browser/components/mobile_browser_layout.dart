@@ -1,8 +1,8 @@
 import 'package:bird_core/bird_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutterbird/features/browser/components/browser_window.dart';
 import 'package:flutterbird/features/browser/components/mobile_omnibox_bar.dart';
-import 'package:flutterbird/features/browser/components/tab_swipe_back_stack.dart';
 import 'package:flutterbird/features/browser/state/fullscreen_mode.dart';
 import 'package:flutterbird/features/browser/state/tab_actions.dart';
 import 'package:flutterbird/features/browser/state/tab_history.dart';
@@ -21,39 +21,50 @@ class MobileBrowserLayout extends ConsumerWidget {
       return const SizedBox.shrink();
     }
 
-    // Going back goes through the tab's own history first (the swipe stack
-    // below takes the system back button while there is any). Once it has none
-    // left, a tab that a page opened closes and hands the user back to the tab
-    // that opened it, like in a browser. Any other tab lets the back button
-    // through, which leaves the app.
+    // The back button does what it does in a browser, in this order:
+    //  1. The page has history behind it: go back through it. That is the engine
+    //     going back, and nothing else: the view shows the page it navigates to,
+    //     with no animation of ours, because there is no stack of pages here to
+    //     animate (a stack of snapshots pushed one per link and then fought the
+    //     engine's own navigation, which showed as jank).
+    //  2. The tab was opened by a page and has no history left: close it and go
+    //     back to the tab that opened it.
+    //  3. Otherwise let the back button through, which leaves the app.
+    // While the page is fullscreen, the back button exits that instead
+    // (BrowserWindowScreen handles it).
     final historyState = ref.watch(tabHistoryControllerProvider(viewId));
     final currentStep = historyState.effectiveCurrentStep;
-    final canGoBackInTab =
+    final hasHistory =
         currentStep != null && historyState.canPopFrom(currentStep);
     final openerViewId = BrowserTabActions.openerOf(ref, viewId);
-    final backClosesTab =
-        openerViewId != null && !canGoBackInTab && !isFullscreen;
+    final goesBack = !isFullscreen && hasHistory;
+    final closesTab = !isFullscreen && !hasHistory && openerViewId != null;
 
     return PopScope(
-      canPop: !backClosesTab,
+      canPop: !(goesBack || closesTab),
       onPopInvokedWithResult: (didPop, result) {
-        if (didPop || openerViewId == null) return;
-        BrowserTabActions.closeTab(
-          context,
-          currentViewId: viewId,
-          closeViewId: viewId,
-          destinationViewId: openerViewId,
-        );
+        if (didPop) return;
+        if (goesBack) {
+          currentTabController.goBack();
+        } else if (closesTab) {
+          BrowserTabActions.closeTab(
+            context,
+            currentViewId: viewId,
+            closeViewId: viewId,
+            destinationViewId: openerViewId,
+          );
+        }
       },
       child: Scaffold(
         body: Column(
           children: [
             if (!isFullscreen)
               MobileOmniboxBar(currentTabController: currentTabController),
-            // Keyed by the tab: each tab gets its own stack of history pages, so
-            // switching tabs never animates one tab's pages into another's.
             Expanded(
-              child: TabSwipeBackStack(key: ValueKey(viewId), viewId: viewId),
+              child: BrowserWindow(
+                key: GlobalObjectKey<State<BrowserWindow>>(viewId),
+                viewId: viewId,
+              ),
             ),
           ],
         ),
