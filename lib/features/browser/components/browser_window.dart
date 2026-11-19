@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutterbird/features/browser/components/browser_context_menu.dart';
+import 'package:flutterbird/features/browser/components/tab_loading_bar.dart';
 import 'package:flutterbird/features/browser/state/fullscreen_mode.dart';
 import 'package:flutterbird/features/browser/state/tab_actions.dart';
 import 'package:ladybird/ladybird.dart';
@@ -202,12 +203,29 @@ class _BrowserWindowState extends ConsumerState<BrowserWindow> {
     _bindController(controller);
     controller.updateColorScheme(Theme.of(context).brightness);
 
-    return RepaintBoundary(
-      key: _repaintBoundaryKey,
-      child: KeyedSubtree(
-        key: _viewKey,
-        child: LadybirdView(controller: controller),
-      ),
+    final isFullscreen = ref.watch(browserFullscreenModeControllerProvider);
+
+    return Stack(
+      // The page keeps the constraints it always had; the bar only overlays it.
+      fit: StackFit.passthrough,
+      children: [
+        RepaintBoundary(
+          key: _repaintBoundaryKey,
+          child: KeyedSubtree(
+            key: _viewKey,
+            child: LadybirdView(controller: controller),
+          ),
+        ),
+        // Outside the repaint boundary, so a snapshot of the page (for tab
+        // previews) never has a half-finished bar in it.
+        if (!isFullscreen)
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: TabLoadingBar(isLoading: controller.isLoadingNotifier),
+          ),
+      ],
     );
   }
 }
