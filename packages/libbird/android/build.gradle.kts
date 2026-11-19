@@ -258,6 +258,7 @@ configure<LibraryExtension> {
                                 "ImageDecoder",
                                 "MediaServer",
                                 "RequestServer",
+                                "SystemProbe",
                                 "VideoDecoderServer",
                                 "WebContent"
                         )

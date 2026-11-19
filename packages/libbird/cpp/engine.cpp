@@ -656,10 +656,15 @@ public:
         AHardwareBuffer_release(buffer);
         return;
       }
-      std::fprintf(stderr,
-                   "[Ladybird][Android] view %d: frames are not exported as "
-                   "hardware buffers; copying %dx%d frames instead\n",
-                   m_view_id, bitmap_size.width(), bitmap_size.height());
+      // Once per view: a resize can swap the buffer on nearly every frame for a
+      // moment, when the compositor's backing stores briefly differ in size.
+      if (!m_logged_android_copy_fallback) {
+        m_logged_android_copy_fallback = true;
+        std::fprintf(stderr,
+                     "[Ladybird][Android] view %d: frames are not exported as "
+                     "hardware buffers; copying %dx%d frames instead\n",
+                     m_view_id, bitmap_size.width(), bitmap_size.height());
+      }
     }
 
     auto *buffer = m_android_frame_buffer->buffer();
@@ -1709,6 +1714,7 @@ private:
 #ifdef __ANDROID__
   OwnPtr<AndroidFrameBuffer> m_android_frame_buffer;
   bool m_logged_unsupported_ahb_format{false};
+  bool m_logged_android_copy_fallback{false};
 #endif
 };
 
