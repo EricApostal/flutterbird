@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:flutterbird/features/browser/components/desktop/tabs/tab_preview_popup.dart';
 import 'package:ladybird/ladybird.dart';
 
 enum BrowserTabVariant { horizontal, arcSidebar }
@@ -104,6 +105,33 @@ class _BrowserTabState extends ConsumerState<BrowserTab> {
         ? theme.textTheme.bodyMedium
         : theme.textTheme.bodySmall;
 
+    return TabPreviewHover(
+      viewId: widget.viewId,
+      selected: widget.selected,
+      placement: isSidebarVariant
+          ? TabPreviewPlacement.right
+          : TabPreviewPlacement.below,
+      child: _buildTab(
+        context,
+        browserTab,
+        theme,
+        isSidebarVariant,
+        showCloseButton,
+        borderRadius,
+        titleStyle,
+      ),
+    );
+  }
+
+  Widget _buildTab(
+    BuildContext context,
+    LadybirdController browserTab,
+    ThemeData theme,
+    bool isSidebarVariant,
+    bool showCloseButton,
+    BorderRadius borderRadius,
+    TextStyle? titleStyle,
+  ) {
     return MouseRegion(
       onEnter: (_) {
         if (!isSidebarVariant) return;

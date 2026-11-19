@@ -19,10 +19,14 @@ class BrowserWindow extends ConsumerStatefulWidget {
   // convention already used at every BrowserWindow(...) call site. Returns
   // null if the tab isn't mounted or the capture fails (first frame not yet
   // painted, etc); callers should fall back to a placeholder.
-  static Future<ui.Image?> captureSnapshotFor(int viewId) {
+  //
+  // [maxWidth] caps the snapshot's width in physical pixels, so a thumbnail is
+  // rendered at thumbnail size instead of being read back in full and
+  // downscaled afterwards.
+  static Future<ui.Image?> captureSnapshotFor(int viewId, {double? maxWidth}) {
     final state = GlobalObjectKey<State<BrowserWindow>>(viewId).currentState;
     if (state is! _BrowserWindowState) return Future.value(null);
-    return state._captureSnapshot();
+    return state._captureSnapshot(maxWidth: maxWidth);
   }
 
   @override
@@ -35,18 +39,22 @@ class _BrowserWindowState extends ConsumerState<BrowserWindow> {
   bool _contextMenuVisible = false;
   LadybirdController? _boundController;
 
-  Future<ui.Image?> _captureSnapshot() async {
+  Future<ui.Image?> _captureSnapshot({double? maxWidth}) async {
     final renderObject = _repaintBoundaryKey.currentContext
         ?.findRenderObject();
     if (renderObject is! RenderRepaintBoundary) return null;
     if (!renderObject.attached || renderObject.debugNeedsPaint) return null;
 
     try {
-      final density =
+      var pixelRatio =
           _repaintBoundaryKey.currentContext != null
               ? MediaQuery.devicePixelRatioOf(_repaintBoundaryKey.currentContext!)
               : 1.0;
-      return await renderObject.toImage(pixelRatio: density);
+      final width = renderObject.size.width;
+      if (maxWidth != null && width > 0 && width * pixelRatio > maxWidth) {
+        pixelRatio = maxWidth / width;
+      }
+      return await renderObject.toImage(pixelRatio: pixelRatio);
     } catch (_) {
       return null;
     }
