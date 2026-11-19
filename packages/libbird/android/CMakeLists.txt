@@ -84,8 +84,13 @@ add_subdirectory("${LADYBIRD_DIR}" "${LADYBIRD_BINARY_DIR}")
 # engine launches its helpers by their APK native-library names. Build the
 # helper executables into that directory as lib<Name>.so so they are packaged
 # and visible to get_paths_for_helper_process() at runtime.
+#
+# SystemProbe is one of them: the Browser launches it to describe the GPU before it
+# lets the Compositor paint on it. With no libSystemProbe.so the probe "could not be
+# launched", GPU painting is switched off, and the Compositor paints into CPU
+# bitmaps that can never be shared as hardware buffers.
 if (ANDROID AND LADYBIRD_HELPER_JNI_DIR)
-    foreach(helper_process IN ITEMS AudioServer Compositor ImageDecoder MediaServer RequestServer VideoDecoderServer WebContent)
+    foreach(helper_process IN ITEMS AudioServer Compositor ImageDecoder MediaServer RequestServer SystemProbe VideoDecoderServer WebContent)
         if (TARGET ${helper_process})
             set_target_properties(${helper_process} PROPERTIES
                 OUTPUT_NAME "lib${helper_process}"
@@ -100,7 +105,7 @@ endif()
 # TODO: This is a workaround for a bug in ladybird. This is actually handled,
 # but android is not included in that check
 if (ANDROID AND NOT BUILD_SHARED_LIBS)
-    foreach(helper_process IN ITEMS AudioServer Compositor ImageDecoder MediaServer RequestServer VideoDecoderServer WebContent)
+    foreach(helper_process IN ITEMS AudioServer Compositor ImageDecoder MediaServer RequestServer SystemProbe VideoDecoderServer WebContent)
         if (TARGET ${helper_process})
             target_link_options(${helper_process} PRIVATE LINKER:--allow-multiple-definition)
         endif()

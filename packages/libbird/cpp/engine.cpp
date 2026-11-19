@@ -4,8 +4,10 @@
 #include <cerrno>
 #include <memory>
 #include <mutex>
+#include <thread>
 #include <stdint.h>
 #include <stdlib.h>
+#include <string>
 #include <string.h>
 
 // Platform-specific backend header.  All __APPLE__ ifdefs live here and
@@ -19,6 +21,8 @@
 
 #ifdef __ANDROID__
 #include <android/hardware_buffer.h>
+#include <android/log.h>
+#include <unistd.h>
 #endif
 
 #ifdef __APPLE__
@@ -311,6 +315,53 @@ struct AndroidRuntimeConfig {
   }
 };
 
+// Android discards a native process's stdout and stderr, and the engine reports
+// most of what goes wrong through them (a frame that cannot be exported, a
+// failed allocation), so a failure would leave no trace in logcat. Forward both
+// to logcat under the tag "LadybirdStd". The helper processes inherit these
+// descriptors, so what they print arrives here too.
+static void forward_stdio_to_logcat() {
+  static std::once_flag once;
+  std::call_once(once, [] {
+    int descriptors[2];
+    if (pipe(descriptors) != 0)
+      return;
+
+    setvbuf(stdout, nullptr, _IOLBF, 0);
+    setvbuf(stderr, nullptr, _IONBF, 0);
+    if (dup2(descriptors[1], STDOUT_FILENO) < 0 ||
+        dup2(descriptors[1], STDERR_FILENO) < 0) {
+      close(descriptors[0]);
+      close(descriptors[1]);
+      return;
+    }
+    close(descriptors[1]);
+
+    int read_descriptor = descriptors[0];
+    std::thread([read_descriptor] {
+      char buffer[1024];
+      std::string pending;
+      ssize_t count;
+      while ((count = read(read_descriptor, buffer, sizeof(buffer))) > 0 ||
+             (count < 0 && errno == EINTR)) {
+        if (count < 0)
+          continue;
+        pending.append(buffer, static_cast<size_t>(count));
+        size_t newline;
+        while ((newline = pending.find('\n')) != std::string::npos) {
+          pending[newline] = '\0';
+          __android_log_write(ANDROID_LOG_INFO, "LadybirdStd", pending.c_str());
+          pending.erase(0, newline + 1);
+        }
+        if (pending.size() > 4096) {
+          __android_log_write(ANDROID_LOG_INFO, "LadybirdStd", pending.c_str());
+          pending.clear();
+        }
+      }
+    }).detach();
+  });
+}
+
 static std::mutex g_android_runtime_mutex;
 static AndroidRuntimeConfig g_android_runtime_config;
 
@@ -323,6 +374,7 @@ extern "C" void configure_android_runtime(const char *resource_root,
                                           const char *user_dir,
                                           const char *native_library_dir,
                                           const char *certificates_path) {
+  forward_stdio_to_logcat();
   std::lock_guard lock(g_android_runtime_mutex);
   g_android_runtime_config.resource_root =
       resource_root ? ByteString(resource_root) : ByteString{};
@@ -465,6 +517,9 @@ public:
   // Platform rendering backend (LinuxViewBackend / MacOSViewBackend).
   std::unique_ptr<ViewBackend> m_backend;
   uint64_t m_debug_paint_event_count{0};
+#ifdef __ANDROID__
+  uint64_t m_android_paint_notifications{0};
+#endif
   Optional<u64> m_display_id;
   double m_display_refresh_rate{kDefaultRefreshRate};
 
@@ -601,6 +656,10 @@ public:
         AHardwareBuffer_release(buffer);
         return;
       }
+      std::fprintf(stderr,
+                   "[Ladybird][Android] view %d: frames are not exported as "
+                   "hardware buffers; copying %dx%d frames instead\n",
+                   m_view_id, bitmap_size.width(), bitmap_size.height());
     }
 
     auto *buffer = m_android_frame_buffer->buffer();
@@ -1192,6 +1251,29 @@ public:
       // show is the one in the front backing store, or the kept backup until
       // that has one.
       auto frame = backing_stores().displayed_frame();
+#ifdef __ANDROID__
+      // Say what the first few presented frames look like, and then now and
+      // then, so that a view that never shows anything can be told from one
+      // whose frames cannot be exported.
+      if (m_android_paint_notifications < 5 ||
+          m_android_paint_notifications % 300 == 0) {
+        std::fprintf(
+            stderr,
+            "[Ladybird][Android] view %d ready_to_paint #%llu: frame=%s "
+            "shared_image_buffer=%s native_buffer=%s size=%dx%d\n",
+            m_view_id,
+            static_cast<unsigned long long>(m_android_paint_notifications),
+            frame.has_value() ? "yes" : "no",
+            frame.has_value() && frame->shared_image_buffer ? "yes" : "no",
+            frame.has_value() && frame->shared_image_buffer &&
+                    frame->shared_image_buffer->native_buffer()
+                ? "yes"
+                : "no",
+            frame.has_value() ? frame->size.width() : 0,
+            frame.has_value() ? frame->size.height() : 0);
+      }
+      ++m_android_paint_notifications;
+#endif
       if (!frame.has_value() || !frame->shared_image_buffer)
         return;
 
@@ -1201,11 +1283,32 @@ public:
 
       // A hardware buffer the compositor rendered into is presented as-is; the
       // plugin reads it through get_android_hardware_buffer.
-      if (front_ahb() != nullptr) {
+      //
+      // NB: Only the frame itself says whether it has one. front_ahb() also
+      // returns the copy this plugin keeps for frames without one, so asking it
+      // would take every frame after the first for an exported buffer, and the
+      // copy would never be refreshed: the view would show its first frame for
+      // good.
+#ifdef __ANDROID__
+      bool const has_exported_buffer =
+          shared_image_buffer->native_buffer() != nullptr;
+#else
+      bool const has_exported_buffer = false;
+#endif
+      if (has_exported_buffer) {
+#ifdef __ANDROID__
+        m_android_frame_buffer = nullptr;
+#endif
         m_backend->on_hardware_frame_ready(frame->size.width(),
                                            frame->size.height());
         return;
       }
+
+#ifdef __ANDROID__
+      // Copy the frame into the buffer the plugin presents before announcing
+      // it, so that a reader that sees the new generation sees its pixels too.
+      refresh_android_hardware_buffer();
+#endif
 
 #ifndef __APPLE__
 #ifdef USE_VULKAN_DMABUF_IMAGES
@@ -1249,15 +1352,6 @@ public:
       auto bitmap =
           AK::RefPtr<Gfx::Bitmap const>(shared_image_buffer->bitmap());
       m_backend->on_bitmap_ready(bitmap);
-#ifdef __ANDROID__
-      // A frame the compositor exported as an AHardwareBuffer never needs the
-      // copied one; only fall back to it for frames that have none.
-      if (front_ahb() != nullptr)
-        m_android_frame_buffer = nullptr;
-      else
-        refresh_android_hardware_buffer();
-#endif
-
 #ifdef __APPLE__
       if (m_last_mac_frame_source != MacFrameSource::BitmapFallback) {
         std::fprintf(

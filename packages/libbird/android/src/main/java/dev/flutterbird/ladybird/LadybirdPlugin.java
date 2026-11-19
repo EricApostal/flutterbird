@@ -204,6 +204,23 @@ public final class LadybirdPlugin implements FlutterPlugin, MethodCallHandler {
 
         long generation = nativeGetFrameGeneration(textureContext.viewId);
         textureContext.nativeFrameCallbacks += 1;
+
+        // A view that never shows anything gives no other sign of where its
+        // frames stop: no generation means the engine presented nothing, no size
+        // means it presented a frame it could not size.
+        long now = android.os.SystemClock.elapsedRealtime();
+        if (now - textureContext.lastDiagnosticLogMs >= 2000) {
+            textureContext.lastDiagnosticLogMs = now;
+            android.util.Log.i(
+                    "LadybirdPlugin",
+                    "view=" + textureContext.viewId
+                            + " generation=" + generation
+                            + " size=" + nativeGetSurfaceWidth(textureContext.viewId)
+                            + "x" + nativeGetSurfaceHeight(textureContext.viewId)
+                            + " pumps=" + textureContext.nativeFrameCallbacks
+                            + " delivered=" + textureContext.deliveredFrames
+                            + " drops=" + textureContext.queuedDrops);
+        }
         if (generation == 0 || generation == textureContext.lastFrameGeneration) {
             return;
         }
@@ -310,6 +327,7 @@ public final class LadybirdPlugin implements FlutterPlugin, MethodCallHandler {
         long nativeFrameCallbacks = 0;
         long queuedDrops = 0;
         long deliveredFrames = 0;
+        long lastDiagnosticLogMs = 0;
 
         TextureContext(int viewId, TextureRegistry.SurfaceProducer producer) {
             this.viewId = viewId;
