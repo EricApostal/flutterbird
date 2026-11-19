@@ -30,7 +30,7 @@ fun Project.resolveSdl3JavaInputs(sourceDir: String): Sdl3JavaInputs {
     }.files.minByOrNull { it.path }
 
     val sourceDirs = if (jar == null) {
-        fileTree("$vcpkgRoot/buildtrees/sdl3") {
+        val javaDirs = fileTree("$vcpkgRoot/buildtrees/sdl3") {
             include("**/android-project/app/src/main/java/**/*.java")
         }.files.mapNotNull { file ->
             var current: File? = file
@@ -38,7 +38,24 @@ fun Project.resolveSdl3JavaInputs(sourceDir: String): Sdl3JavaInputs {
                 current = current.parentFile
             }
             current
-        }.distinct().sortedBy { it.path }
+        }.distinct()
+
+        // vcpkg keeps every SDL source tree it has extracted (one per version
+        // it has built), and their Java sources are the same files. Only the
+        // newest one matches the SDL that was built, and mixing trees both
+        // duplicates files and can pair classes from different versions.
+        fun sdl3TreeName(javaDir: File) =
+            javaDir.path.substringAfter("buildtrees/sdl3/src/").substringBefore('/')
+
+        fun sdl3TreeVersion(javaDir: File): String =
+            Regex("""(\d+)\.(\d+)\.(\d+)""").find(sdl3TreeName(javaDir))
+                ?.groupValues?.drop(1)
+                ?.joinToString("") { it.padStart(6, '0') }
+                ?: ""
+
+        val newestTree = javaDirs.maxByOrNull { sdl3TreeVersion(it) + sdl3TreeName(it) }
+            ?.let { sdl3TreeName(it) }
+        javaDirs.filter { sdl3TreeName(it) == newestTree }.sortedBy { it.path }
     } else {
         emptyList()
     }
@@ -170,9 +187,12 @@ val prepareSdl3Java = tasks.register("prepareSdl3Java") {
         val inputs = resolveSdl3JavaInputs(sourceDir)
         verifySdl3JavaInputs(inputs)
         if (inputs.sourceDirs.isNotEmpty()) {
-            copy {
+            // sync, not copy: a source file the SDL in use no longer has must
+            // not linger from an earlier version.
+            sync {
                 from(inputs.sourceDirs)
                 into(generatedSdl3JavaDir)
+                duplicatesStrategy = DuplicatesStrategy.EXCLUDE
             }
         }
     }
