@@ -244,10 +244,24 @@ required_entries() {
       echo "ladybirdHelperJniLibs/arm64-v8a/libengine.so" \
         "ladybirdHelperJniLibs/arm64-v8a/libladybird_plugin.so" \
         "ladybirdHelperJniLibs/arm64-v8a/libWebContent.so" \
-        "ladybirdAssets/ladybird-assets.zip" \
-        "sdl3Java"
+        "ladybirdAssets/ladybird-assets.zip"
       ;;
   esac
+}
+
+# SDL's Android Java comes to the build in one of two forms: the sources, copied
+# out of vcpkg's build tree (sdl3Java), or a jar that vcpkg packaged (sdl3Jar),
+# which the Gradle build uses in place of the sources when there is one. A copy
+# holds whichever form the build it was made from used, and needs one of them.
+has_sdl3_java() {
+  local root="$1"
+  if [[ -d "${root}/sdl3Java" && -n "$(ls -A "${root}/sdl3Java" 2>/dev/null)" ]]; then
+    return 0
+  fi
+  if compgen -G "${root}/sdl3Jar/*.jar" >/dev/null; then
+    return 0
+  fi
+  return 1
 }
 
 check_required_entries() {
@@ -255,6 +269,9 @@ check_required_entries() {
   for entry in $(required_entries "${platform}"); do
     [[ -e "${root}/${entry}" ]] || missing+=("${entry}")
   done
+  if [[ "${platform}" == android-arm64-v8a ]] && ! has_sdl3_java "${root}"; then
+    missing+=("SDL3 Java (sdl3Java or sdl3Jar)")
+  fi
   if ((${#missing[@]} > 0)); then
     die "${root} is missing: ${missing[*]}"
   fi
@@ -313,8 +330,6 @@ package_android_stage() {
   [[ -f "${apk}" ]] || die "no APK at ${apk} (set LIBBIRD_NATIVE_APK)"
   [[ -f "${ladybird_build}/generated/ladybirdAssets/ladybird-assets.zip" ]] ||
     die "no ladybird-assets.zip under ${ladybird_build}/generated"
-  [[ -d "${ladybird_build}/generated/sdl3Java" ]] ||
-    die "no sdl3Java under ${ladybird_build}/generated"
 
   local libs_dir="${stage}/ladybirdHelperJniLibs/arm64-v8a" lib
   mkdir -p "${libs_dir}" "${stage}/ladybirdAssets"
@@ -323,7 +338,27 @@ package_android_stage() {
       die "${lib} is not in ${apk}"
   done
   cp "${ladybird_build}/generated/ladybirdAssets/ladybird-assets.zip" "${stage}/ladybirdAssets/"
-  cp -R "${ladybird_build}/generated/sdl3Java" "${stage}/sdl3Java"
+
+  # SDL's Java, in the form the build used (see has_sdl3_java). A fresh vcpkg
+  # build has the jar and never copies sources, which is why neither form can be
+  # taken for granted.
+  if [[ -d "${ladybird_build}/generated/sdl3Java" ]]; then
+    cp -R "${ladybird_build}/generated/sdl3Java" "${stage}/sdl3Java"
+  fi
+  local ladybird_dir="${LIBBIRD_LADYBIRD_DIR:-${PACKAGE_ROOT}/third_party/ladybird}"
+  local jar index=0
+  if [[ -d "${ladybird_dir}/Build/vcpkg-release/packages" ]]; then
+    while IFS= read -r jar; do
+      [[ -n "${jar}" ]] || continue
+      mkdir -p "${stage}/sdl3Jar"
+      # A prefix keeps jars of the same name from different packages apart.
+      cp "${jar}" "${stage}/sdl3Jar/$(printf '%02d' "${index}")-$(basename "${jar}")"
+      index=$((index + 1))
+    done < <(find "${ladybird_dir}/Build/vcpkg-release/packages" -type f \
+      \( -name 'SDL3.jar' -o -name 'SDL3-*.jar' \) ! -name '*-sources.jar' | LC_ALL=C sort)
+  fi
+  has_sdl3_java "${stage}" ||
+    die "found neither SDL3 Java sources under ${ladybird_build}/generated/sdl3Java nor an SDL3 jar under ${ladybird_dir}/Build/vcpkg-release/packages"
 }
 
 package_artifact() {

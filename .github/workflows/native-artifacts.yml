@@ -121,6 +121,13 @@ jobs:
       # Ladybird builds for macOS 14.4 and up, and the app that embeds it cannot
       # target less (the pod says the same). The pod build gets this from Xcode.
       MACOSX_DEPLOYMENT_TARGET: '14.4'
+      # A copy has to run on Macs other than the runner. Without this Ladybird
+      # builds for whatever CPU it is run on (-march=native, -Ctarget-cpu=native),
+      # which on a virtual machine can come out without features its Rust
+      # dependencies insist on (the `ring` build fails on the AES and SHA ones),
+      # and on a newer chip than yours would use instructions yours lacks. This
+      # asks for the common apple-m1 baseline, Ladybird's own CI does the same.
+      LADYBIRD_BASELINE_CPU_TARGET: 'ON'
       CCACHE_DIR: ${{ github.workspace }}/.ccache
       CCACHE_MAXSIZE: 3G
       SCCACHE_DIR: ${{ github.workspace }}/.sccache

@@ -381,4 +381,15 @@ dependencies {
         include("**/SDL3-*.jar")
         exclude("**/*-sources.jar")
     })
+
+    if (usePrebuiltNative) {
+        // There is no vcpkg tree to find SDL's jar in, so a prebuilt copy brings
+        // it (when the build it came from used the jar rather than the sources,
+        // see tool/libbird_native.sh), unpacked next to the other generated files.
+        implementation(
+            fileTree(layout.buildDirectory.dir("generated/sdl3Jar").get().asFile) {
+                include("*.jar")
+            }
+        )
+    }
 }
