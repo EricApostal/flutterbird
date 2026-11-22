@@ -49,9 +49,18 @@ final class LadybirdRuntimeFiles {
         ensureDirectory(new File(userDir, "runtime"));
         ensureDirectory(new File(userDir, "cache"));
 
+        // The copy on disk has to be the one this build of the app ships. A file
+        // check alone kept the first copy ever extracted forever, so a Ladybird
+        // update that added pages (about:settings and the like) left them missing
+        // and the engine died looking for them. Tie the copy to the installed app
+        // instead: every install or update of the app extracts it afresh.
         File sentinel = new File(resourceRoot, "icons/48x48/app-browser.png");
-        if (!sentinel.exists()) {
+        File stamp = new File(resourceRoot, ".assets-stamp");
+        String expectedStamp = assetsStamp(appContext);
+        if (!sentinel.exists() || !expectedStamp.equals(readText(stamp))) {
+            deleteContents(resourceRoot, certificatesFile);
             extractZipAsset(appContext.getAssets(), "ladybird-assets.zip", resourceRoot);
+            writeText(stamp, expectedStamp);
         }
 
         if (!certificatesFile.exists() || certificatesFile.length() == 0L) {
@@ -119,6 +128,51 @@ final class LadybirdRuntimeFiles {
                         outputStream.write(buffer, 0, read);
                     }
                 }
+            }
+        }
+    }
+
+    // Changes whenever the app is installed or updated.
+    private static String assetsStamp(Context context) {
+        try {
+            android.content.pm.PackageInfo info = context.getPackageManager()
+                    .getPackageInfo(context.getPackageName(), 0);
+            return info.lastUpdateTime + ":" + info.versionName;
+        } catch (android.content.pm.PackageManager.NameNotFoundException exception) {
+            // Without it every launch extracts afresh, which is slow but right.
+            return "unknown:" + System.nanoTime();
+        }
+    }
+
+    private static String readText(File file) {
+        try {
+            return new String(java.nio.file.Files.readAllBytes(file.toPath()),
+                    java.nio.charset.StandardCharsets.UTF_8);
+        } catch (IOException exception) {
+            return "";
+        }
+    }
+
+    private static void writeText(File file, String text) throws IOException {
+        java.nio.file.Files.write(file.toPath(), text.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+    }
+
+    // Empties a directory, apart from one file to keep, so that a file the new
+    // copy no longer has does not linger from the old one.
+    private static void deleteContents(File directory, File keep) throws IOException {
+        File[] children = directory.listFiles();
+        if (children == null) {
+            return;
+        }
+        for (File child : children) {
+            if (child.equals(keep)) {
+                continue;
+            }
+            if (child.isDirectory()) {
+                deleteContents(child, null);
+            }
+            if (!child.delete() && child.exists()) {
+                throw new IOException("Unable to delete: " + child);
             }
         }
     }
