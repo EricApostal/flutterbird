@@ -386,10 +386,25 @@ dependencies {
         // There is no vcpkg tree to find SDL's jar in, so a prebuilt copy brings
         // it (when the build it came from used the jar rather than the sources,
         // see tool/libbird_native.sh), unpacked next to the other generated files.
+        //
+        // Sources win when the copy has both: they are compiled into this
+        // plugin, so adding the jar as well defines every SDL class twice and
+        // R8 refuses the build ("Type org.libsdl.app... is defined multiple
+        // times"). Decided when the classpath is resolved, not here, because
+        // the copy is unpacked by a task that runs after configuration.
+        val sdl3JavaDir = layout.buildDirectory.dir("generated/sdl3Java")
+        val sdl3JarDir = layout.buildDirectory.dir("generated/sdl3Jar")
         implementation(
-            fileTree(layout.buildDirectory.dir("generated/sdl3Jar").get().asFile) {
-                include("*.jar")
-            }
+            files(
+                providers.provider {
+                    val sources = sdl3JavaDir.get().asFile
+                    if (sources.isDirectory && !sources.list().isNullOrEmpty()) {
+                        emptyList<File>()
+                    } else {
+                        fileTree(sdl3JarDir) { include("*.jar") }.files.toList()
+                    }
+                }
+            )
         )
     }
 }

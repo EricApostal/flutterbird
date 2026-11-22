@@ -347,7 +347,9 @@ package_android_stage() {
   fi
   local ladybird_dir="${LIBBIRD_LADYBIRD_DIR:-${PACKAGE_ROOT}/third_party/ladybird}"
   local jar index=0
-  if [[ -d "${ladybird_dir}/Build/vcpkg-release/packages" ]]; then
+  # One form only: with the sources shipped, the jar would define every SDL
+  # class a second time (R8: "Type org.libsdl.app... is defined multiple times").
+  if [[ ! -d "${stage}/sdl3Java" && -d "${ladybird_dir}/Build/vcpkg-release/packages" ]]; then
     while IFS= read -r jar; do
       [[ -n "${jar}" ]] || continue
       mkdir -p "${stage}/sdl3Jar"
