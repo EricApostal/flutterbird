@@ -65,6 +65,21 @@ if (EXISTS "${LADYBIRD_CACHE_FILE}")
     endif()
 endif()
 
+# LibWebView changes the layout of WebView::Application, which the engine
+# subclasses, when it is built with update checks (it adds a virtual and a
+# member). Upstream marks LADYBIRD_HAS_UPDATE_CHECK as a PUBLIC definition of
+# the LibWebView target, but the engine links the built libraries by name and so
+# does not inherit it. Without the same definition the engine and LibWebView
+# disagree on the vtable, and the engine's overrides are called through the
+# wrong slots. Upstream builds with update checks unless told otherwise.
+set(LADYBIRD_HAS_UPDATE_CHECK ON)
+if (EXISTS "${LADYBIRD_CACHE_FILE}")
+    file(STRINGS "${LADYBIRD_CACHE_FILE}" _ladybird_update_check_cache_line REGEX "^LADYBIRD_ENABLE_UPDATE_CHECK:BOOL=(ON|OFF)$")
+    if (_ladybird_update_check_cache_line MATCHES "^LADYBIRD_ENABLE_UPDATE_CHECK:BOOL=OFF$")
+        set(LADYBIRD_HAS_UPDATE_CHECK OFF)
+    endif()
+endif()
+
 if (APPLE)
     set(VCPKG_TRIPLET "arm64-osx-dynamic")
 elseif (ANDROID)
@@ -92,6 +107,10 @@ endif()
 
 if (LADYBIRD_USE_VULKAN_DMABUF_IMAGES)
     target_compile_definitions(engine PRIVATE USE_VULKAN_DMABUF_IMAGES=1)
+endif()
+
+if (LADYBIRD_HAS_UPDATE_CHECK)
+    target_compile_definitions(engine PRIVATE LADYBIRD_HAS_UPDATE_CHECK)
 endif()
 
 target_include_directories(engine PRIVATE
