@@ -2322,7 +2322,7 @@ void navigate_to(int view_id, const char *url) {
   if (it != g_web_views.end()) {
     auto parsed = URL::Parser::basic_parse(AK::StringView(url, strlen(url)));
     if (parsed.has_value())
-      it->second->load(parsed.value());
+      it->second->load_from_browser_ui(parsed.value());
   }
 }
 
