@@ -1,4 +1,5 @@
 export 'src/controller.dart';
+export 'src/extension_bridge.dart';
 export 'src/models/context_menu.dart';
 export 'src/models/download.dart';
 export 'src/models/session_history.dart';

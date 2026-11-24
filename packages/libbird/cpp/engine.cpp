@@ -69,6 +69,7 @@
 #include <LibWebView/Application.h>
 #include <LibWebView/BrowsingSession.h>
 #include <LibWebView/ContextMenuRequest.h>
+#include <LibWebView/ExtensionBridge.h>
 #include <LibWebView/FaviconStore.h>
 #include <LibWebView/FileDownloader.h>
 #include <LibWebView/HistoryDebug.h>
@@ -2989,6 +2990,95 @@ void set_download_update_callback(DownloadUpdateCallback callback) {
 
 void set_download_removed_callback(DownloadRemovedCallback callback) {
   g_download_removed_callback = callback;
+}
+
+// The bridge names a tab by Ladybird's own view ID; the embedder knows it by
+// the one this engine handed out.
+static int embedder_view_id_for(Optional<u64> view_id) {
+  if (!view_id.has_value())
+    return -1;
+  for (auto const &entry : g_web_views) {
+    if (entry.second->view_id() == *view_id)
+      return entry.first;
+  }
+  return -1;
+}
+
+void set_extension_intercept_callback(ExtensionInterceptCallback callback) {
+  auto &bridge = WebView::ExtensionBridge::the();
+  if (!callback) {
+    bridge.on_intercept = nullptr;
+    return;
+  }
+
+  bridge.on_intercept = [callback](u64 request_id, Optional<u64> view_id,
+                                   String details) {
+    auto bytes = details.to_byte_string();
+    callback(request_id, embedder_view_id_for(view_id),
+             strdup(bytes.characters()));
+  };
+}
+
+bool respond_extension_intercept(uint64_t request_id,
+                                 const char *verdict_json) {
+  if (!verdict_json)
+    return false;
+  auto verdict = String::from_utf8(StringView {verdict_json, strlen(verdict_json)});
+  if (verdict.is_error())
+    return false;
+  return WebView::ExtensionBridge::the().respond_to_intercept(request_id,
+                                                              verdict.value());
+}
+
+void set_extension_callbacks(ExtensionContextCreatedCallback created,
+                             ExtensionContextDestroyedCallback destroyed,
+                             ExtensionMessageCallback message) {
+  auto &bridge = WebView::ExtensionBridge::the();
+
+  bridge.on_context_created = [created](u64 context_id, Optional<u64> view_id,
+                                        String extension_uuid, String url,
+                                        bool is_top_level) {
+    if (!created)
+      return;
+
+    int embedder_view_id = embedder_view_id_for(view_id);
+
+    auto uuid_bytes = extension_uuid.to_byte_string();
+    auto url_bytes = url.to_byte_string();
+    created(context_id, embedder_view_id, strdup(uuid_bytes.characters()),
+            strdup(url_bytes.characters()), is_top_level);
+  };
+
+  bridge.on_context_destroyed = [destroyed](u64 context_id) {
+    if (destroyed)
+      destroyed(context_id);
+  };
+
+  bridge.on_message = [message](u64 context_id, String payload) {
+    if (!message)
+      return;
+    auto bytes = payload.to_byte_string();
+    message(context_id, strdup(bytes.characters()));
+  };
+}
+
+void set_extension_state(const char *state_json) {
+  if (!state_json)
+    return;
+  auto json = String::from_utf8(StringView {state_json, strlen(state_json)});
+  if (json.is_error())
+    return;
+  WebView::ExtensionBridge::the().set_state(json.value());
+}
+
+bool send_extension_message(uint64_t context_id, const char *payload) {
+  if (!payload)
+    return false;
+  auto message = String::from_utf8(StringView {payload, strlen(payload)});
+  if (message.is_error())
+    return false;
+  return WebView::ExtensionBridge::the().send_to_context(context_id,
+                                                         message.value());
 }
 
 char *get_downloads_json() {

@@ -48,6 +48,13 @@ packages:
       relative: true
     source: path
     version: "0.0.1"
+  bird_extensions:
+    dependency: "direct main"
+    description:
+      path: "packages/bird_extensions"
+      relative: true
+    source: path
+    version: "0.0.1"
   boolean_selector:
     dependency: transitive
     description:
@@ -772,10 +779,10 @@ packages:
     dependency: transitive
     description:
       name: test_api
-      sha256: "47481c58bb92d0b1d218f0510ff5647e768f8e1256d07077a151fb520923b51d"
+      sha256: "0a10344e901e5b2e63819567951cb6a06673ed6b84f40462188ff5a0c41f371f"
       url: "https://pub.dev"
     source: hosted
-    version: "0.7.15"
+    version: "0.7.14"
   type_plus:
     dependency: transitive
     description:

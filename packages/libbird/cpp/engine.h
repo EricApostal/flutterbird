@@ -330,6 +330,53 @@ set_download_update_callback(DownloadUpdateCallback callback);
 LADYBIRD_API void
 set_download_removed_callback(DownloadRemovedCallback callback);
 
+// Browser extensions. Extensions run inside the web content processes: a
+// content script lives in an isolated world of its own with a bridge to the
+// embedder. The bridge carries opaque strings (JSON, by the embedder's own
+// convention) and this API only addresses them, so what an extension's API
+// means is decided entirely by the embedder.
+//
+// A "context" is one extension's world in one document, named by a number that
+// is unique across processes. Every string handed to these callbacks is owned
+// by the callee and must be freed.
+typedef void (*ExtensionContextCreatedCallback)(uint64_t context_id,
+                                                int view_id,
+                                                char *extension_uuid,
+                                                char *url, bool is_top_level);
+typedef void (*ExtensionContextDestroyedCallback)(uint64_t context_id);
+typedef void (*ExtensionMessageCallback)(uint64_t context_id, char *payload);
+
+// view_id is the tab the document is in, or -1 when it is not one the embedder
+// knows.
+LADYBIRD_API void set_extension_callbacks(
+  ExtensionContextCreatedCallback created,
+  ExtensionContextDestroyedCallback destroyed, ExtensionMessageCallback message);
+
+// A request that is about to be sent, held until the embedder says what the
+// extensions want done with it. details_json describes the request the way a
+// webRequest listener sees it; view_id is the tab it is for, or -1. The string
+// is owned by the callee. Answer with respond_extension_intercept; a request
+// not answered stays held.
+typedef void (*ExtensionInterceptCallback)(uint64_t request_id, int view_id,
+                                           char *details_json);
+LADYBIRD_API void
+set_extension_intercept_callback(ExtensionInterceptCallback callback);
+
+// Answers a held request. verdict_json is {} to let it go ahead, or an object
+// with any of cancel, redirectUrl and requestHeaders. Returns false when the
+// request's process is gone.
+LADYBIRD_API bool respond_extension_intercept(uint64_t request_id,
+                                              const char *verdict_json);
+
+// Replaces the extension state every web content process holds, now and for
+// each one started later: a JSON document of the extensions' content scripts
+// and the `browser` shim they run with. Pass it again whenever it changes.
+LADYBIRD_API void set_extension_state(const char *state_json);
+
+// Sends a string to one context. Returns false when its process is gone.
+LADYBIRD_API bool send_extension_message(uint64_t context_id,
+                                         const char *payload);
+
 // Returns a JSON array string snapshot of all known downloads. Caller owns
 // returned memory and must free it.
 LADYBIRD_API char *get_downloads_json();

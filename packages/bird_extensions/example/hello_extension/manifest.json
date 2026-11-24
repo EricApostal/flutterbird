@@ -1,0 +1,17 @@
+{
+  "manifest_version": 2,
+  "name": "__MSG_extensionName__",
+  "version": "1.0",
+  "description": "Marks pages it runs on, to check that extensions work in FlutterBird.",
+  "default_locale": "en",
+  "browser_specific_settings": { "gecko": { "id": "hello@flutterbird.example" } },
+  "permissions": ["storage", "https://example.com/*", "https://example.org/*"],
+  "content_scripts": [
+    {
+      "matches": ["https://example.com/*", "https://example.org/*"],
+      "js": ["hello.js"],
+      "css": ["hello.css"],
+      "run_at": "document_start"
+    }
+  ]
+}

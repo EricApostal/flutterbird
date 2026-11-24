@@ -16,6 +16,8 @@ dependencies:
     path:
       ../libbird
   collection: ^1.19.1
+  bird_extensions:
+    path: ../bird_extensions
 
 dev_dependencies:
   flutter_test:

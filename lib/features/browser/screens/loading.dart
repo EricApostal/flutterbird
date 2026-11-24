@@ -17,6 +17,11 @@ class _BrowserLoadingScreenState extends ConsumerState<BrowserLoadingScreen> {
   void initState() {
     super.initState();
     final tab = ref.read(browserTabControllerProvider).first;
+
+    // The engine is up now that there is a tab, so extensions can start. They
+    // run for the life of the app, not only while their panel is open.
+    ref.read(extensionServiceProvider);
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.go("/browser/tab/${tab.viewId}");
     });

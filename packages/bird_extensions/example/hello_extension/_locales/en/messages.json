@@ -1,0 +1,4 @@
+{
+  "extensionName": { "message": "Hello from FlutterBird" },
+  "banner": { "message": "Hello from an extension. Visits to this page: $1" }
+}

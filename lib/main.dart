@@ -2,7 +2,9 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:bird_core/bird_core.dart';
 import 'package:flutterbird/features/downloads/downloads_bootstrap.dart';
+import 'package:flutterbird/features/extensions/app_browser_bridge.dart';
 import 'package:flutterbird/features/router/controller.dart';
 import 'package:flutterbird/features/theme/base.dart';
 import 'package:go_transitions/go_transitions.dart';
@@ -38,7 +40,16 @@ void main() async {
     });
   }
 
-  runApp(ProviderScope(child: const MainApp()));
+  runApp(
+    ProviderScope(
+      overrides: [
+        // Extensions run in the app's tabs and run their background pages
+        // in views of their own.
+        browserBridgeProvider.overrideWith((ref) => AppBrowserBridge(ref)),
+      ],
+      child: const MainApp(),
+    ),
+  );
 }
 
 class MainApp extends StatefulWidget {

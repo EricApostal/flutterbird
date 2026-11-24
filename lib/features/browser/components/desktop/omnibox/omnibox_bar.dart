@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutterbird/features/browser/components/browser_context_menu.dart';
 import 'package:flutterbird/features/browser/components/desktop/downloads/downloads_button.dart';
+import 'package:flutterbird/features/browser/components/desktop/extensions/extensions_button.dart';
+import 'package:flutterbird/features/extensions/extension_action_buttons.dart';
 import 'package:flutterbird/features/browser/components/desktop/omnibox/omnibox_bookmarks_bar.dart';
 import 'package:flutterbird/features/browser/components/desktop/omnibox/omnibox_search_field.dart';
 import 'package:flutterbird/features/browser/state/tab_actions.dart';
@@ -665,6 +667,9 @@ class _BrowserOmniboxBarState extends ConsumerState<BrowserOmniboxBar> {
                         ),
                   ),
                 ),
+                const SizedBox(width: 6),
+                const ExtensionActionButtons(),
+                const ExtensionsButton(),
                 const SizedBox(width: 6),
                 const DownloadsButton(),
                 const SizedBox(width: 6),
