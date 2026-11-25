@@ -18,6 +18,8 @@ dependencies:
   collection: ^1.19.1
   bird_extensions:
     path: ../bird_extensions
+  bird_session:
+    path: ../bird_session
 
 dev_dependencies:
   flutter_test:

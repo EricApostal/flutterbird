@@ -3,8 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutterbird/features/browser/components/mobile_tab_card.dart';
 import 'package:flutterbird/features/browser/state/tab_actions.dart';
+import 'package:flutterbird/features/windows/window_scope.dart';
 import 'package:reorderable_grid_view/reorderable_grid_view.dart';
-import 'package:go_router/go_router.dart';
 
 class MobileTabSwitcher extends ConsumerStatefulWidget {
   const MobileTabSwitcher({super.key});
@@ -32,7 +32,8 @@ class _MobileTabSwitcherState extends ConsumerState<MobileTabSwitcher> {
 
   @override
   Widget build(BuildContext context) {
-    final tabs = ref.watch(browserTabControllerProvider);
+    final windowId = BrowserWindowScope.of(context);
+    final tabs = ref.watch(windowTabsProvider(windowId));
     final theme = Theme.of(context);
 
     // Filter out tabs that are currently animating their close
@@ -67,9 +68,12 @@ class _MobileTabSwitcherState extends ConsumerState<MobileTabSwitcher> {
                   ),
                   itemCount: tabs.length,
                   onReorder: (oldIndex, newIndex) {
+                    final session = ref.read(browserSessionProvider);
                     ref
-                        .read(browserTabControllerProvider.notifier)
-                        .reorder(oldIndex, newIndex);
+                        .read(browserSessionProvider.notifier)
+                        .commit(
+                          session.reorderTab(windowId, oldIndex, newIndex),
+                        );
                   },
                   itemBuilder: (context, index) {
                     final tab = tabs[index];
@@ -86,7 +90,7 @@ class _MobileTabSwitcherState extends ConsumerState<MobileTabSwitcher> {
                         child: GestureDetector(
                           onTap: () {
                             if (isClosing) return;
-                            context.go('/browser/tab/${tab.viewId}');
+                            BrowserTabActions.showTab(context, tab.viewId);
                           },
                           child: MobileTabCard(
                             viewId: tab.viewId,

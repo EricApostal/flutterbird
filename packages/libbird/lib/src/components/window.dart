@@ -31,7 +31,16 @@ class LadybirdView extends StatefulWidget {
   /// with a cache.
   static ui.Image? Function(int viewId)? lastFrameProvider;
 
-  const LadybirdView({super.key, required this.controller});
+  /// Whether the page takes keyboard focus when the view first appears. Asking
+  /// for focus in a window that does not have it would make that window the key
+  /// one, so a view in a background window should not.
+  final bool autofocus;
+
+  const LadybirdView({
+    super.key,
+    required this.controller,
+    this.autofocus = true,
+  });
 
   @override
   State<LadybirdView> createState() => _LadybirdViewState();
@@ -172,7 +181,10 @@ class _LadybirdViewState extends State<LadybirdView>
     _shadowEditingValue = _kBaselineEditingValue;
     _textInputConnection = TextInput.attach(
       this,
-      const TextInputConfiguration(
+      TextInputConfiguration(
+        // Which window the keyboard is typing into. Left out, macOS assumes the
+        // app's main view, which an app with several windows does not have.
+        viewId: View.of(context).viewId,
         inputType: TextInputType.text,
         enableDeltaModel: true,
         autocorrect: true,
@@ -331,7 +343,7 @@ class _LadybirdViewState extends State<LadybirdView>
     _focusNode.addListener(_onFocusChanged);
     // This view is mounted because its tab is the one being shown, so it holds
     // focus until the node says otherwise.
-    widget.controller.setViewFocused(true);
+    widget.controller.setViewFocused(true, owner: this);
 
     _textureId = widget.controller.textureId;
     _canvasPhysicalSize = widget.controller.textureCanvasSize;
@@ -339,7 +351,7 @@ class _LadybirdViewState extends State<LadybirdView>
   }
 
   void _onFocusChanged() {
-    widget.controller.setViewFocused(_focusNode.hasFocus);
+    widget.controller.setViewFocused(_focusNode.hasFocus, owner: this);
   }
 
   @override
@@ -875,7 +887,7 @@ class _LadybirdViewState extends State<LadybirdView>
     _previousFrame?.dispose();
     _previousFrame = null;
     _focusNode.removeListener(_onFocusChanged);
-    widget.controller.setViewFocused(false);
+    widget.controller.setViewFocused(false, owner: this);
     super.dispose();
   }
 
@@ -983,7 +995,7 @@ class _LadybirdViewState extends State<LadybirdView>
                   cursor: widget.controller.mouseCursorNotifier.value,
                   child: Focus(
                     focusNode: _focusNode,
-                    autofocus: true,
+                    autofocus: widget.autofocus,
                     onKeyEvent: _onKeyEvent,
                     child: GestureDetector(
                       behavior: HitTestBehavior.opaque,

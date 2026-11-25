@@ -55,6 +55,20 @@ packages:
       relative: true
     source: path
     version: "0.0.1"
+  bird_session:
+    dependency: "direct main"
+    description:
+      path: "packages/bird_session"
+      relative: true
+    source: path
+    version: "0.1.0"
+  bird_window:
+    dependency: "direct main"
+    description:
+      path: "packages/bird_window"
+      relative: true
+    source: path
+    version: "0.1.0"
   boolean_selector:
     dependency: transitive
     description:

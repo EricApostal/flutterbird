@@ -2,34 +2,66 @@ import 'dart:async';
 
 import 'package:bird_extensions/bird_extensions.dart';
 
-/// A browser with tabs that a test can open, change and close.
+/// A browser with tabs and windows that a test can open, change and close.
+///
+/// It starts with one window, numbered 1. Opening a tab in another number, or
+/// calling [createWindow], makes more.
 class FakeBrowser extends BrowserBridge {
   final List<BrowserTab> _tabs = [];
   final StreamController<TabEvent> _events =
       StreamController<TabEvent>.broadcast();
+  final StreamController<WindowEvent> _windowEvents =
+      StreamController<WindowEvent>.broadcast();
   final List<String> startedPages = [];
   final List<String> stoppedPages = [];
   int _nextId = 100;
-  int? _active;
+  int _nextWindowId = 2;
+
+  final Map<int, String> _windowTypes = {1: 'normal'};
+  final Map<int, int> _activeByWindow = {};
+  int _current = 1;
 
   @override
   List<BrowserTab> get tabs => List.unmodifiable(_tabs);
 
   @override
-  int? get activeTabId => _active;
+  int? get activeTabId => _activeByWindow[_current];
 
   @override
   Stream<TabEvent> get tabEvents => _events.stream;
 
-  BrowserTab _make(int id, int index, String url, {String title = ''}) =>
-      BrowserTab(
-        id: id,
-        index: index,
-        active: id == _active,
-        url: url,
-        title: title,
-        isLoading: false,
-      );
+  @override
+  Stream<WindowEvent> get windowEvents => _windowEvents.stream;
+
+  @override
+  int get currentWindowId => _current;
+
+  @override
+  List<BrowserWindowInfo> get windows => [
+    for (final entry in _windowTypes.entries) _window(entry.key),
+  ];
+
+  BrowserWindowInfo _window(int id) => BrowserWindowInfo(
+    id: id,
+    type: _windowTypes[id]!,
+    focused: id == _current,
+  );
+
+  BrowserTab _make(
+    int id,
+    int index,
+    int windowId,
+    String url, {
+    String title = '',
+  }) => BrowserTab(
+    id: id,
+    index: index,
+    active: id == _activeByWindow[windowId],
+    url: url,
+    title: title,
+    isLoading: false,
+    windowId: windowId,
+  );
 
   /// Opens a tab as the user would.
   BrowserTab open(
@@ -37,18 +69,26 @@ class FakeBrowser extends BrowserBridge {
     int? id,
     String title = '',
     bool activate = true,
+    int windowId = 1,
   }) {
     final tabId = id ?? _nextId++;
-    final previous = _active;
-    if (activate) _active = tabId;
-    _tabs.add(_make(tabId, _tabs.length, url, title: title));
+    _windowTypes.putIfAbsent(windowId, () => 'normal');
+    final previous = _activeByWindow[windowId];
+    if (activate) _activeByWindow[windowId] = tabId;
+    _tabs.add(_make(tabId, _tabs.length, windowId, url, title: title));
     _refresh();
-    final tab = _tabs.last;
+    final tab = _tabs.firstWhere((tab) => tab.id == tabId);
     _events.add(TabCreated(tab));
     if (activate && previous != tabId) {
-      _events.add(TabActivated(tabId, previous));
+      _events.add(TabActivated(tabId, previous, windowId: windowId));
     }
     return tab;
+  }
+
+  /// Brings a window to the front, as the user would.
+  void focus(int windowId) {
+    _current = windowId;
+    _windowEvents.add(WindowFocusChanged(windowId));
   }
 
   void navigate(int id, String url, {String? title}) {
@@ -61,45 +101,89 @@ class FakeBrowser extends BrowserBridge {
       url: url,
       title: title ?? old.title,
       isLoading: false,
+      windowId: old.windowId,
     );
     _events.add(TabUpdated(_tabs[index], {'url': url, 'title': ?title}));
   }
 
   void _refresh() {
+    final nextIndex = <int, int>{};
     for (var i = 0; i < _tabs.length; i++) {
       final tab = _tabs[i];
-      _tabs[i] = BrowserTab(
-        id: tab.id,
-        index: i,
-        active: tab.id == _active,
-        url: tab.url,
-        title: tab.title,
-        isLoading: tab.isLoading,
-      );
+      final index = nextIndex[tab.windowId] ?? 0;
+      nextIndex[tab.windowId] = index + 1;
+      _tabs[i] = _make(tab.id, index, tab.windowId, tab.url, title: tab.title);
     }
   }
 
   @override
-  Future<BrowserTab> createTab({String? url, bool active = true}) async =>
-      open(url ?? 'about:blank', activate: active);
+  Future<BrowserTab> createTab({
+    String? url,
+    bool active = true,
+    int? windowId,
+  }) async => open(
+    url ?? 'about:blank',
+    activate: active,
+    windowId: windowId ?? _current,
+  );
+
+  @override
+  Future<int> createWindow({
+    String? url,
+    bool popup = false,
+    int? width,
+    int? height,
+  }) async {
+    final id = _nextWindowId++;
+    _windowTypes[id] = popup ? 'popup' : 'normal';
+    _current = id;
+    _windowEvents.add(WindowCreated(_window(id)));
+    open(url ?? 'about:blank', windowId: id);
+    return id;
+  }
+
+  @override
+  Future<void> focusWindow(int id) async => focus(id);
+
+  @override
+  Future<void> closeWindow(int id) async {
+    for (final tab in _tabs.where((tab) => tab.windowId == id).toList()) {
+      await closeTab(tab.id);
+    }
+    _windowTypes.remove(id);
+    if (_current == id && _windowTypes.isNotEmpty) {
+      _current = _windowTypes.keys.first;
+    }
+    _windowEvents.add(WindowRemoved(id));
+  }
 
   @override
   Future<void> updateTab(int id, {String? url, bool? active}) async {
     if (url != null) navigate(id, url);
     if (active == true) {
-      final previous = _active;
-      _active = id;
+      final windowId = _tabs.firstWhere((tab) => tab.id == id).windowId;
+      final previous = _activeByWindow[windowId];
+      _activeByWindow[windowId] = id;
       _refresh();
-      _events.add(TabActivated(id, previous));
+      _events.add(TabActivated(id, previous, windowId: windowId));
     }
   }
 
   @override
   Future<void> closeTab(int id) async {
-    _tabs.removeWhere((tab) => tab.id == id);
-    if (_active == id) _active = _tabs.isEmpty ? null : _tabs.last.id;
+    final index = _tabs.indexWhere((tab) => tab.id == id);
+    if (index < 0) return;
+    final windowId = _tabs.removeAt(index).windowId;
+    if (_activeByWindow[windowId] == id) {
+      final left = _tabs.where((tab) => tab.windowId == windowId);
+      if (left.isEmpty) {
+        _activeByWindow.remove(windowId);
+      } else {
+        _activeByWindow[windowId] = left.last.id;
+      }
+    }
     _refresh();
-    _events.add(TabRemoved(id));
+    _events.add(TabRemoved(id, windowId: windowId));
   }
 
   final List<int> reloaded = [];

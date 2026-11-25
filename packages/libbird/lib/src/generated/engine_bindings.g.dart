@@ -464,6 +464,17 @@ class LadybirdBindings {
   late final _set_new_web_view_callback = _set_new_web_view_callbackPtr
       .asFunction<void Function(int, NewWebViewCallback)>();
 
+  void set_close_view_callback(int view_id, CloseViewCallback callback) {
+    return _set_close_view_callback(view_id, callback);
+  }
+
+  late final _set_close_view_callbackPtr =
+      _lookup<
+        ffi.NativeFunction<ffi.Void Function(ffi.Int, CloseViewCallback)>
+      >('set_close_view_callback');
+  late final _set_close_view_callback = _set_close_view_callbackPtr
+      .asFunction<void Function(int, CloseViewCallback)>();
+
   void set_input_caret_rect_change_callback(
     int view_id,
     InputCaretRectChangeCallback callback,
@@ -1272,9 +1283,29 @@ typedef DartContextMenuRequestCallbackFunction =
 typedef NewWebViewCallback =
     ffi.Pointer<ffi.NativeFunction<NewWebViewCallbackFunction>>;
 typedef NewWebViewCallbackFunction =
-    ffi.Void Function(ffi.Int new_view_id, ffi.Bool activate_tab);
+    ffi.Void Function(
+      ffi.Int new_view_id,
+      ffi.Bool activate_tab,
+      ffi.Int features,
+      ffi.Int x,
+      ffi.Int y,
+      ffi.Int width,
+      ffi.Int height,
+    );
 typedef DartNewWebViewCallbackFunction =
-    void Function(int new_view_id, bool activate_tab);
+    void Function(
+      int new_view_id,
+      bool activate_tab,
+      int features,
+      int x,
+      int y,
+      int width,
+      int height,
+    );
+typedef CloseViewCallback =
+    ffi.Pointer<ffi.NativeFunction<CloseViewCallbackFunction>>;
+typedef CloseViewCallbackFunction = ffi.Void Function(ffi.Int view_id);
+typedef DartCloseViewCallbackFunction = void Function(int view_id);
 typedef InputCaretRectChangeCallback =
     ffi.Pointer<ffi.NativeFunction<InputCaretRectChangeCallbackFunction>>;
 typedef InputCaretRectChangeCallbackFunction =

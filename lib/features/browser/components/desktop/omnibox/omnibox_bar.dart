@@ -8,13 +8,16 @@ import 'package:flutterbird/features/extensions/extension_action_buttons.dart';
 import 'package:flutterbird/features/browser/components/desktop/omnibox/omnibox_bookmarks_bar.dart';
 import 'package:flutterbird/features/browser/components/desktop/omnibox/omnibox_search_field.dart';
 import 'package:flutterbird/features/browser/state/tab_actions.dart';
+import 'package:flutterbird/features/windows/browser_shell.dart';
+import 'package:flutterbird/features/windows/window_scope.dart';
+import 'package:flutterbird/features/windows/window_system.dart';
 import 'package:flutterbird/features/browser/state/tab_layout_mode.dart';
 import 'package:flutterbird/features/browser/state/omnibox_state.dart';
-import 'package:go_router/go_router.dart';
 import 'package:ladybird/ladybird.dart';
 
 enum _ToolbarMenuAction {
   newTab,
+  newWindow,
   closeCurrentTab,
   copySelection,
   pasteFromClipboard,
@@ -366,7 +369,7 @@ class _BrowserOmniboxBarState extends ConsumerState<BrowserOmniboxBar> {
     required LadybirdController currentTabController,
     required bool next,
   }) {
-    final tabs = ref.read(browserTabControllerProvider);
+    final tabs = ref.read(windowTabsProvider(BrowserWindowScope.of(context)));
     if (tabs.length <= 1) return;
 
     final currentIndex = tabs.indexWhere(
@@ -377,7 +380,7 @@ class _BrowserOmniboxBarState extends ConsumerState<BrowserOmniboxBar> {
     final destinationIndex = next
         ? (currentIndex + 1) % tabs.length
         : (currentIndex - 1 + tabs.length) % tabs.length;
-    context.go('/browser/tab/${tabs[destinationIndex].viewId}');
+    BrowserTabActions.showTab(context, tabs[destinationIndex].viewId);
   }
 
   List<BrowserContextMenuItem> _buildToolbarContextMenuItems(
@@ -440,6 +443,8 @@ class _BrowserOmniboxBarState extends ConsumerState<BrowserOmniboxBar> {
         BrowserTabLayoutMode.vertical;
     return [
       actionItem(action: _ToolbarMenuAction.newTab, label: 'New Tab'),
+      if (ref.read(windowSystemProvider).supportsMultipleWindows)
+        actionItem(action: _ToolbarMenuAction.newWindow, label: 'New Window'),
       actionItem(
         action: _ToolbarMenuAction.closeCurrentTab,
         label: 'Close Current Tab',
@@ -518,6 +523,9 @@ class _BrowserOmniboxBarState extends ConsumerState<BrowserOmniboxBar> {
     switch (selection.action) {
       case _ToolbarMenuAction.newTab:
         BrowserTabActions.openNewTab(ref, context);
+        break;
+      case _ToolbarMenuAction.newWindow:
+        ref.read(browserShellProvider).openWindow();
         break;
       case _ToolbarMenuAction.closeCurrentTab:
         BrowserTabActions.closeTab(

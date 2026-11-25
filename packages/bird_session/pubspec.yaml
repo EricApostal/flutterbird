@@ -1,0 +1,15 @@
+name: bird_session
+description: "Which tabs are in which window, and how dragging a tab moves them: the browser's window bookkeeping, with no UI in it."
+publish_to: 'none'
+version: 0.1.0
+
+environment:
+  sdk: ^3.11.0
+
+dependencies:
+  # For the geometry types, which are plain Dart.
+  bird_window:
+    path: ../bird_window
+
+dev_dependencies:
+  test: ^1.25.0

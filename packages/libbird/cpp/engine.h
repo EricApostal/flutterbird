@@ -95,7 +95,27 @@ typedef void (*CrossSiteNavigationCallback)(int view_id);
 typedef void (*LoadingStateChangeCallback)(bool is_loading);
 typedef void (*CursorChangeCallback)(int cursor_type);
 typedef void (*ContextMenuRequestCallback)(int view_id, char *menu_json);
-typedef void (*NewWebViewCallback)(int new_view_id, bool activate_tab);
+// What a page asked of the window for a view it opened, as bits of
+// NewWebViewCallback's `features`. The numbers after it only mean anything when
+// their bit is set.
+typedef enum {
+  // A popup was asked for (window.open() with features that ask for one): a
+  // window of its own with no tab strip, rather than a tab.
+  LADYBIRD_WINDOW_POPUP = 1 << 0,
+  LADYBIRD_WINDOW_HAS_X = 1 << 1,
+  LADYBIRD_WINDOW_HAS_Y = 1 << 2,
+  LADYBIRD_WINDOW_HAS_WIDTH = 1 << 3,
+  LADYBIRD_WINDOW_HAS_HEIGHT = 1 << 4,
+} LadybirdWindowFeature;
+
+// x and y are the position and width and height the size of the page, in CSS
+// pixels, as the page asked for them.
+typedef void (*NewWebViewCallback)(int new_view_id, bool activate_tab,
+                                   int features, int x, int y, int width,
+                                   int height);
+// Fired when the view's page has closed itself, as with window.close(). The
+// view shows nothing from then on, and the embedder should destroy it.
+typedef void (*CloseViewCallback)(int view_id);
 typedef void (*InputCaretRectChangeCallback)(int view_id, bool has_rect, int x,
                                              int y, int width, int height);
 // Fired when the page enters or exits fullscreen via the DOM Fullscreen API
@@ -130,6 +150,9 @@ LADYBIRD_API void set_context_menu_request_callback(
   int view_id, ContextMenuRequestCallback callback);
 LADYBIRD_API void set_new_web_view_callback(int view_id,
                                             NewWebViewCallback callback);
+// A page that closed before the callback was set is reported as soon as it is.
+LADYBIRD_API void set_close_view_callback(int view_id,
+                                          CloseViewCallback callback);
 LADYBIRD_API void
 set_input_caret_rect_change_callback(int view_id,
                                      InputCaretRectChangeCallback callback);

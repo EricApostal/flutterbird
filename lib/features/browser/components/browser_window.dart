@@ -7,17 +7,32 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutterbird/features/browser/components/browser_context_menu.dart';
 import 'package:flutterbird/features/browser/components/tab_loading_bar.dart';
 import 'package:flutterbird/features/browser/state/fullscreen_mode.dart';
-import 'package:flutterbird/features/browser/state/tab_actions.dart';
+import 'package:flutterbird/features/windows/window_scope.dart';
 import 'package:ladybird/ladybird.dart';
 
 class BrowserWindow extends ConsumerStatefulWidget {
   final int viewId;
   const BrowserWindow({super.key, required this.viewId});
 
+  // The keys every BrowserWindow is made with, by window and tab. A key per
+  // window keeps the page's state when the window changes its layout, while a
+  // tab that moves to another window gets new state there: for a moment both
+  // windows can have one.
+  static final Map<(int, int), GlobalKey<State<BrowserWindow>>> _keys = {};
+
+  static GlobalKey<State<BrowserWindow>> keyFor(int windowId, int viewId) =>
+      _keys.putIfAbsent((
+        windowId,
+        viewId,
+      ), GlobalKey<State<BrowserWindow>>.new);
+
+  // Called when a tab closes.
+  static void forgetTab(int viewId) {
+    _keys.removeWhere((id, _) => id.$2 == viewId);
+  }
+
   // Captures a snapshot of the live web content currently shown for
-  // [viewId], if that tab's BrowserWindow is mounted anywhere in the tree --
-  // resolved via the same GlobalObjectKey<State<BrowserWindow>>(viewId)
-  // convention already used at every BrowserWindow(...) call site. Returns
+  // [viewId], if that tab's BrowserWindow is mounted in any window. Returns
   // null if the tab isn't mounted or the capture fails (first frame not yet
   // painted, etc); callers should fall back to a placeholder.
   //
@@ -25,9 +40,14 @@ class BrowserWindow extends ConsumerStatefulWidget {
   // rendered at thumbnail size instead of being read back in full and
   // downscaled afterwards.
   static Future<ui.Image?> captureSnapshotFor(int viewId, {double? maxWidth}) {
-    final state = GlobalObjectKey<State<BrowserWindow>>(viewId).currentState;
-    if (state is! _BrowserWindowState) return Future.value(null);
-    return state._captureSnapshot(maxWidth: maxWidth);
+    for (final entry in _keys.entries) {
+      if (entry.key.$2 != viewId) continue;
+      final state = entry.value.currentState;
+      if (state is _BrowserWindowState) {
+        return state._captureSnapshot(maxWidth: maxWidth);
+      }
+    }
+    return Future.value(null);
   }
 
   @override
@@ -61,23 +81,32 @@ class _BrowserWindowState extends ConsumerState<BrowserWindow> {
 
   late final void Function(LadybirdContextMenuRequest)
   _onContextMenuRequestCallback = _onContextMenuRequest;
-  late final void Function(int, bool) _onNewWebViewCallback = _onNewWebView;
   late final void Function(bool) _onFullscreenChangeCallback =
       _onFullscreenChange;
 
+  // What pages do to tabs and windows is the browser shell's business, which
+  // hears of it whether or not the tab is on screen. What needs this widget is
+  // what is about the page on screen.
   void _bindController(LadybirdController controller) {
     if (identical(_boundController, controller)) return;
 
-    if (_boundController != null) {
-      _boundController!.onContextMenuRequest = null;
-      _boundController!.onNewWebView = null;
-      _boundController!.onFullscreenChange = null;
-    }
-
+    _unbindController();
     _boundController = controller;
-    _boundController!.onContextMenuRequest = _onContextMenuRequestCallback;
-    _boundController!.onNewWebView = _onNewWebViewCallback;
-    _boundController!.onFullscreenChange = _onFullscreenChangeCallback;
+    controller.onContextMenuRequest = _onContextMenuRequestCallback;
+    controller.onFullscreenChange = _onFullscreenChangeCallback;
+  }
+
+  // A tab that moved to another window has been bound by its widget there
+  // before this one goes, so only what is still this widget's is taken back.
+  void _unbindController() {
+    final controller = _boundController;
+    if (controller == null) return;
+    if (controller.onContextMenuRequest == _onContextMenuRequestCallback) {
+      controller.onContextMenuRequest = null;
+    }
+    if (controller.onFullscreenChange == _onFullscreenChangeCallback) {
+      controller.onFullscreenChange = null;
+    }
   }
 
   void _onFullscreenChange(bool isFullscreen) {
@@ -95,29 +124,18 @@ class _BrowserWindowState extends ConsumerState<BrowserWindow> {
       return;
     }
     ref
-        .read(browserFullscreenModeControllerProvider.notifier)
+        .read(
+          browserFullscreenModeControllerProvider(
+            BrowserWindowScope.of(context),
+          ).notifier,
+        )
         .syncFromEngine(controller, isFullscreen);
   }
 
   @override
   void dispose() {
-    if (_boundController != null) {
-      _boundController!.onContextMenuRequest = null;
-      _boundController!.onNewWebView = null;
-      _boundController!.onFullscreenChange = null;
-    }
+    _unbindController();
     super.dispose();
-  }
-
-  void _onNewWebView(int newViewId, bool activateTab) {
-    if (!mounted) return;
-    BrowserTabActions.openExistingTab(
-      ref,
-      context,
-      newViewId,
-      activate: activateTab,
-      openerViewId: widget.viewId,
-    );
   }
 
   List<BrowserContextMenuItem> _mapContextMenuEntries(
@@ -203,7 +221,14 @@ class _BrowserWindowState extends ConsumerState<BrowserWindow> {
     _bindController(controller);
     controller.updateColorScheme(Theme.of(context).brightness);
 
-    final isFullscreen = ref.watch(browserFullscreenModeControllerProvider);
+    final windowId = BrowserWindowScope.of(context);
+    final isFullscreen = ref.watch(
+      browserFullscreenModeControllerProvider(windowId),
+    );
+    // Only the window being used may take the keyboard: asking for it from
+    // another would bring that one forward.
+    final isFocusedWindow =
+        ref.read(browserSessionProvider).focusedWindowId == windowId;
 
     return Stack(
       // The page keeps the constraints it always had; the bar only overlays it.
@@ -213,7 +238,10 @@ class _BrowserWindowState extends ConsumerState<BrowserWindow> {
           key: _repaintBoundaryKey,
           child: KeyedSubtree(
             key: _viewKey,
-            child: LadybirdView(controller: controller),
+            child: LadybirdView(
+              controller: controller,
+              autofocus: isFocusedWindow,
+            ),
           ),
         ),
         // Outside the repaint boundary, so a snapshot of the page (for tab

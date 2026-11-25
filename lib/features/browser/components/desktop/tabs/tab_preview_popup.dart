@@ -5,6 +5,7 @@ import 'package:bird_core/bird_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutterbird/features/browser/state/tab_preview_cache.dart';
+import 'package:flutterbird/features/windows/tab_drag_controller.dart';
 
 // Where the preview sits relative to the tab it belongs to.
 enum TabPreviewPlacement {
@@ -56,13 +57,15 @@ class _TabPreviewHoverState extends State<TabPreviewHover> {
 
   void _schedule() {
     _timer?.cancel();
-    if (widget.selected || _entry != null) return;
+    if (widget.selected || _entry != null || _isDraggingTab()) return;
     _timer = Timer(_hoverDelay, _show);
   }
 
   void _show() {
     _timer = null;
-    if (!mounted || widget.selected || _entry != null) return;
+    if (!mounted || widget.selected || _entry != null || _isDraggingTab()) {
+      return;
+    }
 
     final box = context.findRenderObject();
     if (box is! RenderBox || !box.attached || !box.hasSize) return;
@@ -88,6 +91,12 @@ class _TabPreviewHoverState extends State<TabPreviewHover> {
     );
     overlay.insert(_entry!);
   }
+
+  // A preview would only be in the way of a tab being dragged past.
+  bool _isDraggingTab() => ProviderScope.containerOf(
+    context,
+    listen: false,
+  ).read(tabDragControllerProvider).isDragging;
 
   void _hide() {
     _timer?.cancel();

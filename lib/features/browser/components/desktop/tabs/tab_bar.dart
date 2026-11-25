@@ -7,19 +7,12 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutterbird/features/browser/components/desktop/omnibox/omnibox_bar.dart';
 import 'package:flutterbird/features/browser/components/desktop/tabs/tab.dart';
+import 'package:flutterbird/features/browser/components/desktop/tabs/tab_strip.dart';
 import 'package:flutterbird/features/browser/state/tab_actions.dart';
 import 'package:flutterbird/features/browser/state/tab_layout_mode.dart';
-import 'package:window_manager/window_manager.dart';
-
-class BrowserTabAnimationConfig {
-  final Duration sizeDuration;
-  final Curve sizeCurve;
-
-  const BrowserTabAnimationConfig({
-    this.sizeDuration = const Duration(milliseconds: 180),
-    this.sizeCurve = Curves.easeOutCubic,
-  });
-}
+import 'package:flutterbird/features/windows/tab_drag_controller.dart';
+import 'package:flutterbird/features/windows/window_drag_area.dart';
+import 'package:flutterbird/features/windows/window_scope.dart';
 
 class BrowserTabBar extends ConsumerStatefulWidget {
   final int currentViewId;
@@ -30,97 +23,82 @@ class BrowserTabBar extends ConsumerStatefulWidget {
   ConsumerState<ConsumerStatefulWidget> createState() => _BrowserTabBarState();
 }
 
-class _BrowserTabBarState extends ConsumerState<BrowserTabBar>
-    with WindowListener {
+class _BrowserTabBarState extends ConsumerState<BrowserTabBar> {
   static const double _kMacControlsWidth = 78;
   static const double _kWindowsControlsWidth = 138;
   static const double _kMinTabWidth = 170;
   static const double _kMaxTabWidth = 225;
+  static const double _kTabSpacing = 2;
   static const double _kAddButtonWidth = 48;
   static const double _kLayoutToggleButtonWidth = 40;
-  static const BrowserTabAnimationConfig _kTabAnimationConfig =
-      BrowserTabAnimationConfig();
+  static const double _kStripHeight = 40;
+  static const double _kStripPadding = 4;
 
-  bool _isWindowMaximized = false;
-  bool _animateNewTabs = false;
+  final ScrollController _scrollController = ScrollController();
+  // Where a dragged tab can be let go, and where the first tab starts.
+  final GlobalKey _stripKey = GlobalKey();
+  final GlobalKey _tabsKey = GlobalKey();
 
-  // Which tab rows are expanded, and which ones are collapsing on their way
-  // out. Kept by view id rather than inside the row: the reorderable list
-  // builds its items under a `_ReorderableItemGlobalKey` that includes the
-  // item's index, so a reorder rebuilds the moved row and everything after it,
-  // which would reset a flag stored in the row (and make the row animate in
-  // again, since a rebuilt `AnimatedContainer` does not animate from its
-  // previous height). Held here, a reorder leaves it untouched.
-  final Set<int> _expandedViewIds = <int>{};
+  // The room the tabs and the add button have, from the last layout.
+  double _contentWidth = 0;
+
+  int? _registeredWindowId;
+  VoidCallback? _unregisterStrip;
 
   @override
-  void initState() {
-    super.initState();
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      setState(() {
-        _animateNewTabs = true;
-      });
-    });
-
-    if (Platform.isMacOS || Platform.isLinux || Platform.isWindows) {
-      windowManager.addListener(this);
-      _refreshWindowState();
-    }
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final windowId = BrowserWindowScope.of(context);
+    if (windowId == _registeredWindowId) return;
+    _unregisterStrip?.call();
+    _registeredWindowId = windowId;
+    _unregisterStrip = ref
+        .read(tabDragControllerProvider)
+        .registerStrip(windowId, _report);
   }
 
   @override
   void dispose() {
-    if (Platform.isMacOS || Platform.isLinux || Platform.isWindows) {
-      windowManager.removeListener(this);
-    }
+    _unregisterStrip?.call();
+    _scrollController.dispose();
     super.dispose();
   }
 
-  Future<void> _refreshWindowState() async {
-    final isMaximized = await windowManager.isMaximized();
-    if (!mounted || isMaximized == _isWindowMaximized) return;
-    setState(() {
-      _isWindowMaximized = isMaximized;
-    });
+  /// Whether [tabCount] tabs are too many for the add button to follow them,
+  /// which pins it to the end of the strip.
+  bool _pinsAddButton(int tabCount) =>
+      tabCount * (_kMinTabWidth + _kTabSpacing) + _kAddButtonWidth >
+      _contentWidth;
+
+  double _viewportFor(int tabCount) => math.max(
+    0.0,
+    _contentWidth - (_pinsAddButton(tabCount) ? _kAddButtonWidth : 0.0),
+  );
+
+  /// How wide each of [tabCount] tabs is, its gap included.
+  double _slotFor(int tabCount) {
+    final count = math.max(1, tabCount);
+    final room =
+        (_viewportFor(count) -
+            (_pinsAddButton(count) ? 0.0 : _kAddButtonWidth)) /
+        count;
+    return (room - _kTabSpacing).clamp(_kMinTabWidth, _kMaxTabWidth) +
+        _kTabSpacing;
   }
 
-  @override
-  void onWindowMaximize() => _refreshWindowState();
+  TabStripReport? _report() {
+    final strip = _stripKey.currentContext?.findRenderObject();
+    final tabs = _tabsKey.currentContext?.findRenderObject();
+    if (strip is! RenderBox || tabs is! RenderBox) return null;
+    if (!strip.attached || !strip.hasSize || !tabs.hasSize) return null;
 
-  @override
-  void onWindowUnmaximize() => _refreshWindowState();
-
-  @override
-  void onWindowRestore() => _refreshWindowState();
-
-  /// Brings [_expandedViewIds] in line with the open tabs:
-  /// gone rows are dropped, rows already accounted for are left alone (so a
-  /// reorder never touches this), and a tab seen for the first time is expanded
-  /// immediately when it predates the first frame or one frame later when it
-  /// was opened afterwards, keeping the open animation new tabs had before.
-  void _syncRowExpandState(Iterable<int> viewIds) {
-    final present = viewIds.toSet();
-    _expandedViewIds.removeWhere((id) => !present.contains(id));
-
-    final toExpand = <int>[];
-    for (final id in present) {
-      if (_expandedViewIds.contains(id)) continue;
-      if (!_animateNewTabs) {
-        _expandedViewIds.add(id);
-      } else {
-        toExpand.add(id);
-      }
-    }
-
-    if (toExpand.isEmpty) return;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      setState(() {
-        _expandedViewIds.addAll(toExpand);
-      });
-    });
+    return TabStripReport(
+      bounds: strip.localToGlobal(Offset.zero) & strip.size,
+      tabsOrigin: tabs.localToGlobal(Offset.zero),
+      axis: Axis.horizontal,
+      slotExtentFor: _slotFor,
+      scrollOffset: _scrollController.hasClients ? _scrollController.offset : 0,
+    );
   }
 
   /// Closes [viewId]'s tab. Its row collapses first and the tab goes away once
@@ -134,14 +112,19 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar>
     );
   }
 
+  Widget _buildAddButton() {
+    return IconButton(
+      icon: const Icon(Icons.add, size: 20),
+      onPressed: () => BrowserTabActions.openNewTab(ref, context),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final tabStripHeight = 40.0;
-    final tabListPadding = const EdgeInsets.only(top: 4, bottom: 4);
-
-    final tabs = ref.watch(browserTabControllerProvider);
+    final windowId = BrowserWindowScope.of(context);
+    final tabIds =
+        ref.watch(browserWindowProvider(windowId))?.tabIds ?? const <int>[];
     final closingViewIds = ref.watch(closingTabsProvider);
-    _syncRowExpandState(tabs.map((tab) => tab.viewId));
     final currentTabController = ref.watch(
       browserTabProvider(widget.currentViewId),
     );
@@ -158,11 +141,12 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar>
     return Column(
       children: [
         SizedBox(
-          height: tabStripHeight,
+          key: _stripKey,
+          height: _kStripHeight,
           child: Row(
             children: [
               if (!Platform.isAndroid)
-                DragToMoveArea(
+                WindowDragArea(
                   child: SizedBox(
                     height: double.infinity,
                     width: leadingControlsPadding,
@@ -183,39 +167,21 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar>
               Expanded(
                 child: LayoutBuilder(
                   builder: (context, constraints) {
-                    final tabCount = tabs.isEmpty ? 1 : tabs.length;
                     // The leading window-button area and the layout toggle sit
                     // in the strip's Row *before* this builder, so `maxWidth`
                     // already excludes them; the only inset left to honour is
                     // the trailing window-button reservation. Strip content has
-                    // to stop exactly at that boundary — the tab viewport (and
-                    // with it the point where scrolled tabs get clipped) running
-                    // 40px short of it left a dead band on the right that the
-                    // scrolled tabs disappeared behind.
-                    final contentWidth = math.max(
+                    // to stop exactly at that boundary.
+                    _contentWidth = math.max(
                       0.0,
                       constraints.maxWidth - trailingControlsPadding,
                     );
-                    final pinAddButton =
-                        (tabs.length * _kMinTabWidth) + _kAddButtonWidth >
-                        contentWidth;
-                    final availableForTabViewport = math.max(
-                      0.0,
-                      contentWidth - (pinAddButton ? _kAddButtonWidth : 0.0),
-                    );
-                    final adaptiveTabWidth = math.min(
-                      _kMaxTabWidth,
-                      math.max(
-                        _kMinTabWidth,
-                        availableForTabViewport / tabCount,
-                      ),
-                    );
-                    final tabContentWidth =
-                        (adaptiveTabWidth * tabs.length) +
-                        (pinAddButton ? 0 : _kAddButtonWidth);
-                    double tabViewportWidth = math.min(
-                      availableForTabViewport,
-                      tabContentWidth,
+                    final count = tabIds.length;
+                    final pinAddButton = _pinsAddButton(count);
+                    final slot = _slotFor(count);
+                    final tabsWidth = math.min(
+                      _viewportFor(count),
+                      slot * count + (pinAddButton ? 0 : _kAddButtonWidth),
                     );
 
                     // Everything the tabs do not use is window-drag surface,
@@ -223,96 +189,50 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar>
                     final dragAreaWidth = math.max(
                       trailingControlsPadding,
                       constraints.maxWidth -
-                          tabViewportWidth -
+                          tabsWidth -
                           (pinAddButton ? _kAddButtonWidth : 0.0),
                     );
-
-                    Widget buildTabList({required bool includeAddButton}) {
-                      return ReorderableListView.builder(
-                        shrinkWrap: true,
-                        padding: tabListPadding,
-                        scrollDirection: Axis.horizontal,
-                        buildDefaultDragHandles: false,
-                        itemBuilder: (context, index) {
-                          if (includeAddButton && index == tabs.length) {
-                            return ReorderableDragStartListener(
-                              key: const ValueKey('add'),
-                              index: index,
-                              enabled: false,
-                              child: IconButton(
-                                icon: const Icon(Icons.add, size: 20),
-                                onPressed: () =>
-                                    BrowserTabActions.openNewTab(ref, context),
-                              ),
-                            );
-                          }
-
-                          final id = tabs[index].viewId;
-                          return _AnimatedBrowserTabItem(
-                            key: ValueKey(id),
-                            index: index,
-                            viewId: tabs[index].viewId,
-                            selected: id == widget.currentViewId,
-                            expanded:
-                                _expandedViewIds.contains(id) &&
-                                !closingViewIds.contains(id),
-                            minWidth: _kMinTabWidth,
-                            width: adaptiveTabWidth,
-                            animationConfig: _kTabAnimationConfig,
-                            onTabClosed: () => _closeTab(id),
-                          );
-                        },
-                        proxyDecorator:
-                            (
-                              Widget child,
-                              int index,
-                              Animation<double> animation,
-                            ) {
-                              return Material(
-                                color: Colors.transparent,
-                                elevation: 0,
-                                child: child,
-                              );
-                            },
-                        itemCount: tabs.length + (includeAddButton ? 1 : 0),
-                        onReorder: (oldIndex, newIndex) {
-                          if (includeAddButton && oldIndex == tabs.length) {
-                            return;
-                          }
-                          if (oldIndex < newIndex) {
-                            newIndex -= 1;
-                          }
-                          final maxIndex = tabs.length - 1;
-                          if (newIndex > maxIndex) {
-                            newIndex = maxIndex;
-                          }
-                          if (newIndex < 0 || oldIndex == newIndex) return;
-                          ref
-                              .read(browserTabControllerProvider.notifier)
-                              .reorder(oldIndex, newIndex);
-                        },
-                      );
-                    }
 
                     return Row(
                       children: [
                         SizedBox(
-                          width: tabViewportWidth,
-                          child: buildTabList(includeAddButton: !pinAddButton),
-                        ),
-                        if (pinAddButton)
-                          SizedBox(
-                            // width: _kAddButtonWidth,
-                            child: IconButton(
-                              icon: const Icon(Icons.add, size: 20),
-                              onPressed: () =>
-                                  BrowserTabActions.openNewTab(ref, context),
+                          width: tabsWidth,
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              vertical: _kStripPadding,
+                            ),
+                            child: KeyedSubtree(
+                              key: _tabsKey,
+                              child: TabStrip(
+                                windowId: windowId,
+                                axis: Axis.horizontal,
+                                tabIds: tabIds,
+                                closingTabIds: closingViewIds,
+                                slotExtent: slot,
+                                crossExtent: _kStripHeight - _kStripPadding * 2,
+                                spacing: _kTabSpacing,
+                                scrollController: _scrollController,
+                                trailing: pinAddButton
+                                    ? null
+                                    : _buildAddButton(),
+                                trailingExtent: pinAddButton
+                                    ? 0
+                                    : _kAddButtonWidth,
+                                itemBuilder: (context, id) => BrowserTab(
+                                  viewId: id,
+                                  selected: id == widget.currentViewId,
+                                  minWidth: _kMinTabWidth,
+                                  width: slot - _kTabSpacing,
+                                  onTabClosed: () => _closeTab(id),
+                                ),
+                              ),
                             ),
                           ),
-
+                        ),
+                        if (pinAddButton) _buildAddButton(),
                         SizedBox(
                           width: dragAreaWidth,
-                          child: DragToMoveArea(
+                          child: const WindowDragArea(
                             child: SizedBox(
                               height: double.infinity,
                               width: double.infinity,
@@ -329,71 +249,6 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar>
         ),
         BrowserOmniboxBar(currentTabController: currentTabController),
       ],
-    );
-  }
-}
-
-/// One tab of the horizontal strip.
-///
-/// Like the sidebar's rows, this holds no state of its own: [expanded] comes
-/// from the bar, so reordering the strip (which rebuilds items positionally)
-/// cannot reset a tab's animation — see
-/// [_BrowserTabBarState._expandedViewIds].
-class _AnimatedBrowserTabItem extends StatelessWidget {
-  final int index;
-  final int viewId;
-  final bool selected;
-  final double minWidth;
-  final double width;
-
-  /// Whether the tab is expanded. A tab that is not expanded is either still
-  /// animating in or on its way out.
-  final bool expanded;
-  final BrowserTabAnimationConfig animationConfig;
-  final VoidCallback onTabClosed;
-
-  const _AnimatedBrowserTabItem({
-    super.key,
-    required this.index,
-    required this.viewId,
-    required this.selected,
-    required this.minWidth,
-    required this.width,
-    required this.expanded,
-    required this.animationConfig,
-    required this.onTabClosed,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final tabChild = ClipRect(
-      child: AnimatedContainer(
-        duration: animationConfig.sizeDuration,
-        curve: animationConfig.sizeCurve,
-        width: expanded ? width + 2 : 0,
-        child: Padding(
-          padding: const EdgeInsets.only(right: 2),
-          child: SizedBox(
-            width: width,
-            child: IgnorePointer(
-              ignoring: !expanded,
-              child: BrowserTab(
-                viewId: viewId,
-                selected: selected,
-                minWidth: minWidth,
-                width: width,
-                onTabClosed: onTabClosed,
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-
-    return ReorderableDragStartListener(
-      index: index,
-      enabled: expanded,
-      child: tabChild,
     );
   }
 }

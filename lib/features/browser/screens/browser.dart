@@ -14,6 +14,9 @@ import 'package:flutterbird/features/browser/state/fullscreen_mode.dart';
 import 'package:flutterbird/features/browser/state/history_bitmap_cache.dart';
 import 'package:flutterbird/features/browser/state/tab_actions.dart';
 import 'package:flutterbird/features/browser/state/tab_layout_mode.dart';
+import 'package:flutterbird/features/windows/browser_shell.dart';
+import 'package:flutterbird/features/windows/window_scope.dart';
+import 'package:flutterbird/features/windows/window_system.dart';
 import 'package:ladybird/ladybird.dart';
 
 class BrowserWindowScreen extends ConsumerStatefulWidget {
@@ -33,6 +36,7 @@ class _BrowserWindowScreenState extends ConsumerState<BrowserWindowScreen> {
 
   bool _showFullscreenHint = false;
   Timer? _fullscreenHintTimer;
+  late int _windowId;
 
   @override
   void initState() {
@@ -44,6 +48,12 @@ class _BrowserWindowScreenState extends ConsumerState<BrowserWindowScreen> {
     // paint: hand libbird this tab's last presented frame to cover that, from
     // the same snapshots the swipe-back stack is built from.
     LadybirdView.lastFrameProvider = HistoryBitmapCache.instance.cloneLastFrame;
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _windowId = BrowserWindowScope.of(context);
   }
 
   @override
@@ -95,7 +105,9 @@ class _BrowserWindowScreenState extends ConsumerState<BrowserWindowScreen> {
   // chrome/window immediately rather than waiting on the page to confirm —
   // see BrowserFullscreenModeController.exitFromUi for why.
   void _requestExitFullscreen() {
-    ref.read(browserFullscreenModeControllerProvider.notifier).exitFromUi();
+    ref
+        .read(browserFullscreenModeControllerProvider(_windowId).notifier)
+        .exitFromUi();
   }
 
   void _showFullscreenHintBriefly() {
@@ -110,6 +122,20 @@ class _BrowserWindowScreenState extends ConsumerState<BrowserWindowScreen> {
   bool _handleKeyEvent(KeyEvent event) {
     if (event is! KeyDownEvent) return false;
     if (!_isPrimaryShortcutModifierPressed()) return false;
+    // Keyboard handlers hear every window's keys, so each acts only on its own.
+    final windows = ref.read(windowSystemProvider);
+    if (!windows.claimShortcut(_windowId, event)) return false;
+
+    if (windows.supportsMultipleWindows) {
+      if (event.logicalKey == LogicalKeyboardKey.keyN) {
+        ref.read(browserShellProvider).openWindow();
+        return true;
+      }
+      if (event.logicalKey == LogicalKeyboardKey.keyW && _isShiftPressed()) {
+        ref.read(browserShellProvider).closeWindow(_windowId);
+        return true;
+      }
+    }
 
     if (event.logicalKey == LogicalKeyboardKey.keyT) {
       // Shift+T brings the last closed tab back instead of opening a blank one.
@@ -141,9 +167,15 @@ class _BrowserWindowScreenState extends ConsumerState<BrowserWindowScreen> {
     final layoutMode = ref.watch(browserTabLayoutModeControllerProvider);
     final isVerticalLayout = layoutMode == BrowserTabLayoutMode.vertical;
     final currentTabController = ref.watch(browserTabProvider(viewId));
-    final isFullscreen = ref.watch(browserFullscreenModeControllerProvider);
+    final windowId = BrowserWindowScope.of(context);
+    final isFullscreen = ref.watch(
+      browserFullscreenModeControllerProvider(windowId),
+    );
 
-    ref.listen<bool>(browserFullscreenModeControllerProvider, (previous, next) {
+    ref.listen<bool>(browserFullscreenModeControllerProvider(windowId), (
+      previous,
+      next,
+    ) {
       if (next) {
         _showFullscreenHintBriefly();
       } else if (_showFullscreenHint) {
@@ -226,7 +258,7 @@ class _BrowserWindowScreenState extends ConsumerState<BrowserWindowScreen> {
                   Expanded(
                     child: isFullscreen
                         ? BrowserWindow(
-                            key: GlobalObjectKey<State<BrowserWindow>>(viewId),
+                            key: BrowserWindow.keyFor(windowId, viewId),
                             viewId: viewId,
                           )
                         // No cross-fade between the two layouts: it faded the
@@ -251,10 +283,10 @@ class _BrowserWindowScreenState extends ConsumerState<BrowserWindowScreen> {
                                             topLeft: .circular(8),
                                           ),
                                           child: BrowserWindow(
-                                            key:
-                                                GlobalObjectKey<
-                                                  State<BrowserWindow>
-                                                >(viewId),
+                                            key: BrowserWindow.keyFor(
+                                              windowId,
+                                              viewId,
+                                            ),
                                             viewId: viewId,
                                           ),
                                         ),
@@ -269,10 +301,10 @@ class _BrowserWindowScreenState extends ConsumerState<BrowserWindowScreen> {
                                     BrowserTabBar(currentViewId: viewId),
                                     Expanded(
                                       child: BrowserWindow(
-                                        key:
-                                            GlobalObjectKey<
-                                              State<BrowserWindow>
-                                            >(viewId),
+                                        key: BrowserWindow.keyFor(
+                                          windowId,
+                                          viewId,
+                                        ),
                                         viewId: viewId,
                                       ),
                                     ),

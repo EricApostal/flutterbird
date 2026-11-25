@@ -44,6 +44,10 @@ class _ExtensionPopupState extends State<ExtensionPopup> {
   void initState() {
     super.initState();
     _controller = LadybirdController();
+    // Extensions' popups close themselves once they have done their job.
+    _controller.onCloseRequested = () {
+      if (mounted) widget.onClose();
+    };
     _controller.navigate(widget.url);
 
     _sizes = widget.contentSizes.listen((size) {

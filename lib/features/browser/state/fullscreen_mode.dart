@@ -2,18 +2,16 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutterbird/features/windows/window_system.dart';
 import 'package:ladybird/ladybird.dart';
-import 'package:riverpod_annotation/riverpod_annotation.dart';
-import 'package:window_manager/window_manager.dart';
-
-part 'fullscreen_mode.g.dart';
 
 bool get _isDesktopPlatform =>
     Platform.isMacOS || Platform.isLinux || Platform.isWindows;
 
 bool get _isMobilePlatform => Platform.isAndroid;
 
-// Reflects whether the page currently occupying the screen is showing a DOM
+// Reflects whether the page currently occupying a window is showing a DOM
 // Fullscreen API element (e.g. a <video>'s native fullscreen button, or
 // `element.requestFullscreen()`). This is never toggled by the user directly
 // — it only ever mirrors what the engine reports via
@@ -23,20 +21,24 @@ bool get _isMobilePlatform => Platform.isAndroid;
 // Architecture mirrors Ladybird's own Qt frontend exactly: engine.confirm_
 // fullscreen_state() (Qt: view().set_is_fullscreen()) is called from exactly
 // one place — the real OS window-state-change confirmation
-// (onWindowEnterFullScreen/onWindowLeaveFullScreen here; Qt's
+// (_onWindowEnterFullScreen/_onWindowLeaveFullScreen here; Qt's
 // changeEvent(QEvent::WindowStateChange)) — never eagerly from the "please
 // enter/exit" request handlers. Confirming eagerly races the viewport
 // updates Flutter's own window-resize handling sends as a side effect of
 // that same transition; whichever reaches the engine last wins, and losing
 // that race is what silently (and permanently, since it desyncs the
 // engine's internal fullscreen flag) broke fullscreen after one cycle.
-@Riverpod(keepAlive: true)
-class BrowserFullscreenModeController extends _$BrowserFullscreenModeController
-    with WindowListener {
+class BrowserFullscreenModeController extends Notifier<bool> {
+  BrowserFullscreenModeController(this.windowId);
+
+  final int windowId;
+
+  WindowSystem get _windows => ref.read(windowSystemProvider);
+
   // The tab whose fullscreen request is currently active. Set as soon as we
   // start a transition, but only *cleared* once that transition is actually
-  // confirmed (by the OS, on desktop) — see onWindowEnterFullScreen/
-  // onWindowLeaveFullScreen.
+  // confirmed (by the OS, on desktop) — see _onWindowEnterFullScreen/
+  // _onWindowLeaveFullScreen.
   LadybirdController? _activeController;
 
   // Set right before we ask the OS to leave fullscreen on the user's behalf
@@ -48,12 +50,12 @@ class BrowserFullscreenModeController extends _$BrowserFullscreenModeController
   bool _exitInitiatedByUi = false;
 
   // True while we're waiting for the OS to confirm a platform-level
-  // transition we already asked for (onWindowEnterFullScreen /
-  // onWindowLeaveFullScreen). On macOS, NSWindow.toggleFullScreen(nil) is
-  // animated and asynchronous — the `await windowManager.setFullScreen(...)`
+  // transition we already asked for (_onWindowEnterFullScreen /
+  // _onWindowLeaveFullScreen). On macOS, NSWindow.toggleFullScreen(nil) is
+  // animated and asynchronous — the `await _windows.setFullscreen(...)`
   // call returns as soon as the *request* is issued, well before the
   // animation (and its delegate callback) actually completes. Calling
-  // setFullScreen again before that callback lands (e.g. the page firing a
+  // setFullscreen again before that callback lands (e.g. the page firing a
   // rapid enter/exit) can wedge NSWindow's fullscreen state machine: the
   // second toggle silently fails to produce a matching delegate callback,
   // permanently desyncing our state from the real window. So we never issue
@@ -66,15 +68,22 @@ class BrowserFullscreenModeController extends _$BrowserFullscreenModeController
   @override
   bool build() {
     if (_isDesktopPlatform) {
-      windowManager.addListener(this);
-      ref.onDispose(() => windowManager.removeListener(this));
+      ref.onDispose(
+        _windows.addFullscreenListener(windowId, (isFullscreen) {
+          if (isFullscreen) {
+            _onWindowEnterFullScreen();
+          } else {
+            _onWindowLeaveFullScreen();
+          }
+        }),
+      );
     }
     return false;
   }
 
   // The page asked to enter/exit fullscreen. Only *initiates* our own
   // platform-level transition here. On desktop, confirming back to the
-  // engine happens from onWindowEnterFullScreen/onWindowLeaveFullScreen once
+  // engine happens from _onWindowEnterFullScreen/_onWindowLeaveFullScreen once
   // the OS genuinely confirms the transition. Mobile has no separate
   // OS-level window-state-change signal to wait for, so it confirms directly
   // once our own await completes.
@@ -122,13 +131,13 @@ class BrowserFullscreenModeController extends _$BrowserFullscreenModeController
       controller?.confirmFullscreenState(false);
       controller?.requestExitFullscreen();
     }
-    // Desktop: onWindowLeaveFullScreen() does the confirm + request once the
+    // Desktop: _onWindowLeaveFullScreen() does the confirm + request once the
     // OS genuinely confirms the window left fullscreen.
   }
 
   // Serializes desktop platform-level transitions so we never call
-  // windowManager.setFullScreen() again while a previous call's OS
-  // confirmation (onWindowEnterFullScreen/onWindowLeaveFullScreen) hasn't
+  // setFullscreen() again while a previous call's OS
+  // confirmation (_onWindowEnterFullScreen/_onWindowLeaveFullScreen) hasn't
   // landed yet. See _osTransitionPending for why that matters.
   Future<void> _requestPlatformFullscreen(bool enabled) async {
     if (_isDesktopPlatform) {
@@ -163,15 +172,7 @@ class BrowserFullscreenModeController extends _$BrowserFullscreenModeController
   Future<void> _applyPlatformFullscreen(bool enabled) async {
     print('[Fullscreen] _applyPlatformFullscreen enabled=$enabled');
     if (_isDesktopPlatform) {
-      final before = await windowManager.isFullScreen();
-      print(
-        '[Fullscreen] windowManager.isFullScreen() before setFullScreen($enabled) = $before',
-      );
-      await windowManager.setFullScreen(enabled);
-      final after = await windowManager.isFullScreen();
-      print(
-        '[Fullscreen] windowManager.isFullScreen() after setFullScreen($enabled) = $after',
-      );
+      await _windows.setFullscreen(windowId, enabled);
       return;
     }
 
@@ -196,10 +197,10 @@ class BrowserFullscreenModeController extends _$BrowserFullscreenModeController
   // was because the page asked (syncFromEngine) or anything else. This is
   // the single point that tells the engine the transition genuinely
   // happened, mirroring Qt's changeEvent(QEvent::WindowStateChange).
-  @override
-  void onWindowEnterFullScreen() {
+  void _onWindowEnterFullScreen() {
     print(
-      '[Fullscreen] onWindowEnterFullScreen (activeController=${_activeController != null})',
+      '[Fullscreen] window $windowId entered full screen '
+      '(activeController=${_activeController != null})',
     );
     state = true;
     _activeController?.confirmFullscreenState(true);
@@ -210,10 +211,9 @@ class BrowserFullscreenModeController extends _$BrowserFullscreenModeController
   // the page exiting (syncFromEngine), our own button/back gesture
   // (exitFromUi), or the OS itself (e.g. macOS's green traffic-light
   // button). Single point that confirms the settled state to the engine.
-  @override
-  void onWindowLeaveFullScreen() {
+  void _onWindowLeaveFullScreen() {
     print(
-      '[Fullscreen] onWindowLeaveFullScreen (activeController='
+      '[Fullscreen] window $windowId left full screen (activeController='
       '${_activeController != null}, initiatedByUi=$_exitInitiatedByUi)',
     );
     state = false;
@@ -231,3 +231,9 @@ class BrowserFullscreenModeController extends _$BrowserFullscreenModeController
     }
   }
 }
+
+/// Each window's page fullscreen, by window id.
+final browserFullscreenModeControllerProvider =
+    NotifierProvider.family<BrowserFullscreenModeController, bool, int>(
+      BrowserFullscreenModeController.new,
+    );

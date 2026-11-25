@@ -1,0 +1,15 @@
+name: bird_window
+description: "Native window control for FlutterBird: positions, z-order, the cursor and title bars, by calling AppKit from Dart."
+publish_to: 'none'
+version: 0.1.0
+
+# Plain Dart on purpose. There is nothing to compile: AppKit is reached through
+# the Objective-C runtime with dart:ffi, so this works from `dart test` too.
+environment:
+  sdk: ^3.11.0
+
+dependencies:
+  ffi: ^2.2.0
+
+dev_dependencies:
+  test: ^1.25.0

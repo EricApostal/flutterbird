@@ -3,8 +3,8 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:flutterbird/features/browser/components/desktop/tabs/tab_preview_popup.dart';
+import 'package:flutterbird/features/browser/state/tab_actions.dart';
 import 'package:ladybird/ladybird.dart';
 
 enum BrowserTabVariant { horizontal, arcSidebar }
@@ -89,7 +89,8 @@ class _BrowserTabState extends ConsumerState<BrowserTab> {
 
   @override
   Widget build(BuildContext context) {
-    final browserTab = ref.watch(browserTabProvider(widget.viewId))!;
+    final browserTab = ref.watch(browserTabProvider(widget.viewId));
+    if (browserTab == null) return const SizedBox.shrink();
 
     final theme = Theme.of(context);
     final isSidebarVariant = widget.variant == BrowserTabVariant.arcSidebar;
@@ -244,6 +245,6 @@ class _BrowserTabState extends ConsumerState<BrowserTab> {
   void _activate(BuildContext context) {
     if (widget.selected) return;
     HapticFeedback.lightImpact();
-    context.go('/browser/tab/${widget.viewId}');
+    BrowserTabActions.showTab(context, widget.viewId);
   }
 }

@@ -571,6 +571,84 @@ void main() {
     });
   });
 
+  group('several windows', () {
+    Future<List<Object?>> ids(dynamic page, String query) async =>
+        (await page.world.run(
+              'browser.tabs.query($query).then((t) => t.map((x) => x.id))',
+            ))
+            as List<Object?>;
+
+    test('the current window is the one focused last', () async {
+      final extension = await install();
+      await host.start();
+      browser.open('https://a.example/', id: 1);
+      browser.open('https://b.example/', id: 2, windowId: 7);
+      final page = await open(extension, isPage: true);
+
+      expect(await ids(page, '{active: true}'), [1, 2]);
+      expect(await ids(page, '{active: true, currentWindow: true}'), [1]);
+
+      browser.focus(7);
+      expect(await ids(page, '{active: true, currentWindow: true}'), [2]);
+      expect(await ids(page, '{active: true, lastFocusedWindow: true}'), [2]);
+      expect(await ids(page, '{currentWindow: false}'), [1]);
+      expect(await ids(page, '{windowId: -2}'), [2]);
+      expect(await ids(page, '{windowId: 1}'), [1]);
+    });
+
+    test('a document in a tab is in that tab\'s window', () async {
+      final extension = await install();
+      await host.start();
+      browser.open('https://a.example/', id: 1);
+      browser.open('https://b.example/', id: 2, windowId: 7);
+      final page = await open(extension, isPage: true, viewId: 2);
+
+      expect(await ids(page, '{active: true, currentWindow: true}'), [2]);
+      final window =
+          await page.world.run('browser.windows.getCurrent()') as Map;
+      expect(window['id'], 7);
+    });
+
+    test('a popup window can be opened and closed', () async {
+      final extension = await install();
+      await host.start();
+      browser.open('https://a.example/', id: 1);
+      final page = await open(extension, isPage: true);
+
+      final made =
+          await page.world.run(
+                'browser.windows.create('
+                '{url: "https://c.example/", type: "popup", width: 400})',
+              )
+              as Map;
+      expect(made['type'], 'popup');
+      expect((made['tabs'] as List).single['url'], 'https://c.example/');
+      expect(await ids(page, '{windowType: "popup"}'), [
+        (made['tabs'] as List).single['id'],
+      ]);
+
+      await page.world.run('browser.windows.remove(${made['id']})');
+      expect(
+        await page.world.run('browser.windows.getAll().then((w) => w.length)'),
+        1,
+      );
+    });
+
+    test('a window that is not there is an error', () async {
+      final extension = await install();
+      await host.start();
+      browser.open('https://a.example/', id: 1);
+      final page = await open(extension, isPage: true);
+
+      expect(
+        await page.world.run(
+          'browser.windows.get(99).then(() => "found", (e) => e.message)',
+        ),
+        contains('Invalid window ID'),
+      );
+    });
+  });
+
   group('webNavigation', () {
     test('reports documents of content scripts as navigations', () async {
       final extension = await install();
@@ -756,15 +834,18 @@ void main() {
   });
 
   group('browserAction', () {
-    test('shows the extension\'s own icon when the button names none', () async {
-      final extension = await install();
-      await host.start();
+    test(
+      'shows the extension\'s own icon when the button names none',
+      () async {
+        final extension = await install();
+        await host.start();
 
-      // The sample extension has icons and no browser_action.
-      final manifest = (await host.manifestOf(extension))!;
-      actions.setDefaults(extension, manifest);
-      expect(actions.stateFor(extension.uuid).iconPath, 'icon.png');
-    });
+        // The sample extension has icons and no browser_action.
+        final manifest = (await host.manifestOf(extension))!;
+        actions.setDefaults(extension, manifest);
+        expect(actions.stateFor(extension.uuid).iconPath, 'icon.png');
+      },
+    );
 
     test('openPopup asks the app to open the popup', () async {
       final extension = await install();

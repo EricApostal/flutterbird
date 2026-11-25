@@ -6,6 +6,7 @@ import 'package:flutterbird/features/browser/components/mobile_omnibox_bar.dart'
 import 'package:flutterbird/features/browser/state/fullscreen_mode.dart';
 import 'package:flutterbird/features/browser/state/tab_actions.dart';
 import 'package:flutterbird/features/browser/state/tab_history.dart';
+import 'package:flutterbird/features/windows/window_scope.dart';
 
 class MobileBrowserLayout extends ConsumerWidget {
   final int viewId;
@@ -15,7 +16,10 @@ class MobileBrowserLayout extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final currentTabController = ref.watch(browserTabProvider(viewId));
-    final isFullscreen = ref.watch(browserFullscreenModeControllerProvider);
+    final windowId = BrowserWindowScope.of(context);
+    final isFullscreen = ref.watch(
+      browserFullscreenModeControllerProvider(windowId),
+    );
 
     if (currentTabController == null) {
       return const SizedBox.shrink();
@@ -62,7 +66,7 @@ class MobileBrowserLayout extends ConsumerWidget {
               MobileOmniboxBar(currentTabController: currentTabController),
             Expanded(
               child: BrowserWindow(
-                key: GlobalObjectKey<State<BrowserWindow>>(viewId),
+                key: BrowserWindow.keyFor(windowId, viewId),
                 viewId: viewId,
               ),
             ),

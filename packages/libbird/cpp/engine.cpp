@@ -539,6 +539,8 @@ public:
   CursorChangeCallback m_cursor_change_callback = nullptr;
   ContextMenuRequestCallback m_context_menu_request_callback = nullptr;
   NewWebViewCallback m_new_web_view_callback = nullptr;
+  CloseViewCallback m_close_view_callback = nullptr;
+  bool m_closed_by_page = false;
   InputCaretRectChangeCallback m_input_caret_rect_change_callback = nullptr;
   FullscreenChangeCallback m_fullscreen_change_callback = nullptr;
   NavigationHistoryChangeCallback m_navigation_history_change_callback =
@@ -1486,7 +1488,7 @@ public:
     // traversable the engine already prepared for it, and hand back its handle
     // so the engine can name the new tab.
     on_new_web_view = [this](Web::HTML::ActivateTab activate_tab,
-                             Web::HTML::WebViewHints,
+                             Web::HTML::WebViewHints hints,
                              WebView::CanonicalTraversable &traversable)
         -> String {
       int new_view_id = -1;
@@ -1500,10 +1502,40 @@ public:
         callback = m_new_web_view_callback;
       }
 
-      if (callback)
-        callback(new_view_id, activate_tab == Web::HTML::ActivateTab::Yes);
+      if (callback) {
+        int features = hints.popup ? LADYBIRD_WINDOW_POPUP : 0;
+        int x = 0, y = 0, width = 0, height = 0;
+        if (hints.screen_x.has_value()) {
+          features |= LADYBIRD_WINDOW_HAS_X;
+          x = hints.screen_x->value();
+        }
+        if (hints.screen_y.has_value()) {
+          features |= LADYBIRD_WINDOW_HAS_Y;
+          y = hints.screen_y->value();
+        }
+        if (hints.width.has_value()) {
+          features |= LADYBIRD_WINDOW_HAS_WIDTH;
+          width = hints.width->value();
+        }
+        if (hints.height.has_value()) {
+          features |= LADYBIRD_WINDOW_HAS_HEIGHT;
+          height = hints.height->value();
+        }
+        callback(new_view_id, activate_tab == Web::HTML::ActivateTab::Yes,
+                 features, x, y, width, height);
+      }
 
       return handle;
+    };
+
+    // The page closed itself (window.close(), which is how a sign-in popup
+    // goes away once it is done). The view cannot be destroyed from inside
+    // this call, so Flutter is told and destroys it afterwards.
+    on_close = [this]() {
+      std::lock_guard lock(m_info_mutex);
+      m_closed_by_page = true;
+      if (m_close_view_callback)
+        m_close_view_callback(m_view_id);
     };
 
     // The page requested fullscreen (element.requestFullscreen() or a
@@ -1951,7 +1983,8 @@ public:
       return {};
 
     if (auto callback = new_web_view_callback_from_views())
-      callback(new_view_id, activate_tab == Web::HTML::ActivateTab::Yes);
+      callback(new_view_id, activate_tab == Web::HTML::ActivateTab::Yes, 0, 0, 0,
+               0, 0);
 
     return *it->second;
   }
@@ -2876,6 +2909,16 @@ void set_new_web_view_callback(int view_id, NewWebViewCallback callback) {
   }
 }
 
+void set_close_view_callback(int view_id, CloseViewCallback callback) {
+  auto it = g_web_views.find(view_id);
+  if (it != g_web_views.end()) {
+    std::lock_guard lock(it->second->m_info_mutex);
+    it->second->m_close_view_callback = callback;
+    if (callback && it->second->m_closed_by_page)
+      callback(view_id);
+  }
+}
+
 void set_fullscreen_change_callback(int view_id,
                                     FullscreenChangeCallback callback) {
   auto it = g_web_views.find(view_id);
@@ -2948,8 +2991,13 @@ void dispatch_mouse_event(int view_id, int type, int x, int y, int button,
 
 void set_view_focused(int view_id, bool focused) {
   auto it = g_web_views.find(view_id);
-  if (it != g_web_views.end())
-    it->second->set_has_system_focus(focused);
+  if (it == g_web_views.end())
+    return;
+  // With several windows, the focused view is what application-wide actions
+  // (View Source and the like) are about.
+  if (focused)
+    g_active_view_id = view_id;
+  it->second->set_has_system_focus(focused);
 }
 
 void dispatch_key_event(int view_id, int type, int keycode, int modifiers,

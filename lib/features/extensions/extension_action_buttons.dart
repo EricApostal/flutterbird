@@ -6,6 +6,7 @@ import 'package:bird_extensions/bird_extensions.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutterbird/features/extensions/extension_popup.dart';
+import 'package:flutterbird/features/windows/window_scope.dart';
 
 /// The toolbar buttons of the extensions that have one, as they are in
 /// Firefox: the extension's icon, with the badge it set on top.
@@ -39,6 +40,18 @@ class _ActionButtonState extends ConsumerState<_ActionButton> {
   final OverlayPortalController _overlay = OverlayPortalController();
   final LayerLink _link = LayerLink();
   final List<StreamSubscription<Object?>> _subscriptions = [];
+  late int _windowId;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _windowId = BrowserWindowScope.of(context);
+  }
+
+  /// The tab this button's window is showing. What a button shows, and what
+  /// pressing it acts on, is about that tab, whichever window is focused.
+  int? get _tabId =>
+      ref.read(browserSessionProvider).window(_windowId)?.activeTabId;
 
   @override
   void initState() {
@@ -68,9 +81,15 @@ class _ActionButtonState extends ConsumerState<_ActionButton> {
           .where((uuid) => uuid == widget.extension.uuid)
           .listen((_) {
             if (!mounted) return;
+            // Every window has this button, and the popup opens in one: the
+            // browser window used last.
+            final current = ref
+                .read(browserSessionProvider)
+                .lastFocused(kind: BrowserWindowKind.normal);
+            if (current?.id != _windowId) return;
             final state = service.actions.stateFor(
               widget.extension.uuid,
-              tabId: ref.read(browserBridgeProvider)?.activeTabId,
+              tabId: _tabId,
             );
             if (state.popup != null && state.popup!.isNotEmpty) {
               _overlay.show();
@@ -91,7 +110,7 @@ class _ActionButtonState extends ConsumerState<_ActionButton> {
 
   Future<void> _pressed(ExtensionService service, ActionState state) async {
     final bridge = ref.read(browserBridgeProvider);
-    final tabId = bridge?.activeTabId;
+    final tabId = _tabId;
 
     if (state.popup != null && state.popup!.isNotEmpty) {
       _overlay.toggle();
@@ -113,11 +132,8 @@ class _ActionButtonState extends ConsumerState<_ActionButton> {
     if (service == null) return const SizedBox.shrink();
 
     final extension = widget.extension;
-    final bridge = ref.read(browserBridgeProvider);
-    final state = service.actions.stateFor(
-      extension.uuid,
-      tabId: bridge?.activeTabId,
-    );
+    final tabId = ref.watch(browserWindowProvider(_windowId))?.activeTabId;
+    final state = service.actions.stateFor(extension.uuid, tabId: tabId);
 
     final badge = state.badgeText ?? '';
     final badgeColor = state.badgeBackground;
@@ -130,7 +146,8 @@ class _ActionButtonState extends ConsumerState<_ActionButton> {
             File('${service.registry.directoryFor(extension).path}/$iconPath'),
             width: 20,
             height: 20,
-            errorBuilder: (_, _, _) => const Icon(Icons.extension_outlined, size: 20),
+            errorBuilder: (_, _, _) =>
+                const Icon(Icons.extension_outlined, size: 20),
           );
 
     return CompositedTransformTarget(
@@ -171,7 +188,12 @@ class _ActionButtonState extends ConsumerState<_ActionButton> {
             label: Text(badge, style: const TextStyle(fontSize: 9)),
             backgroundColor: badgeColor == null
                 ? null
-                : Color.fromARGB(badgeColor[3], badgeColor[0], badgeColor[1], badgeColor[2]),
+                : Color.fromARGB(
+                    badgeColor[3],
+                    badgeColor[0],
+                    badgeColor[1],
+                    badgeColor[2],
+                  ),
             child: Opacity(opacity: enabled ? 1 : 0.4, child: icon),
           ),
         ),

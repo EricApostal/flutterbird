@@ -6,95 +6,137 @@ import 'package:bird_core/bird_core.dart';
 import 'package:flutterbird/features/downloads/downloads_bootstrap.dart';
 import 'package:flutterbird/features/extensions/app_browser_bridge.dart';
 import 'package:flutterbird/features/router/controller.dart';
-import 'package:flutterbird/features/theme/base.dart';
-import 'package:go_transitions/go_transitions.dart';
+import 'package:flutterbird/features/theme/app_theme.dart';
+import 'package:flutterbird/features/windows/browser_shell.dart';
+import 'package:flutterbird/features/windows/legacy_window_system.dart';
+import 'package:flutterbird/features/windows/macos/mac_window_system.dart';
+import 'package:flutterbird/features/windows/macos/multi_window_app.dart';
+import 'package:flutterbird/features/windows/window_scope.dart';
+import 'package:flutterbird/features/windows/window_system.dart';
 import 'package:window_manager/window_manager.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await initializeDownloads();
-  final isDesktop = Platform.isMacOS || Platform.isLinux || Platform.isWindows;
+
+  // macOS gives each browser window a window of its own. Elsewhere the app is
+  // one window, or the screen.
+  if (Platform.isMacOS) {
+    _runMultiWindow();
+  } else {
+    await _runSingleWindow();
+  }
+}
+
+ProviderContainer _createContainer(WindowSystem windows) => ProviderContainer(
+  overrides: [
+    windowSystemProvider.overrideWithValue(windows),
+    // Extensions run in the app's tabs and run their background pages
+    // in views of their own.
+    browserBridgeProvider.overrideWith((ref) => AppBrowserBridge(ref)),
+  ],
+);
+
+void _runMultiWindow() {
+  if (!windowingIsAvailable) {
+    // The macOS runner makes no window of its own, so there is nothing to show
+    // this in but the log.
+    throw UnsupportedError(
+      'FlutterBird needs Flutter\'s windowing feature on macOS. Use the master '
+      'channel (puro flutter ...) with `flutter: config: enable-windowing: '
+      'true` in pubspec.yaml.',
+    );
+  }
+
+  final windows = MacWindowSystem();
+  final container = _createContainer(windows);
+
+  // The shell first: it listens for what pages do to tabs, and making its
+  // first tab is what starts the engine.
+  final shell = container.read(browserShellProvider);
+  windows.onCloseRequested = shell.closeWindow;
+  windows.start(container);
+
+  // Extensions run for the life of the app, whichever windows come and go. The
+  // provider is only built once.
+  container.read(extensionServiceProvider);
+
+  runWidget(
+    UncontrolledProviderScope(
+      container: container,
+      child: MultiWindowApp(system: windows),
+    ),
+  );
+}
+
+Future<void> _runSingleWindow() async {
+  final isDesktop = Platform.isLinux || Platform.isWindows;
 
   if (isDesktop) {
     await windowManager.ensureInitialized();
-    final usesCustomTitlebar =
-        Platform.isMacOS || Platform.isWindows || Platform.isLinux;
     const initialSize = Size(800, 600);
-    final windowOptions = WindowOptions(
+    const windowOptions = WindowOptions(
       minimumSize: initialSize,
       size: initialSize,
       center: true,
-      titleBarStyle: usesCustomTitlebar
-          ? TitleBarStyle.hidden
-          : TitleBarStyle.normal,
+      titleBarStyle: TitleBarStyle.hidden,
       // Keep real native caption buttons when titlebar is hidden.
-      windowButtonVisibility: usesCustomTitlebar,
+      windowButtonVisibility: true,
     );
 
     await windowManager.waitUntilReadyToShow(windowOptions, () async {
-      if (usesCustomTitlebar) {
-        await windowManager.setMovable(false);
-      }
+      await windowManager.setMovable(false);
       await windowManager.show();
       await windowManager.focus();
     });
   }
 
+  final container = _createContainer(
+    isDesktop ? SingleWindowSystem() : NoWindowSystem(),
+  );
+
   runApp(
-    ProviderScope(
-      overrides: [
-        // Extensions run in the app's tabs and run their background pages
-        // in views of their own.
-        browserBridgeProvider.overrideWith((ref) => AppBrowserBridge(ref)),
-      ],
-      child: const MainApp(),
-    ),
+    UncontrolledProviderScope(container: container, child: const MainApp()),
   );
 }
 
-class MainApp extends StatefulWidget {
+/// The app where it is one window: its tabs are routes.
+class MainApp extends ConsumerStatefulWidget {
   const MainApp({super.key});
 
   @override
-  State<MainApp> createState() => _MainAppState();
+  ConsumerState<MainApp> createState() => _MainAppState();
 }
 
-class _MainAppState extends State<MainApp> {
+class _MainAppState extends ConsumerState<MainApp> {
+  late final int _windowId;
+
+  @override
+  void initState() {
+    super.initState();
+    // The shell starts listening to tabs, and makes the first one.
+    final shell = ref.read(browserShellProvider);
+    _windowId = ref.read(browserSessionProvider).windows.first.id;
+    // Not while widgets are being built, when providers cannot change.
+    WidgetsBinding.instance.addPostFrameCallback((_) => shell.keepOnlyWindow());
+  }
+
   @override
   Widget build(BuildContext context) {
-    final pageTransition = const PageTransitionsTheme(
-      builders: {
-        TargetPlatform.fuchsia: GoTransitions.none,
-        TargetPlatform.iOS: GoTransitions.none,
-        TargetPlatform.linux: GoTransitions.none,
-        TargetPlatform.macOS: GoTransitions.none,
-        TargetPlatform.windows: GoTransitions.none,
-      },
-    );
-
-    return MaterialApp.router(
-      routerConfig: routerController,
-      themeMode: ThemeMode.dark,
-      darkTheme: ThemeData(
-        pageTransitionsTheme: pageTransition,
-        colorScheme: ColorScheme.fromSeed(
-          brightness: Brightness.dark,
-          seedColor: const Color.fromARGB(255, 53, 111, 227),
-        ),
-        textTheme: getBaseTextTheme(ThemeData.dark().textTheme),
-        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+    return BrowserWindowScope(
+      windowId: _windowId,
+      child: MaterialApp.router(
+        routerConfig: routerController,
+        themeMode: ThemeMode.dark,
+        darkTheme: birdDarkTheme(),
+        theme: birdLightTheme(),
+        builder: (context, child) {
+          return PopScope(
+            canPop: false,
+            child: child ?? const SizedBox.shrink(),
+          );
+        },
       ),
-      theme: ThemeData(
-        pageTransitionsTheme: pageTransition,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color.fromARGB(255, 35, 141, 255),
-        ),
-        textTheme: getBaseTextTheme(ThemeData.light().textTheme),
-        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-      ),
-      builder: (context, child) {
-        return PopScope(canPop: false, child: child ?? const SizedBox.shrink());
-      },
     );
   }
 }

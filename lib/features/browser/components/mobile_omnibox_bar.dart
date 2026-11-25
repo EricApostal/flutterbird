@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutterbird/features/browser/components/browser_context_menu.dart';
 import 'package:flutterbird/features/browser/state/tab_actions.dart';
+import 'package:flutterbird/features/windows/window_scope.dart';
 import 'package:flutterbird/features/browser/state/tab_preview_cache.dart';
 import 'package:flutterbird/features/browser/state/tab_layout_mode.dart';
 import 'package:flutterbird/features/browser/state/omnibox_state.dart';
@@ -373,7 +374,7 @@ class _MobileOmniboxBarState extends ConsumerState<MobileOmniboxBar> {
     required LadybirdController currentTabController,
     required bool next,
   }) {
-    final tabs = ref.read(browserTabControllerProvider);
+    final tabs = ref.read(windowTabsProvider(BrowserWindowScope.of(context)));
     if (tabs.length <= 1) return;
 
     final currentIndex = tabs.indexWhere(
@@ -384,7 +385,7 @@ class _MobileOmniboxBarState extends ConsumerState<MobileOmniboxBar> {
     final destinationIndex = next
         ? (currentIndex + 1) % tabs.length
         : (currentIndex - 1 + tabs.length) % tabs.length;
-    context.go('/browser/tab/${tabs[destinationIndex].viewId}');
+    BrowserTabActions.showTab(context, tabs[destinationIndex].viewId);
   }
 
   List<BrowserContextMenuItem> _buildToolbarContextMenuItems(
@@ -530,8 +531,6 @@ class _MobileOmniboxBarState extends ConsumerState<MobileOmniboxBar> {
       case _ToolbarMenuAction.closeCurrentTab:
         BrowserTabActions.closeTabImmediately(
           ref,
-          context,
-          currentViewId: currentTabController.viewId,
           closeViewId: currentTabController.viewId,
         );
         break;
@@ -1136,7 +1135,9 @@ class _MobileOmniboxBarState extends ConsumerState<MobileOmniboxBar> {
                           Consumer(
                             builder: (context, ref, child) {
                               final tabs = ref.watch(
-                                browserTabControllerProvider,
+                                windowTabsProvider(
+                                  BrowserWindowScope.of(context),
+                                ),
                               );
                               return InkWell(
                                 borderRadius: BorderRadius.circular(6),

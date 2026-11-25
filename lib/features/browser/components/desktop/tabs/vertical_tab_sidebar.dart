@@ -6,12 +6,13 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutterbird/features/browser/components/desktop/omnibox/omnibox_style.dart';
 import 'package:flutterbird/features/browser/components/desktop/tabs/tab.dart';
+import 'package:flutterbird/features/browser/components/desktop/tabs/tab_strip.dart';
 import 'package:flutterbird/features/browser/state/tab_actions.dart';
+import 'package:flutterbird/features/browser/state/fullscreen_mode.dart';
 import 'package:flutterbird/features/browser/state/tab_layout_mode.dart';
-import 'package:window_manager/window_manager.dart';
-
-const Duration _kSidebarTabAnimationDuration = Duration(milliseconds: 180);
-const Curve _kSidebarTabAnimationCurve = Curves.easeOutCubic;
+import 'package:flutterbird/features/windows/tab_drag_controller.dart';
+import 'package:flutterbird/features/windows/window_drag_area.dart';
+import 'package:flutterbird/features/windows/window_scope.dart';
 
 class BrowserVerticalTabSidebar extends ConsumerStatefulWidget {
   static const double sidebarWidth = 272;
@@ -26,80 +27,63 @@ class BrowserVerticalTabSidebar extends ConsumerStatefulWidget {
 }
 
 class _BrowserVerticalTabSidebarState
-    extends ConsumerState<BrowserVerticalTabSidebar>
-    with WindowListener {
+    extends ConsumerState<BrowserVerticalTabSidebar> {
   static const double _kSidebarWidth = BrowserVerticalTabSidebar.sidebarWidth;
+  static const double _kSidebarPadding = 8;
   static const double _kTabHeight = 36;
+  static const double _kTabSpacing = 6;
+  static const double _kTabSlot = _kTabHeight + _kTabSpacing;
+  static const double _kNewTabExtent = _kTabHeight + 8;
   static const double _kMacControlsWidth = 78;
 
-  bool _animateNewTabs = false;
+  final ScrollController _scrollController = ScrollController();
+  // Where a dragged tab can be let go, and where the first tab starts.
+  final GlobalKey _sidebarKey = GlobalKey();
+  final GlobalKey _tabsKey = GlobalKey();
 
-  // Which rows are expanded, and which ones are collapsing on their way out.
-  //
-  // This lives here rather than inside the row itself on purpose: the
-  // reorderable list builds every item under a `_ReorderableItemGlobalKey`
-  // that mixes the item's key with its *index*, so reordering rebuilds the
-  // moved row and all the rows below it from scratch. An expand flag held
-  // inside the row would be reset with that rebuild — and since a rebuilt
-  // `AnimatedContainer` starts at its target height without animating, a
-  // fresh row animates in again whenever the list is reordered. Keyed by view
-  // id (never by position), the rows below keep their height through the
-  // reorder and the state of the list cannot be scrambled by it.
-  final Set<int> _expandedViewIds = <int>{};
+  int? _registeredWindowId;
+  VoidCallback? _unregisterStrip;
 
   @override
-  void initState() {
-    super.initState();
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      setState(() {
-        _animateNewTabs = true;
-      });
-    });
-
-    if (Platform.isMacOS || Platform.isLinux || Platform.isWindows) {
-      windowManager.addListener(this);
-    }
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final windowId = BrowserWindowScope.of(context);
+    if (windowId == _registeredWindowId) return;
+    _unregisterStrip?.call();
+    _registeredWindowId = windowId;
+    _unregisterStrip = ref
+        .read(tabDragControllerProvider)
+        .registerStrip(windowId, _report);
   }
 
   @override
   void dispose() {
-    if (Platform.isMacOS || Platform.isLinux || Platform.isWindows) {
-      windowManager.removeListener(this);
-    }
+    _unregisterStrip?.call();
+    _scrollController.dispose();
     super.dispose();
   }
 
-  /// Brings [_expandedViewIds] in line with the open tabs.
-  ///
-  /// Rows that are gone are dropped; rows that are already accounted for are
-  /// left alone, so reordering the list does not touch this state at all. A
-  /// tab that shows up here for the first time is expanded right away when it
-  /// has been there since the first frame, and one frame later otherwise, so
-  /// tabs opening after startup animate in exactly as they did before this
-  /// state moved out of the row.
-  void _syncRowExpandState(Iterable<int> viewIds) {
-    final present = viewIds.toSet();
-    _expandedViewIds.removeWhere((id) => !present.contains(id));
-
-    final toExpand = <int>[];
-    for (final id in present) {
-      if (_expandedViewIds.contains(id)) continue;
-      if (!_animateNewTabs) {
-        _expandedViewIds.add(id);
-      } else {
-        toExpand.add(id);
-      }
+  // The sidebar is built while the tabs are along the top too, only closed.
+  TabStripReport? _report() {
+    final windowId = _registeredWindowId;
+    if (windowId == null ||
+        ref.read(browserTabLayoutModeControllerProvider) !=
+            BrowserTabLayoutMode.vertical ||
+        ref.read(browserFullscreenModeControllerProvider(windowId))) {
+      return null;
     }
+    final sidebar = _sidebarKey.currentContext?.findRenderObject();
+    final tabs = _tabsKey.currentContext?.findRenderObject();
+    if (sidebar is! RenderBox || tabs is! RenderBox) return null;
+    if (!sidebar.attached || !sidebar.hasSize || !tabs.hasSize) return null;
 
-    if (toExpand.isEmpty) return;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      setState(() {
-        _expandedViewIds.addAll(toExpand);
-      });
-    });
+    return TabStripReport(
+      bounds: sidebar.localToGlobal(Offset.zero) & sidebar.size,
+      tabsOrigin: tabs.localToGlobal(Offset.zero),
+      axis: Axis.vertical,
+      slotExtentFor: (_) => _kTabSlot,
+      scrollOffset: _scrollController.hasClients ? _scrollController.offset : 0,
+    );
   }
 
   /// Closes [viewId]'s tab. Its row collapses first and the tab goes away once
@@ -113,15 +97,61 @@ class _BrowserVerticalTabSidebarState
     );
   }
 
+  Widget _buildNewTabButton(ThemeData theme) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 4, bottom: 4),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(8.0),
+          onTap: () {
+            HapticFeedback.lightImpact();
+            BrowserTabActions.openNewTab(ref, context);
+          },
+          child: Container(
+            decoration: BoxDecoration(
+              color: Color.lerp(
+                Colors.black,
+                theme.colorScheme.primaryContainer,
+                0.5,
+              )!,
+              borderRadius: BorderRadius.circular(8.0),
+            ),
+            child: Row(
+              children: [
+                const SizedBox(width: 10),
+                Icon(Icons.add, size: 16, color: theme.colorScheme.onSurface),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'New Tab',
+                    style: TextStyle(
+                      color: theme.colorScheme.onSurface,
+                      fontSize: 13,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const SizedBox(width: 6),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final tabs = ref.watch(browserTabControllerProvider);
+    final windowId = BrowserWindowScope.of(context);
+    final tabIds =
+        ref.watch(browserWindowProvider(windowId))?.tabIds ?? const <int>[];
     final closingViewIds = ref.watch(closingTabsProvider);
-    _syncRowExpandState(tabs.map((tab) => tab.viewId));
     final theme = Theme.of(context);
     final padding = MediaQuery.paddingOf(context);
 
     return Container(
+      key: _sidebarKey,
       width: _kSidebarWidth,
       decoration: BoxDecoration(
         color: omniboxSurfaceColor(theme),
@@ -137,8 +167,8 @@ class _BrowserVerticalTabSidebarState
             child: Row(
               children: [
                 SizedBox(width: Platform.isMacOS ? _kMacControlsWidth : 8),
-                Expanded(
-                  child: DragToMoveArea(
+                const Expanded(
+                  child: WindowDragArea(
                     child: SizedBox(
                       width: double.infinity,
                       height: double.infinity,
@@ -158,187 +188,38 @@ class _BrowserVerticalTabSidebarState
             ),
           ),
           Expanded(
-            child: CustomScrollView(
-              slivers: [
-                SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(8, 0, 8, 0),
-                  sliver: SliverReorderableList(
-                    itemCount: tabs.length,
-                    proxyDecorator:
-                        (Widget child, int index, Animation<double> animation) {
-                          return Material(
-                            color: Colors.transparent,
-                            elevation: 0,
-                            child: child,
-                          );
-                        },
-                    itemBuilder: (context, index) {
-                      final id = tabs[index].viewId;
-                      return _AnimatedSidebarTabItem(
-                        key: ValueKey(id),
-                        index: index,
-                        viewId: id,
-                        selected: id == widget.currentViewId,
-                        expanded:
-                            _expandedViewIds.contains(id) &&
-                            !closingViewIds.contains(id),
-                        width: _kSidebarWidth - 16,
-                        height: _kTabHeight,
-                        onTabClosed: () => _closeTab(id),
-                      );
-                    },
-                    onReorder: (oldIndex, newIndex) {
-                      if (oldIndex < newIndex) {
-                        newIndex -= 1;
-                      }
-
-                      final maxIndex = tabs.length - 1;
-                      if (newIndex > maxIndex) {
-                        newIndex = maxIndex;
-                      }
-                      if (newIndex < 0 || oldIndex == newIndex) return;
-
-                      ref
-                          .read(browserTabControllerProvider.notifier)
-                          .reorder(oldIndex, newIndex);
-                    },
-                  ),
-                ),
-                SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
-                  sliver: SliverToBoxAdapter(
-                    child: Material(
-                      color: Colors.transparent,
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(8.0),
-                        onTap: () {
-                          HapticFeedback.lightImpact();
-                          BrowserTabActions.openNewTab(ref, context);
-                        },
-                        child: Container(
-                          constraints: const BoxConstraints(minHeight: 36),
-                          decoration: BoxDecoration(
-                            color: Color.lerp(
-                              Colors.black,
-                              theme.colorScheme.primaryContainer,
-                              0.5,
-                            )!,
-                            borderRadius: BorderRadius.circular(8.0),
-                          ),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: Align(
-                                  alignment: Alignment.centerLeft,
-                                  child: Padding(
-                                    padding: const EdgeInsets.only(
-                                      left: 10,
-                                      right: 6,
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        Padding(
-                                          padding: const EdgeInsets.only(
-                                            right: 8.0,
-                                          ),
-                                          child: Icon(
-                                            Icons.add,
-                                            size: 16,
-                                            color: theme.colorScheme.onSurface,
-                                          ),
-                                        ),
-                                        Expanded(
-                                          child: Text(
-                                            'New Tab',
-                                            style: TextStyle(
-                                              color:
-                                                  theme.colorScheme.onSurface,
-                                              fontSize: 13,
-                                            ),
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 6),
-                            ],
-                          ),
-                        ),
-                      ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: _kSidebarPadding),
+              child: Align(
+                alignment: Alignment.topCenter,
+                child: KeyedSubtree(
+                  key: _tabsKey,
+                  child: TabStrip(
+                    windowId: windowId,
+                    axis: Axis.vertical,
+                    tabIds: tabIds,
+                    closingTabIds: closingViewIds,
+                    slotExtent: _kTabSlot,
+                    crossExtent: _kSidebarWidth - _kSidebarPadding * 2,
+                    spacing: _kTabSpacing,
+                    scrollController: _scrollController,
+                    trailing: _buildNewTabButton(theme),
+                    trailingExtent: _kNewTabExtent,
+                    itemBuilder: (context, id) => BrowserTab(
+                      viewId: id,
+                      selected: id == widget.currentViewId,
+                      variant: BrowserTabVariant.arcSidebar,
+                      minWidth: _kSidebarWidth - _kSidebarPadding * 2,
+                      width: _kSidebarWidth - _kSidebarPadding * 2,
+                      minHeight: _kTabHeight,
+                      onTabClosed: () => _closeTab(id),
                     ),
                   ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// One row of the sidebar's tab list.
-///
-/// The row owns no state: whether it is expanded (and therefore how tall it
-/// is) comes from the sidebar itself, because the reorderable list rebuilds
-/// items positionally and would otherwise reset it — see
-/// [_BrowserVerticalTabSidebarState._expandedViewIds].
-class _AnimatedSidebarTabItem extends StatelessWidget {
-  final int index;
-  final int viewId;
-  final bool selected;
-
-  /// Whether the row is expanded. A row that is not expanded is either still
-  /// animating in or on its way out.
-  final bool expanded;
-  final double width;
-  final double height;
-  final VoidCallback onTabClosed;
-
-  const _AnimatedSidebarTabItem({
-    super.key,
-    required this.index,
-    required this.viewId,
-    required this.selected,
-    required this.expanded,
-    required this.width,
-    required this.height,
-    required this.onTabClosed,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return ReorderableDragStartListener(
-      index: index,
-      enabled: expanded,
-      child: ClipRect(
-        child: AnimatedContainer(
-          duration: _kSidebarTabAnimationDuration,
-          curve: _kSidebarTabAnimationCurve,
-          height: expanded ? height + 6 : 0,
-          child: Padding(
-            padding: const EdgeInsets.only(bottom: 6),
-            child: SizedBox(
-              height: height,
-              width: width,
-              child: IgnorePointer(
-                ignoring: !expanded,
-                child: BrowserTab(
-                  viewId: viewId,
-                  selected: selected,
-                  variant: BrowserTabVariant.arcSidebar,
-                  minWidth: width,
-                  width: width,
-                  minHeight: height,
-                  onTabClosed: onTabClosed,
                 ),
               ),
             ),
           ),
-        ),
+        ],
       ),
     );
   }

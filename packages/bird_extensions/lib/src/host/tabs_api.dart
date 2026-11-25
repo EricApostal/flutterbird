@@ -58,19 +58,23 @@ class TabsApi extends ApiNamespace {
           'tabs.onCreated',
           (extension) => [present(extension, tab)],
         );
-      case TabRemoved(:final tabId):
+      case TabRemoved(:final tabId, :final windowId, :final isWindowClosing):
         host.emitToAll(
           'tabs.onRemoved',
           (_) => [
             tabId,
-            {'windowId': 1, 'isWindowClosing': false},
+            {'windowId': windowId, 'isWindowClosing': isWindowClosing},
           ],
         );
-      case TabActivated(:final tabId, :final previousTabId):
+      case TabActivated(:final tabId, :final previousTabId, :final windowId):
         host.emitToAll(
           'tabs.onActivated',
           (_) => [
-            {'tabId': tabId, 'previousTabId': ?previousTabId, 'windowId': 1},
+            {
+              'tabId': tabId,
+              'previousTabId': ?previousTabId,
+              'windowId': windowId,
+            },
           ],
         );
       case TabUpdated(:final tab, :final changes):
@@ -103,7 +107,7 @@ class TabsApi extends ApiNamespace {
         return tab == null ? null : present(call.extension, tab);
       case 'query':
         return [
-          for (final tab in _query(browser, call.arg(0)))
+          for (final tab in _query(call, browser, call.arg(0)))
             present(call.extension, tab),
         ];
       case 'create':
@@ -159,7 +163,19 @@ class TabsApi extends ApiNamespace {
     return active;
   }
 
-  Iterable<BrowserTab> _query(BrowserBridge browser, Object? info) {
+  /// The window `currentWindow` means: the one the asking document is in, or
+  /// for a background page or a popup, the one focused last.
+  static int currentWindowOf(ApiCall call, BrowserBridge browser) {
+    final viewId = call.context.viewId;
+    final own = viewId == null ? null : browser.tab(viewId);
+    return own?.windowId ?? browser.currentWindowId;
+  }
+
+  Iterable<BrowserTab> _query(
+    ApiCall call,
+    BrowserBridge browser,
+    Object? info,
+  ) {
     final filter = info is Map ? info : const {};
 
     bool? flag(String key) => filter[key] is bool ? filter[key] as bool : null;
@@ -175,7 +191,29 @@ class TabsApi extends ApiNamespace {
     final titleGlob = title is String ? UrlGlob(title) : null;
     final status = filter['status'];
 
+    final current = currentWindowOf(call, browser);
+    final currentWindow = flag('currentWindow');
+    final lastFocused = flag('lastFocusedWindow');
+    final wantedWindow = filter['windowId'] is int
+        // WINDOW_ID_CURRENT.
+        ? (filter['windowId'] == -2 ? current : filter['windowId'] as int)
+        : null;
+    final windowType = filter['windowType'];
+    final windowTypes = windowType is String
+        ? {for (final window in browser.windows) window.id: window.type}
+        : null;
+
     return browser.tabs.where((tab) {
+      if (currentWindow != null && (tab.windowId == current) != currentWindow) {
+        return false;
+      }
+      if (lastFocused != null &&
+          (tab.windowId == browser.currentWindowId) != lastFocused) {
+        return false;
+      }
+      if (windowTypes != null && windowTypes[tab.windowId] != windowType) {
+        return false;
+      }
       if (flag('active') != null && tab.active != flag('active')) return false;
       if (flag('highlighted') != null && tab.active != flag('highlighted')) {
         return false;
@@ -185,9 +223,7 @@ class TabsApi extends ApiNamespace {
           flag('discarded') == true) {
         return false;
       }
-      if (filter['windowId'] is int &&
-          filter['windowId'] != tab.windowId &&
-          filter['windowId'] != -2) {
+      if (wantedWindow != null && wantedWindow != tab.windowId) {
         return false;
       }
       if (filter['index'] is int && filter['index'] != tab.index) return false;
@@ -205,9 +241,11 @@ class TabsApi extends ApiNamespace {
     final properties = call.arg(0);
     final map = properties is Map ? properties : const {};
     final url = map['url'];
+    final windowId = map['windowId'];
     final tab = await browser.createTab(
       url: url is String ? url : null,
       active: map['active'] is bool ? map['active']! as bool : true,
+      windowId: windowId is int && windowId >= 0 ? windowId : null,
     );
     return present(call.extension, tab);
   }
@@ -403,16 +441,18 @@ class ScriptingApi extends ApiNamespace {
         // One answer per document, so that each result names its frame.
         return Future.wait([
           for (final context in targets)
-            call.host.askContexts([context], 'bird.eval', [code]).then(
-              (values) => <String, Object?>{
-                'frameId': call.host.frameIdOf(context),
-                'result': values.isNotEmpty ? values.first : null,
-              },
-              onError: (Object error) => <String, Object?>{
-                'frameId': call.host.frameIdOf(context),
-                'error': {'message': '$error'},
-              },
-            ),
+            call.host
+                .askContexts([context], 'bird.eval', [code])
+                .then(
+                  (values) => <String, Object?>{
+                    'frameId': call.host.frameIdOf(context),
+                    'result': values.isNotEmpty ? values.first : null,
+                  },
+                  onError: (Object error) => <String, Object?>{
+                    'frameId': call.host.frameIdOf(context),
+                    'error': {'message': '$error'},
+                  },
+                ),
         ]);
       case 'insertCSS':
         final css = await _source(call, injection, 'css');

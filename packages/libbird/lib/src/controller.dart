@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:ffi' as ffi;
 import 'dart:io';
@@ -17,6 +18,61 @@ ffi.DynamicLibrary _openLadybirdLibrary() {
     return ffi.DynamicLibrary.open('libengine.so');
   }
   return ffi.DynamicLibrary.process();
+}
+
+/// A view the engine made for a page: a link that opens a new tab, or
+/// `window.open`. The page that asked stays its opener, so it has to be shown
+/// through this view; a view of the app's own at the same address would not do.
+class LadybirdNewWebViewRequest {
+  const LadybirdNewWebViewRequest({
+    required this.viewId,
+    required this.activate,
+    this.isPopup = false,
+    this.left,
+    this.top,
+    this.width,
+    this.height,
+  });
+
+  // Mirrors LadybirdWindowFeature in cpp/engine.h.
+  static const int _popup = 1 << 0;
+  static const int _hasX = 1 << 1;
+  static const int _hasY = 1 << 2;
+  static const int _hasWidth = 1 << 3;
+  static const int _hasHeight = 1 << 4;
+
+  factory LadybirdNewWebViewRequest.fromNative(
+    int viewId,
+    bool activate,
+    int features,
+    int x,
+    int y,
+    int width,
+    int height,
+  ) => LadybirdNewWebViewRequest(
+    viewId: viewId,
+    activate: activate,
+    isPopup: features & _popup != 0,
+    left: features & _hasX != 0 ? x : null,
+    top: features & _hasY != 0 ? y : null,
+    width: features & _hasWidth != 0 ? width : null,
+    height: features & _hasHeight != 0 ? height : null,
+  );
+
+  final int viewId;
+
+  /// Whether to show the new view rather than open it in the background.
+  final bool activate;
+
+  /// Whether a popup window was asked for, rather than a tab.
+  final bool isPopup;
+
+  /// Where on screen and how large the page asked to be, in CSS pixels. The
+  /// size is that of the page itself, without any window around it.
+  final int? left;
+  final int? top;
+  final int? width;
+  final int? height;
 }
 
 class LadybirdController {
@@ -54,8 +110,8 @@ class LadybirdController {
     ffi.Void Function(ffi.Int, ffi.Pointer<ffi.Char>)
   >
   _contextMenuRequestCallback;
-  late final ffi.NativeCallable<ffi.Void Function(ffi.Int, ffi.Bool)>
-  _newWebViewCallback;
+  late final ffi.NativeCallable<NewWebViewCallbackFunction> _newWebViewCallback;
+  late final ffi.NativeCallable<CloseViewCallbackFunction> _closeViewCallback;
   late final ffi.NativeCallable<
     ffi.Void Function(ffi.Int, ffi.Bool, ffi.Int, ffi.Int, ffi.Int, ffi.Int)
   >
@@ -100,7 +156,27 @@ class LadybirdController {
   final Set<VoidCallback> _resizeListeners = <VoidCallback>{};
   void Function()? onCrossSiteNavigation;
   void Function(LadybirdContextMenuRequest request)? onContextMenuRequest;
-  void Function(int newViewId, bool activateTab)? onNewWebView;
+
+  /// Set by whoever keeps the app's tabs. A view that has none of its own,
+  /// such as an extension's popup, falls back to [fallbackNewWebViewHandler].
+  void Function(LadybirdNewWebViewRequest request)? onNewWebView;
+
+  /// Takes the views asked for by a view with no [onNewWebView]. Without it
+  /// such a view would be made by the engine and never shown.
+  static void Function(LadybirdNewWebViewRequest request)?
+  fallbackNewWebViewHandler;
+
+  /// Fired when the page closes itself, as with `window.close()`. The view has
+  /// nothing more to show, and its owner should [dispose] it.
+  void Function()? get onCloseRequested => _onCloseRequested;
+  set onCloseRequested(void Function()? handler) {
+    _onCloseRequested = handler;
+    // The page can close before anyone is listening.
+    if (handler != null && _closedByPage) scheduleMicrotask(handler);
+  }
+
+  void Function()? _onCloseRequested;
+  bool _closedByPage = false;
   // Fired when the page enters/exits fullscreen via the DOM Fullscreen API
   // (e.g. a <video>'s native fullscreen control), not by any user action in
   // the Flutter chrome.
@@ -288,12 +364,18 @@ class LadybirdController {
     );
 
     _newWebViewCallback =
-        ffi.NativeCallable<ffi.Void Function(ffi.Int, ffi.Bool)>.listener(
-          _onNewWebView,
-        );
+        ffi.NativeCallable<NewWebViewCallbackFunction>.listener(_onNewWebView);
     _bindings.set_new_web_view_callback(
       _viewId,
       _newWebViewCallback.nativeFunction,
+    );
+
+    _closeViewCallback = ffi.NativeCallable<CloseViewCallbackFunction>.listener(
+      _onCloseView,
+    );
+    _bindings.set_close_view_callback(
+      _viewId,
+      _closeViewCallback.nativeFunction,
     );
 
     _inputCaretRectChangeCallback =
@@ -436,9 +518,33 @@ class LadybirdController {
     }
   }
 
-  void _onNewWebView(int newViewId, bool activateTab) {
+  void _onNewWebView(
+    int newViewId,
+    bool activateTab,
+    int features,
+    int x,
+    int y,
+    int width,
+    int height,
+  ) {
     if (newViewId <= 0) return;
-    onNewWebView?.call(newViewId, activateTab);
+    (onNewWebView ?? fallbackNewWebViewHandler)?.call(
+      LadybirdNewWebViewRequest.fromNative(
+        newViewId,
+        activateTab,
+        features,
+        x,
+        y,
+        width,
+        height,
+      ),
+    );
+  }
+
+  void _onCloseView(int viewId) {
+    if (viewId != _viewId || _closedByPage) return;
+    _closedByPage = true;
+    _onCloseRequested?.call();
   }
 
   void _onNavigationHistoryChange(
@@ -1192,10 +1298,20 @@ class LadybirdController {
     return _bindings.activate_context_menu_action(_viewId, actionToken);
   }
 
+  // The widget that last said this view has focus. A tab that moves to another
+  // window is shown by a new widget before the old one is disposed, so the old
+  // one's parting word must not take the focus from the new one.
+  Object? _focusOwner;
+
   // Tells the engine whether this view holds system focus. WebContent only has a
   // focused navigable while it does, and the actions that work on a selection
   // (select all, copy) as well as text input act on that navigable.
-  void setViewFocused(bool focused) {
+  void setViewFocused(bool focused, {Object? owner}) {
+    if (focused) {
+      _focusOwner = owner;
+    } else if (owner != null && _focusOwner != owner) {
+      return;
+    }
     if (focused == _lastFocused) return;
     _lastFocused = focused;
     _bindings.set_view_focused(_viewId, focused);
@@ -1203,7 +1319,9 @@ class LadybirdController {
 
   void dispose() {
     setViewFocused(false);
+    _onCloseRequested = null;
     _bindings.set_new_web_view_callback(_viewId, ffi.nullptr);
+    _bindings.set_close_view_callback(_viewId, ffi.nullptr);
     _bindings.set_context_menu_request_callback(_viewId, ffi.nullptr);
     _bindings.set_cursor_change_callback(_viewId, ffi.nullptr);
     _bindings.set_cross_site_navigation_callback(_viewId, ffi.nullptr);
@@ -1229,6 +1347,7 @@ class LadybirdController {
     _cursorChangeCallback.close();
     _contextMenuRequestCallback.close();
     _newWebViewCallback.close();
+    _closeViewCallback.close();
     _inputCaretRectChangeCallback.close();
     _fullscreenChangeCallback.close();
     _navigationHistoryChangeCallback.close();
