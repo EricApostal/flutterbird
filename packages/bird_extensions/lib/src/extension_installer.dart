@@ -137,11 +137,6 @@ class ExtensionInstaller {
         '${addon.name} is a ${addon.type}; only extensions can be installed',
       );
     }
-    if (addon.requiresPayment) {
-      throw InstallException(
-        '${addon.name} requires payment and cannot be installed',
-      );
-    }
 
     final bytes = await amo.download(addon, onProgress: onProgress);
     return _install(

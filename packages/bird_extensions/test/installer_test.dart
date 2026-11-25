@@ -42,6 +42,21 @@ void main() {
   }
 
   group('install', () {
+    test('installs an add-on that asks for payment inside itself', () async {
+      // AMO flags a password manager or a VPN this way. Downloading it is
+      // free, and Firefox installs it like any other.
+      amo.publish(
+        slug: 'paid',
+        guid: 'paid@test',
+        version: '1.0',
+        files: sampleExtension(id: 'paid@test'),
+        requiresPayment: true,
+      );
+
+      final result = await installer.installFromAmo('paid');
+      expect(result.extension.id, 'paid@test');
+    });
+
     test('downloads, unpacks and records an extension', () async {
       amo.publish(
         slug: 'sample',

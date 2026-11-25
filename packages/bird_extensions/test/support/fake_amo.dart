@@ -22,6 +22,7 @@ class FakeAmo implements HttpFetcher {
     String? hashOverride,
     Uri? fileUrlOverride,
     int addonId = 1000,
+    bool requiresPayment = false,
   }) {
     final xpi = buildZip(files);
     final fileUrl =
@@ -39,7 +40,7 @@ class FakeAmo implements HttpFetcher {
       'name': {'en-US': 'Name of $slug'},
       'summary': {'en-US': 'Summary'},
       'is_disabled': false,
-      'requires_payment': false,
+      'requires_payment': requiresPayment,
       'icon_url': 'https://addons.mozilla.org/icon.png',
       'current_version': {
         'version': version,

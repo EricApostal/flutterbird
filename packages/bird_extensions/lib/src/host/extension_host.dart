@@ -373,6 +373,12 @@ class ExtensionHost {
         }
         return null;
 
+      case 'log':
+        _trace(
+          () => 'context ${context.contextId} ${at(0)}: ${_brief(at(1), 800)}',
+        );
+        return null;
+
       case 'contentSize':
         final width = at(0);
         final height = at(1);

@@ -118,6 +118,42 @@
     return event;
   }
 
+  // Lets the browser's log say what went wrong in an extension's own code.
+  function logToBrowser(kind, text) {
+    tell('bird', 'log', [kind, String(text).slice(0, 800)]);
+  }
+
+  if (typeof globalThis.addEventListener === 'function') {
+    globalThis.addEventListener('error', function (event) {
+      var file = String(event.filename || '');
+      if (file.indexOf('moz-extension://') !== 0) return;
+      logToBrowser('error', event.message + ' at ' + file + ':' + event.lineno + ':' + event.colno);
+    });
+    globalThis.addEventListener('unhandledrejection', function (event) {
+      var reason = event.reason;
+      var stack = reason && reason.stack ? String(reason.stack) : '';
+      var text = stack || String(reason && reason.message ? reason.name + ': ' + reason.message : reason);
+      // A page's own rejections are its business; whatever has no stack to tell is still reported.
+      if (stack && stack.indexOf('moz-extension://') < 0) return;
+      logToBrowser('unhandled rejection', text);
+    });
+  }
+
+  ['error', 'warn'].forEach(function (level) {
+    var original = globalThis.console && globalThis.console[level];
+    if (typeof original !== 'function') return;
+    globalThis.console[level] = function () {
+      try {
+        logToBrowser('console.' + level, Array.prototype.map.call(arguments, function (value) {
+          return value && value.stack ? value.stack : String(value);
+        }).join(' '));
+      } catch (ignored) {
+        // Logging must never get in the way of the extension.
+      }
+      return original.apply(this, arguments);
+    };
+  });
+
   function reportListenerError(error) {
     try {
       console.error(error);
