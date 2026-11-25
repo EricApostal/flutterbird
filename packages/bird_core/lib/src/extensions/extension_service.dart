@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
+
 import 'package:bird_extensions/bird_extensions.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:ladybird/ladybird.dart';
@@ -72,6 +74,7 @@ class ExtensionService {
       registry: registry,
       transport: EngineExtensionTransport(engine),
       browser: browser,
+      trace: debugPrint,
       stateBuilder: EngineStateBuilder(
         registry: registry,
         platform: _platform,
@@ -135,7 +138,8 @@ class ExtensionService {
     final intercepts = engine.interceptRequests.listen((request) async {
       var verdict = '{}';
       try {
-        final details = (jsonDecode(request.detailsJson) as Map).cast<String, Object?>();
+        final details = (jsonDecode(request.detailsJson) as Map)
+            .cast<String, Object?>();
         details['tabId'] = request.viewId ?? -1;
         verdict = await webRequest.intercept(details);
       } on Object {

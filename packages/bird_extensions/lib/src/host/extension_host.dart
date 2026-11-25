@@ -23,6 +23,7 @@ class ExtensionHost {
     required this.stateBuilder,
     required Iterable<ApiNamespace> apis,
     this.browser,
+    this.trace,
   }) {
     for (final api in [RuntimeApi(), ...apis]) {
       _apis[api.name] = api;
@@ -36,6 +37,20 @@ class ExtensionHost {
   /// The browser's tabs and where to run background pages. Null in a host
   /// that has no browser around it, such as in a test of one API.
   final BrowserBridge? browser;
+
+  /// Where a line goes for everything that passes between the host and an
+  /// extension's contexts, for working out why an extension does not work.
+  final void Function(String line)? trace;
+
+  void _trace(String Function() line) {
+    final sink = trace;
+    if (sink != null) sink('[extensions] ${line()}');
+  }
+
+  static String _brief(Object? value, [int limit = 240]) {
+    final text = value is String ? value : jsonEncode(value);
+    return text.length <= limit ? text : '${text.substring(0, limit)}...';
+  }
 
   final Map<String, ApiNamespace> _apis = {};
   final Map<int, ExtensionContext> _contexts = {};
@@ -203,6 +218,11 @@ class ExtensionHost {
 
   void _onContextCreated(ExtensionContext context) {
     _contexts[context.contextId] = context;
+    _trace(
+      () =>
+          'context ${context.contextId} created (${context.kind.name}, '
+          'view ${context.viewId}) ${context.url}',
+    );
     for (final observer in _apis.values.whereType<ContextObserver>()) {
       observer.contextCreated(this, context);
     }
@@ -210,6 +230,7 @@ class ExtensionHost {
 
   void _onContextDestroyed(int contextId) {
     final context = _contexts.remove(contextId);
+    _trace(() => 'context $contextId destroyed');
     events.dropContext(contextId);
 
     // Whoever was asked to answer from here never will.
@@ -251,6 +272,9 @@ class ExtensionHost {
     final args = decoded['args'];
     if (id is! int || ns is! String || method is! String) return;
 
+    _trace(
+      () => 'context ${context.contextId} -> $ns.$method ${_brief(args)}',
+    );
     unawaited(
       _handleCall(context, id, ns, method, args is List ? args : const []),
     );
@@ -303,6 +327,11 @@ class ExtensionHost {
   }
 
   void _reply(int contextId, int id, {Object? result, String? error}) {
+    _trace(
+      () =>
+          'context $contextId <- reply $id '
+          '${error != null ? 'ERROR $error' : _brief(result)}',
+    );
     transport.send(
       contextId,
       jsonEncode({
@@ -324,6 +353,9 @@ class ExtensionHost {
       case 'respond':
         final token = at(0);
         final body = at(1);
+        _trace(
+          () => 'context ${context.contextId} answered #$token ${_brief(body)}',
+        );
         if (token is int && body is Map) {
           _dispatches[token]?.answer(
             context.contextId,
@@ -464,6 +496,12 @@ class ExtensionHost {
     final token = _nextToken++;
     final dispatch = _Dispatch(targets.map((target) => target.contextId));
     _dispatches[token] = dispatch;
+    _trace(
+      () =>
+          'runtime.onMessage #$token to '
+          '${targets.map((target) => target.contextId).toList()}: '
+          '${_brief(message)}',
+    );
 
     final payload = jsonEncode({
       'event': 'runtime.onMessage',
