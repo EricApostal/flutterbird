@@ -61,6 +61,22 @@ class _ActionButtonState extends ConsumerState<_ActionButton> {
           .where((uuid) => uuid == widget.extension.uuid)
           .listen(refresh),
     );
+    // An extension can open its own popup, as a password manager does when it
+    // needs to be unlocked.
+    _subscriptions.add(
+      service.actions.popupRequests
+          .where((uuid) => uuid == widget.extension.uuid)
+          .listen((_) {
+            if (!mounted) return;
+            final state = service.actions.stateFor(
+              widget.extension.uuid,
+              tabId: ref.read(browserBridgeProvider)?.activeTabId,
+            );
+            if (state.popup != null && state.popup!.isNotEmpty) {
+              _overlay.show();
+            }
+          }),
+    );
     final bridge = ref.read(browserBridgeProvider);
     if (bridge != null) _subscriptions.add(bridge.tabEvents.listen(refresh));
   }

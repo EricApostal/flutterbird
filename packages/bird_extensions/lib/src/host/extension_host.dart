@@ -47,6 +47,15 @@ class ExtensionHost {
     if (sink != null) sink('[extensions] ${line()}');
   }
 
+  /// Lets an API add a line to the trace, for what it does that no call shows.
+  void note(String Function() line) => _trace(line);
+
+  // Calls that are only the plumbing of other calls, or that happen hundreds
+  // of times a minute in an extension that blocks requests, say nothing a
+  // reader needs; what remains is what an extension asked for and what failed.
+  static bool _isQuiet(String ns, String method) =>
+      ns == 'bird' && (method == 'respond' || method == 'documentEvent');
+
   static String _brief(Object? value, [int limit = 240]) {
     final text = value is String ? value : jsonEncode(value);
     return text.length <= limit ? text : '${text.substring(0, limit)}...';
@@ -280,9 +289,11 @@ class ExtensionHost {
     final args = decoded['args'];
     if (id is! int || ns is! String || method is! String) return;
 
-    _trace(
-      () => 'context ${context.contextId} -> $ns.$method ${_brief(args)}',
-    );
+    if (!_isQuiet(ns, method)) {
+      _trace(
+        () => 'context ${context.contextId} -> $ns.$method ${_brief(args)}',
+      );
+    }
     unawaited(
       _handleCall(context, id, ns, method, args is List ? args : const []),
     );
@@ -335,11 +346,11 @@ class ExtensionHost {
   }
 
   void _reply(int contextId, int id, {Object? result, String? error}) {
-    _trace(
-      () =>
-          'context $contextId <- reply $id '
-          '${error != null ? 'ERROR $error' : _brief(result)}',
-    );
+    // A reply that carries nothing went well, and a call that did not is the
+    // one worth a line.
+    if (error != null) {
+      _trace(() => 'context $contextId <- reply $id ERROR $error');
+    }
     transport.send(
       contextId,
       jsonEncode({
@@ -361,9 +372,12 @@ class ExtensionHost {
       case 'respond':
         final token = at(0);
         final body = at(1);
-        _trace(
-          () => 'context ${context.contextId} answered #$token ${_brief(body)}',
-        );
+        // Whether an answer was given is told by what was asked, not here.
+        if (body is Map && body['error'] != null) {
+          _trace(
+            () => 'context ${context.contextId} answered #$token ${_brief(body)}',
+          );
+        }
         if (token is int && body is Map) {
           _dispatches[token]?.answer(
             context.contextId,
@@ -542,6 +556,17 @@ class ExtensionHost {
     }
 
     if (dispatch.isFinished) _dispatches.remove(token);
+    if (trace != null) {
+      dispatch.completer.future.then(
+        (answer) => _trace(
+          () =>
+              'runtime.onMessage #$token '
+              '${answer == null ? 'was not answered' : 'was answered: ${_brief(answer)}'}',
+        ),
+        onError: (Object error) =>
+            _trace(() => 'runtime.onMessage #$token failed: $error'),
+      );
+    }
     return dispatch.completer.future;
   }
 

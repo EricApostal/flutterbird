@@ -250,6 +250,22 @@ one-line call into new files; do not append at the tail of lists.
 | `host/extension_transport.dart` | The channel interface; the app implements it over the engine's C API |
 | `bin/bird_ext.dart` | CLI: `info`, `install`, `load`, `update`, `list`, `uninstall` |
 
+## Native messaging
+
+`runtime.connectNative` and `runtime.sendNativeMessage` (extension pages only)
+are the `native` namespace of `host/native_messaging_api.dart`. Hosts are found
+where Firefox looks for them (`~/Library/Application Support/Mozilla/
+NativeMessagingHosts` and the system one on macOS, `~/.mozilla/native-messaging-hosts`
+and the system ones on Linux; Windows keeps them in the registry, which is not
+read yet). A host manifest must be `type: stdio`, have an absolute `path`, and
+list the extension's id in `allowed_extensions`. The program is started with the
+manifest's path and the extension id, and speaks JSON after a four byte length in
+the machine's byte order, at most 1 MB from the host. A host name that is not
+dot-separated words is refused, so it cannot name a path. Tested end to end
+against a fake host (`test/native_messaging_test.dart`). Not verified: whether a
+real host accepts this browser. 1Password's helper may check which browser started
+it and refuse an unknown one.
+
 ## Known gaps
 
 - Themes, dictionaries and language packs are rejected (themes are cheap: a

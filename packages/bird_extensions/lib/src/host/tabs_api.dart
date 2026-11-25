@@ -372,3 +372,102 @@ class TabsApi extends ApiNamespace {
     return null;
   }
 }
+
+// ---------------------------------------------------------------- scripting
+
+/// `browser.scripting`: running an extension's scripts and stylesheets in the
+/// documents of a tab, in the world its content scripts run in.
+class ScriptingApi extends ApiNamespace {
+  @override
+  String get name => 'scripting';
+
+  @override
+  String? get requiredPermission => 'scripting';
+
+  @override
+  Future<Object?> call(ApiCall call) async {
+    final injection = call.arg(0);
+    final target = injection is Map ? injection['target'] : null;
+    if (injection is! Map || target is! Map || target['tabId'] is! int) {
+      throw ApiException('scripting.${call.method} needs a target tab');
+    }
+    if (injection['world'] == 'MAIN') {
+      throw ApiException('Running in the main world is not supported yet');
+    }
+
+    final targets = _targets(call, target).toList();
+
+    switch (call.method) {
+      case 'executeScript':
+        final code = await _source(call, injection, 'code');
+        // One answer per document, so that each result names its frame.
+        return Future.wait([
+          for (final context in targets)
+            call.host.askContexts([context], 'bird.eval', [code]).then(
+              (values) => <String, Object?>{
+                'frameId': call.host.frameIdOf(context),
+                'result': values.isNotEmpty ? values.first : null,
+              },
+              onError: (Object error) => <String, Object?>{
+                'frameId': call.host.frameIdOf(context),
+                'error': {'message': '$error'},
+              },
+            ),
+        ]);
+      case 'insertCSS':
+        final css = await _source(call, injection, 'css');
+        for (final context in targets) {
+          call.host.dispatchEvent(context.contextId, 'bird.insertCss', [css]);
+        }
+        return null;
+      default:
+        throw ApiException('scripting.${call.method} is not supported');
+    }
+  }
+
+  Iterable<ExtensionContext> _targets(
+    ApiCall call,
+    Map<Object?, Object?> target,
+  ) {
+    final frames = target['frameIds'];
+    final all = target['allFrames'] == true;
+    return call.host.contextsOf(call.extension.uuid).where((context) {
+      if (context.kind != ExtensionContextKind.contentScript ||
+          context.viewId != target['tabId']) {
+        return false;
+      }
+      if (frames is List) return frames.contains(call.host.frameIdOf(context));
+      return all || context.isTopLevel;
+    });
+  }
+
+  /// The text under [inline], or that of the extension's `files`, in order.
+  Future<String> _source(
+    ApiCall call,
+    Map<Object?, Object?> injection,
+    String inline,
+  ) async {
+    final text = injection[inline];
+    if (text is String) return text;
+
+    final files = injection['files'];
+    if (files is! List || files.isEmpty) {
+      throw ApiException('scripting.${call.method} needs "files"');
+    }
+    final parts = <String>[];
+    for (final file in files) {
+      final path = file is String ? normalizeResourcePath(file) : null;
+      if (path == null) throw ApiException('Invalid file "$file"');
+      try {
+        parts.add(
+          await File(
+            '${call.host.registry.directoryFor(call.extension).path}/$path',
+          ).readAsString(),
+        );
+      } on FileSystemException {
+        throw ApiException('Could not read "$file"');
+      }
+    }
+    return parts.join(inline == 'css' ? '\n' : '\n;\n');
+  }
+}

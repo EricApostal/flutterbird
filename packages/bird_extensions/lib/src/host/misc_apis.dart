@@ -223,6 +223,7 @@ class CommandsApi extends ApiNamespace {
             },
         ];
       case 'reset':
+      case 'update':
         return null;
       default:
         throw ApiException('commands.${call.method} is not supported');

@@ -90,6 +90,9 @@ void main() {
     final entry = (built['extensions']! as List).single as Map<String, Object?>;
     expect(entry['uuid'], installed.uuid);
     expect(entry['id'], 'sample@test');
+    // What its own pages may read from without CORS.
+    expect(entry['hostPermissions'], installed.grantedOrigins);
+    expect(entry['hostPermissions'], isNotEmpty);
 
     final script =
         (entry['contentScripts']! as List).single as Map<String, Object?>;

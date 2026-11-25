@@ -147,6 +147,9 @@ class EngineStateBuilder {
       // A string, because the engine pastes it into `__bird_init = <this>;`.
       'init': jsonEncode(init),
       'contentScripts': scripts,
+      // The hosts the extension was granted, which its own pages may read from
+      // without CORS.
+      'hostPermissions': extension.grantedOrigins,
       // What web pages may load from the extension.
       'webAccessible': [
         for (final rule in manifest.webAccessibleResources)

@@ -39,6 +39,15 @@ class ActionStore {
   /// The uuid of an extension whose button changed.
   Stream<String> get changes => _changes.stream;
 
+  final StreamController<String> _popupRequests =
+      StreamController<String>.broadcast();
+
+  /// The uuid of an extension that asked for its popup to open, as
+  /// `browserAction.openPopup` does.
+  Stream<String> get popupRequests => _popupRequests.stream;
+
+  void requestPopup(String uuid) => _popupRequests.add(uuid);
+
   /// Sets the manifest's own values, which show until an extension changes them.
   void setDefaults(InstalledExtension extension, Manifest manifest) {
     final spec = manifest.action;
@@ -47,7 +56,12 @@ class ActionStore {
       popup: spec?.defaultPopup,
       badgeText: '',
       enabled: true,
-      iconPath: spec == null ? null : bestIconPath(spec.defaultIcon, 16),
+      // An extension whose button names no icon shows the one of the
+      // extension itself, as in Firefox. The button is 20 points wide, which
+      // is 40 pixels on the screens that most need a sharp one.
+      iconPath:
+          (spec == null ? null : bestIconPath(spec.defaultIcon, 32)) ??
+          bestIconPath(manifest.icons, 32),
     );
     _changes.add(extension.uuid);
   }
@@ -181,8 +195,12 @@ class ActionApi extends ApiNamespace {
         final path = _iconPath(map['path']);
         if (path != null) store.update(uuid, tabId, (s) => s.iconPath = path);
         return null;
+      case 'getUserSettings':
+        // Every extension's button is on the toolbar.
+        return {'isOnToolbar': true};
       case 'openPopup':
-        throw ApiException('$name.openPopup is not supported');
+        store.requestPopup(uuid);
+        return null;
       default:
         throw ApiException('$name.${call.method} is not supported');
     }
@@ -197,7 +215,7 @@ class ActionApi extends ApiNamespace {
               normalizeResourcePath(entry.value as String) != null)
             entry.key.toString(): normalizeResourcePath(entry.value as String)!,
       };
-      return bestIconPath(sizes, 16);
+      return bestIconPath(sizes, 32);
     }
     return null;
   }

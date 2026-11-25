@@ -27,10 +27,13 @@ class ExtensionService {
     required ExtensionEngineBridge bridge,
     required IoHttpFetcher fetcher,
     required List<StreamSubscription<Object?>> subscriptions,
-  }) : _bridge = bridge,
+    required IOSink traceFile,
+  }) : _traceFile = traceFile,
+       _bridge = bridge,
        _fetcher = fetcher,
        _subscriptions = subscriptions;
 
+  final IOSink _traceFile;
   final ExtensionRegistry registry;
   final ExtensionInstaller installer;
   final ExtensionHost host;
@@ -70,11 +73,18 @@ class ExtensionService {
     final webRequest = WebRequestApi();
     final contentScripts = ContentScriptsApi();
 
+    // Temporary, while extensions are being made to work: the trace of the
+    // latest run is also kept in a file, whole, where console output is not.
+    final traceFile = File('${root.path}/trace.log').openWrite();
+
     final host = ExtensionHost(
       registry: registry,
       transport: EngineExtensionTransport(engine),
       browser: browser,
-      trace: debugPrint,
+      trace: (line) {
+        debugPrint(line);
+        traceFile.writeln('${DateTime.now().toIso8601String()} $line');
+      },
       stateBuilder: EngineStateBuilder(
         registry: registry,
         platform: _platform,
@@ -96,6 +106,12 @@ class ExtensionService {
         CommandsApi(),
         PermissionsApi(),
         DnsApi(),
+        NativeMessagingApi(),
+        IdleApi(),
+        NotificationsApi(),
+        ManagementApi(),
+        DownloadsApi(),
+        ScriptingApi(),
         contentScripts,
         webRequest,
       ],
@@ -150,6 +166,7 @@ class ExtensionService {
     engine.startIntercepting();
 
     return ExtensionService._(
+      traceFile: traceFile,
       registry: registry,
       installer: installer,
       host: host,
@@ -216,6 +233,7 @@ class ExtensionService {
     }
     _bridge.stop();
     await host.dispose();
+    await _traceFile.close();
     await registry.dispose();
     _fetcher.close();
   }

@@ -126,7 +126,8 @@
   if (typeof globalThis.addEventListener === 'function') {
     globalThis.addEventListener('error', function (event) {
       var file = String(event.filename || '');
-      if (file.indexOf('moz-extension://') !== 0) return;
+      // In an extension's own page every error is the extension's.
+      if (!isExtensionPage && file.indexOf('moz-extension://') !== 0) return;
       logToBrowser('error', event.message + ' at ' + file + ':' + event.lineno + ':' + event.colno);
     });
     globalThis.addEventListener('unhandledrejection', function (event) {
@@ -134,7 +135,7 @@
       var stack = reason && reason.stack ? String(reason.stack) : '';
       var text = stack || String(reason && reason.message ? reason.name + ': ' + reason.message : reason);
       // A page's own rejections are its business; whatever has no stack to tell is still reported.
-      if (stack && stack.indexOf('moz-extension://') < 0) return;
+      if (!isExtensionPage && stack && stack.indexOf('moz-extension://') < 0) return;
       logToBrowser('unhandled rejection', text);
     });
   }
@@ -404,6 +405,77 @@
     }
   }
 
+  // ---------------------------------------------------------------- native messaging
+
+  var nativePorts = new Map();
+  var nextNativePort = 1;
+
+  function finishNativePort(portId, errorMessage) {
+    var entry = nativePorts.get(portId);
+    if (!entry || entry.closed) return;
+    entry.closed = true;
+    nativePorts.delete(portId);
+    if (errorMessage) entry.port.error = { message: String(errorMessage) };
+    entry.port.onDisconnect._listeners.slice().forEach(function (listener) {
+      try {
+        listener(entry.port);
+      } catch (error) {
+        reportListenerError(error);
+      }
+    });
+  }
+
+  function dispatchNativeEvent(message) {
+    var args = message.args || [];
+    var entry = nativePorts.get(args[0]);
+    if (!entry) return;
+
+    if (message.event === 'bird.nativeDisconnect') {
+      finishNativePort(args[0], args[1]);
+      return;
+    }
+    entry.port.onMessage._listeners.slice().forEach(function (listener) {
+      try {
+        listener(args[1], entry.port);
+      } catch (error) {
+        reportListenerError(error);
+      }
+    });
+  }
+
+  // runtime.connectNative: a port to a program installed on the computer.
+  function connectNative(application) {
+    var portId = 'native:' + nextNativePort++;
+    var entry = { closed: false, port: null };
+    var port = {
+      name: String(application),
+      error: null,
+      onMessage: createEvent(null, false),
+      onDisconnect: createEvent(null, false),
+      postMessage: function (message) {
+        if (entry.closed) throw new Error('Attempt to postMessage on disconnected port');
+        tell('native', 'post', [portId, message]);
+      },
+      disconnect: function () {
+        if (entry.closed) return;
+        entry.closed = true;
+        nativePorts.delete(portId);
+        tell('native', 'close', [portId]);
+      },
+    };
+    entry.port = port;
+    nativePorts.set(portId, entry);
+
+    call('native', 'connect', [String(application), portId]).catch(function (error) {
+      finishNativePort(portId, error && error.message);
+    });
+    return port;
+  }
+
+  function sendNativeMessage(application, message) {
+    return call('native', 'send', [String(application), message]);
+  }
+
   // ---------------------------------------------------------------- receiving
 
   setReceiver(function (text) {
@@ -428,6 +500,7 @@
 
     if (name === 'bird.portMessage' || name === 'bird.portDisconnect') dispatchPortEvent(message);
     else if (name === 'bird.eval' || name === 'bird.insertCss') dispatchBirdEvent(message);
+    else if (name === 'bird.nativeMessage' || name === 'bird.nativeDisconnect') dispatchNativeEvent(message);
     else if (name === 'runtime.onConnect') dispatchConnect(message);
     else if (message.token !== undefined) dispatchAnswered(message, name === 'runtime.onMessage');
     else dispatchPlainEvent(message);
@@ -545,6 +618,9 @@
     onUpdateAvailable: createEvent('runtime.onUpdateAvailable', true),
     // Messages from other extensions and web pages are not supported, so these never fire.
     onMessageExternal: createEvent(null, false),
+    // The background page is never suspended, so these never fire either.
+    onSuspend: createEvent(null, false),
+    onSuspendCanceled: createEvent(null, false),
     onConnectExternal: createEvent(null, false),
     lastError: undefined,
   };
@@ -698,7 +774,7 @@
     var api = defineCalls({}, ns, [
       'setTitle', 'getTitle', 'setIcon', 'setPopup', 'getPopup', 'setBadgeText', 'getBadgeText',
       'setBadgeBackgroundColor', 'getBadgeBackgroundColor', 'setBadgeTextColor',
-      'getBadgeTextColor', 'enable', 'disable', 'isEnabled', 'openPopup',
+      'getBadgeTextColor', 'enable', 'disable', 'isEnabled', 'openPopup', 'getUserSettings',
     ]);
     return defineEvents(api, ns, ['onClicked']);
   }
@@ -731,23 +807,83 @@
   };
   defineEvents(alarms, 'alarms', ['onAlarm']);
 
-  var commands = defineCalls({}, 'commands', ['getAll', 'reset']);
+  var commands = defineCalls({}, 'commands', ['getAll', 'reset', 'update']);
   defineEvents(commands, 'commands', ['onCommand']);
 
   var permissions = defineCalls({}, 'permissions', ['contains', 'getAll', 'request', 'remove']);
+  // Asking for access to one host from the toolbar is not offered.
+  permissions.addHostAccessRequest = function () {
+    return Promise.resolve();
+  };
+  permissions.removeHostAccessRequest = function () {
+    return Promise.resolve();
+  };
   defineEvents(permissions, 'permissions', ['onAdded', 'onRemoved']);
 
-  // Settings the browser has no way to change are reported as left alone.
-  function setting(value) {
+  var idle = defineCalls({}, 'idle', ['queryState']);
+  idle.setDetectionInterval = function (seconds) {
+    tell('idle', 'setDetectionInterval', [seconds]);
+  };
+  defineEvents(idle, 'idle', ['onStateChanged']);
+
+  var notifications = defineCalls({}, 'notifications', ['update', 'clear', 'getAll']);
+  // create([id], options)
+  notifications.create = function (first, second) {
+    var named = typeof first === 'string';
+    return call('notifications', 'create', [named ? first : '', named ? second : first]);
+  };
+  defineEvents(notifications, 'notifications', ['onClicked', 'onButtonClicked', 'onClosed', 'onShown']);
+
+  var management = defineCalls({}, 'management', ['getSelf', 'getAll', 'setEnabled']);
+  defineEvents(management, 'management', ['onInstalled', 'onUninstalled', 'onEnabled', 'onDisabled']);
+
+  var downloads = defineCalls({}, 'downloads', ['download', 'search', 'cancel', 'erase', 'open', 'show']);
+  defineEvents(downloads, 'downloads', ['onCreated', 'onChanged', 'onErased']);
+
+  var scripting = {
+    executeScript: function (injection) {
+      var request = Object.assign({}, injection);
+      // A function is sent as code that calls it with its arguments.
+      var func = request.func || request.function;
+      if (typeof func === 'function') {
+        request.code = '(' + func.toString() + ').apply(null, ' + JSON.stringify(request.args || []) + ')';
+        delete request.func;
+        delete request.function;
+        delete request.args;
+      }
+      return call('scripting', 'executeScript', [request]);
+    },
+    insertCSS: function (injection) {
+      return call('scripting', 'insertCSS', [injection]);
+    },
+    removeCSS: function () {
+      return Promise.resolve();
+    },
+  };
+
+  // The browser has none of these to change, so each remembers what was asked
+  // of it for as long as the page lasts and changes nothing.
+  function setting(initial) {
+    var value = initial;
+    var controlled = false;
     return {
       get: function () {
-        return Promise.resolve({ value: value, levelOfControl: 'controllable_by_this_extension' });
+        return Promise.resolve({
+          value: value,
+          levelOfControl: controlled ? 'controlled_by_this_extension' : 'controllable_by_this_extension',
+        });
       },
-      set: function () {
-        return Promise.resolve();
+      set: function (details) {
+        if (details && 'value' in details) {
+          value = details.value;
+          controlled = true;
+        }
+        return Promise.resolve(true);
       },
       clear: function () {
-        return Promise.resolve();
+        value = initial;
+        controlled = false;
+        return Promise.resolve(true);
       },
       onChange: createEvent(null, false),
     };
@@ -759,7 +895,14 @@
       peerConnectionEnabled: setting(true),
       httpsOnlyMode: setting('never'),
     },
-    services: {},
+    // The browser saves no passwords and fills nothing in, which is what a
+    // password manager asks before it offers to take over.
+    services: {
+      passwordSavingEnabled: setting(false),
+      autofillAddressEnabled: setting(false),
+      autofillCreditCardEnabled: setting(false),
+      autofillEnabled: setting(false),
+    },
     websites: {
       hyperlinkAuditingEnabled: setting(true),
       referrersEnabled: setting(true),
@@ -819,6 +962,8 @@
   // The rest of the API is for the extension's own pages, as in Firefox: content
   // scripts get runtime, storage, i18n and extension, and little else.
   if (isExtensionPage) {
+    runtime.connectNative = connectNative;
+    runtime.sendNativeMessage = sendNativeMessage;
     browser.tabs = tabs;
     browser.windows = windows;
     browser.webNavigation = webNavigation;
@@ -832,6 +977,11 @@
     browser.permissions = permissions;
     browser.privacy = privacy;
     browser.dns = dns;
+    browser.idle = idle;
+    browser.notifications = notifications;
+    browser.management = management;
+    browser.downloads = downloads;
+    browser.scripting = scripting;
     browser.contentScripts = contentScripts;
   }
 

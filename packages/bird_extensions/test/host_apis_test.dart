@@ -18,6 +18,10 @@ const _all = [
   'alarms',
   'dns',
   'menus',
+  'idle',
+  'notifications',
+  'scripting',
+  'downloads',
   '<all_urls>',
 ];
 
@@ -72,6 +76,11 @@ void main() {
         CommandsApi(),
         PermissionsApi(),
         DnsApi(),
+        IdleApi(),
+        NotificationsApi(),
+        ManagementApi(),
+        DownloadsApi(),
+        ScriptingApi(),
         contentScripts,
         webRequest,
       ],
@@ -647,7 +656,130 @@ void main() {
     });
   });
 
+  group('APIs an extension touches as it starts', () {
+    test('are all there to add listeners to', () async {
+      final extension = await install();
+      await host.start();
+      final page = await open(extension, isPage: true);
+
+      // A missing one of these throws and stops a background page partway
+      // through starting, which leaves it deaf to its own content scripts.
+      expect(
+        await page.world.run('''
+          chrome.notifications.onClicked.addListener(() => {});
+          chrome.notifications.onButtonClicked.addListener(() => {});
+          chrome.notifications.onClosed.addListener(() => {});
+          browser.idle.onStateChanged.addListener(() => {});
+          browser.idle.setDetectionInterval(60);
+          browser.management.onEnabled.addListener(() => {});
+          browser.downloads.onChanged.addListener(() => {});
+          browser.runtime.onSuspend.addListener(() => {});
+          typeof browser.scripting.executeScript
+        '''),
+        'function',
+      );
+    });
+
+    test('answer', () async {
+      final extension = await install();
+      await host.start();
+      final page = await open(extension, isPage: true);
+
+      final answers = jsonDecode(
+        jsonEncode(
+          await page.world.run('''
+            Promise.all([
+              browser.idle.queryState(60),
+              chrome.notifications.create('saved', {type: 'basic', title: 't', message: 'm'}),
+              browser.notifications.clear('saved'),
+              browser.management.getSelf().then((self) => self.id),
+              browser.browserAction.getUserSettings().then((s) => s.isOnToolbar),
+            ])
+          '''),
+        ),
+      );
+      expect(answers, ['active', 'saved', true, extension.id, true]);
+    });
+
+    test('privacy settings answer a callback and remember a change', () async {
+      final extension = await install();
+      await host.start();
+      final page = await open(extension, isPage: true);
+
+      // The chrome form, with a callback, as a password manager calls it.
+      final values = jsonDecode(
+        jsonEncode(
+          await page.world.run('''
+            (async () => {
+              const read = () => new Promise((done) =>
+                chrome.privacy.services.passwordSavingEnabled.get({}, (s) => done(s)));
+              const before = await read();
+              await browser.privacy.services.passwordSavingEnabled.set({value: true});
+              const after = await read();
+              await browser.privacy.services.autofillEnabled.get({});
+              await browser.privacy.services.autofillAddressEnabled.get({});
+              await browser.privacy.services.autofillCreditCardEnabled.get({});
+              return [before.value, before.levelOfControl, after.value, after.levelOfControl];
+            })()
+          '''),
+        ),
+      );
+      expect(values, [
+        false,
+        'controllable_by_this_extension',
+        true,
+        'controlled_by_this_extension',
+      ]);
+    });
+
+    test('scripting runs a function in a tab and names the frame', () async {
+      final extension = await install();
+      await host.start();
+      final page = await open(extension, isPage: true);
+      await open(extension, viewId: 1);
+
+      final results = jsonDecode(
+        jsonEncode(
+          await page.world.run('''
+            browser.scripting.executeScript({
+              target: {tabId: 1},
+              func: (a, b) => a + b,
+              args: [2, 3],
+            })
+          '''),
+        ),
+      );
+      expect(results, [
+        {'frameId': 0, 'result': 5},
+      ]);
+    });
+  });
+
   group('browserAction', () {
+    test('shows the extension\'s own icon when the button names none', () async {
+      final extension = await install();
+      await host.start();
+
+      // The sample extension has icons and no browser_action.
+      final manifest = (await host.manifestOf(extension))!;
+      actions.setDefaults(extension, manifest);
+      expect(actions.stateFor(extension.uuid).iconPath, 'icon.png');
+    });
+
+    test('openPopup asks the app to open the popup', () async {
+      final extension = await install();
+      await host.start();
+      final page = await open(extension, isPage: true);
+
+      final requests = <String>[];
+      final subscription = actions.popupRequests.listen(requests.add);
+      await page.world.run('browser.browserAction.openPopup()');
+      await eventually(() async => requests.isNotEmpty);
+      await subscription.cancel();
+
+      expect(requests, [extension.uuid]);
+    });
+
     test('keeps what the extension sets, per tab and overall', () async {
       final extension = await install();
       await host.start();
@@ -676,7 +808,7 @@ void main() {
         255,
       ]);
       expect(actions.stateFor(extension.uuid).title, 'Blocked');
-      expect(actions.stateFor(extension.uuid).iconPath, 'img/a.png');
+      expect(actions.stateFor(extension.uuid).iconPath, 'img/b.png');
       expect(
         await page.world.run('browser.browserAction.getBadgeText({tabId: 7})'),
         '3',
