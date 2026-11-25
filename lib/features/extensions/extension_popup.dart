@@ -73,20 +73,19 @@ class _ExtensionPopupState extends State<ExtensionPopup> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return Material(
-      elevation: 6,
-      color: omniboxSurfaceColor(theme),
-      borderRadius: BorderRadius.circular(kOmniboxFieldRadius),
-      clipBehavior: Clip.antiAlias,
-      child: IgnorePointer(
-        ignoring: !_measured,
-        child: Opacity(
-          opacity: _measured ? 1 : 0,
-          child: SizedBox(
-            width: _size.width,
-            height: _size.height,
-            child: LadybirdView(controller: _controller),
-          ),
+    // Nothing of the popup shows until it has its size: not its page, and not
+    // the card it sits on, which would be as big as the most room it can have.
+    return Offstage(
+      offstage: !_measured,
+      child: Material(
+        elevation: 6,
+        color: omniboxSurfaceColor(theme),
+        borderRadius: BorderRadius.circular(kOmniboxFieldRadius),
+        clipBehavior: Clip.antiAlias,
+        child: SizedBox(
+          width: _size.width,
+          height: _size.height,
+          child: LadybirdView(controller: _controller),
         ),
       ),
     );

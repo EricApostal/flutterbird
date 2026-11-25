@@ -893,28 +893,37 @@
       if (!body || !root || !root.style) return;
 
       // A block fills the view, so its box says nothing about how much room its
-      // content wants. The root is laid out as wide as its content for the
-      // moment it takes to read the boxes, and put back before anything paints.
-      var savedWidth = root.style.getPropertyValue('width');
-      var savedWidthPriority = root.style.getPropertyPriority('width');
+      // content wants. The root is laid out as big as its content for the
+      // moment it takes to read it, and put back before anything paints.
+      var sides = [root.style, body.style];
+      var saved = sides.map(function (style) {
+        return ['width', 'height', 'min-height'].map(function (name) {
+          return [style.getPropertyValue(name), style.getPropertyPriority(name)];
+        });
+      });
       var width = 0;
       var height = 0;
       try {
         root.style.setProperty('width', 'max-content', 'important');
-        width = root.getBoundingClientRect().width;
-        var nodes = body.querySelectorAll('*');
-        for (var i = 0; i < nodes.length; i++) {
-          var rect = nodes[i].getBoundingClientRect();
-          if (rect.width === 0 && rect.height === 0) continue;
-          if (rect.bottom > height) height = rect.bottom;
-        }
+        root.style.setProperty('height', 'max-content', 'important');
+        root.style.setProperty('min-height', '0', 'important');
+        body.style.setProperty('height', 'auto', 'important');
+        body.style.setProperty('min-height', '0', 'important');
+        var box = root.getBoundingClientRect();
+        width = box.width;
+        height = box.height;
       } finally {
-        if (savedWidth) root.style.setProperty('width', savedWidth, savedWidthPriority);
-        else root.style.removeProperty('width');
+        sides.forEach(function (style, index) {
+          ['width', 'height', 'min-height'].forEach(function (name, position) {
+            var was = saved[index][position];
+            if (was[0]) style.setProperty(name, was[0], was[1]);
+            else style.removeProperty(name);
+          });
+        });
       }
 
       width = Math.ceil(width);
-      height = Math.ceil(height + (globalThis.scrollY || 0));
+      height = Math.ceil(height);
       if (width === 0 || height === 0) return;
       if (width === lastWidth && height === lastHeight) return;
       lastWidth = width;
