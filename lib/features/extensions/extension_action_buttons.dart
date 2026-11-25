@@ -138,6 +138,7 @@ class _ActionButtonState extends ConsumerState<_ActionButton> {
                     onTap: () {}, // swallow so it doesn't bubble to the barrier
                     child: ExtensionPopup(
                       url: '${extension.origin}/${state.popup}',
+                      contentSizes: service.host.contentSizes,
                       onClose: _overlay.hide,
                     ),
                   ),

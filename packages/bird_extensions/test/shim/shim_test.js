@@ -380,18 +380,63 @@ test('the browser identifies as Firefox, because that is the API on offer', asyn
   assert.ok(parseInt(info.version, 10) >= 115);
 });
 
-test('tracked events tell the browser when listeners come and go', () => {
+test('tracked events tell the browser about every listener that comes and goes', () => {
   const world = page();
   const sentAbout = () => world.sent.filter((m) => m.ns === 'events').map((m) => [m.method, ...m.args]);
 
   world.run('globalThis.a = () => {}; globalThis.b = () => {};');
   world.run('browser.tabs.onUpdated.addListener(a); browser.tabs.onUpdated.addListener(b);');
-  assert.deepEqual(sentAbout(), [['addListener', 'tabs.onUpdated', []]], 'only the first listener is announced');
+  assert.deepEqual(sentAbout(), [
+    ['addListener', 'tabs.onUpdated', []],
+    ['addListener', 'tabs.onUpdated', []],
+  ]);
 
   world.run('browser.tabs.onUpdated.removeListener(a);');
-  assert.equal(sentAbout().length, 1, 'one listener is still left');
+  assert.deepEqual(sentAbout().at(-1), ['removeListener', 'tabs.onUpdated', []]);
   world.run('browser.tabs.onUpdated.removeListener(b);');
-  assert.deepEqual(sentAbout().at(-1), ['removeListener', 'tabs.onUpdated']);
+  assert.equal(sentAbout().length, 4);
+});
+
+test('a webRequest listener only hears about requests its own filter covers', () => {
+  const world = page();
+  world.run(`
+    globalThis.heard = [];
+    browser.webRequest.onBeforeRequest.addListener(
+      (d) => { heard.push('guard:' + d.url); return { cancel: true }; },
+      { urls: ['moz-extension://abc/web_accessible_resources/*'] }, ['blocking']);
+    browser.webRequest.onBeforeRequest.addListener(
+      (d) => { heard.push('web:' + d.url); },
+      { urls: ['https://*/*', 'http://*/*'], types: ['script'] }, ['blocking']);
+    browser.webRequest.onCompleted.addListener((d) => heard.push('done:' + d.url), { urls: ['*://*.example.com/*'] });
+  `);
+
+  const ask = (token, url, type) =>
+    world.deliver({ event: 'webRequest.onBeforeRequest', args: [{ url, type }], token });
+  ask(1, 'https://www.google.com/a.js', 'script');
+  ask(2, 'https://www.google.com/pic.png', 'image');
+  ask(3, 'moz-extension://abc/web_accessible_resources/x.js', 'script');
+
+  assert.deepEqual(JSON.parse(JSON.stringify(world.run('heard'))), [
+    'web:https://www.google.com/a.js',
+    'guard:moz-extension://abc/web_accessible_resources/x.js',
+  ]);
+
+  const answers = world.sent.filter((m) => m.method === 'respond').map((m) => m.args);
+  assert.equal(answers.length, 3);
+  assert.deepEqual(JSON.parse(JSON.stringify(answers[0][1])), { handled: false }, 'the guard did not see the page request');
+  assert.deepEqual(JSON.parse(JSON.stringify(answers[2][1])), { handled: true, value: { cancel: true } });
+
+  world.deliver({ event: 'webRequest.onCompleted', args: [{ url: 'https://a.example.com/x', type: 'image' }] });
+  world.deliver({ event: 'webRequest.onCompleted', args: [{ url: 'https://example.org/x', type: 'image' }] });
+  assert.deepEqual(JSON.parse(JSON.stringify(world.run('heard'))).filter((h) => h.startsWith('done:')), ['done:https://a.example.com/x']);
+});
+
+test('a webRequest listener that did not ask to block is not asked to', () => {
+  const world = page();
+  world.run(`browser.webRequest.onBeforeRequest.addListener(() => ({ cancel: true }), { urls: ['<all_urls>'] });`);
+  world.deliver({ event: 'webRequest.onBeforeRequest', args: [{ url: 'https://a.com/', type: 'script' }], token: 1 });
+  const answer = world.sent.find((m) => m.method === 'respond');
+  assert.deepEqual(JSON.parse(JSON.stringify(answer.args[1])), { handled: false });
 });
 
 test('webRequest listeners send their filter and options with them', () => {
@@ -426,13 +471,13 @@ test('a blocking listener may answer with a promise, and one that returns nothin
   world.run(`
     browser.webRequest.onBeforeRequest.addListener(async () => ({redirectUrl: "https://x/y"}), {urls: ["<all_urls>"]}, ["blocking"]);
   `);
-  world.deliver({ event: 'webRequest.onBeforeRequest', args: [{}], token: 5 });
+  world.deliver({ event: 'webRequest.onBeforeRequest', args: [{ url: 'https://a.com/' }], token: 5 });
   await world.tick();
   assert.deepEqual(JSON.parse(JSON.stringify(answers(world))), [[5, { handled: true, value: { redirectUrl: 'https://x/y' } }]]);
 
   const quiet = page();
   quiet.run('browser.webRequest.onBeforeRequest.addListener(() => {}, {urls: ["<all_urls>"]}, ["blocking"]);');
-  quiet.deliver({ event: 'webRequest.onBeforeRequest', args: [{}], token: 6 });
+  quiet.deliver({ event: 'webRequest.onBeforeRequest', args: [{ url: 'https://a.com/' }], token: 6 });
   assert.deepEqual(JSON.parse(JSON.stringify(answers(quiet))), [[6, { handled: false }]]);
 });
 
@@ -566,4 +611,17 @@ test('dom.openOrClosedShadowRoot returns an open shadow root, else null', () => 
   assert.equal(world.run('browser.dom.openOrClosedShadowRoot({shadowRoot: "root"})'), 'root');
   assert.equal(world.run('browser.dom.openOrClosedShadowRoot({})'), null);
   assert.equal(world.run('browser.dom.openOrClosedShadowRoot(null)'), null);
+});
+
+test('a storage area has its own onChanged, and runtime has the external events', () => {
+  const world = page();
+  world.run(`
+    globalThis.seen = [];
+    browser.storage.sync.onChanged.addListener((changes) => seen.push(changes));
+    browser.storage.local.onChanged.addListener((changes) => seen.push('local'));
+    browser.runtime.onMessageExternal.addListener(() => {});
+    browser.runtime.onConnectExternal.addListener(() => {});
+  `);
+  world.deliver({ event: 'storage.onChanged', args: [{ k: { newValue: 1 } }, 'sync'] });
+  assert.deepEqual(JSON.parse(JSON.stringify(world.run('seen'))), [{ k: { newValue: 1 } }]);
 });

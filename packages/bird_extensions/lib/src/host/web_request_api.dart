@@ -100,7 +100,8 @@ class WebRequestApi extends ApiNamespace implements EventObserver {
     return host.events
         .contextsFor(event)
         .any(
-          (contextId) => _isBlocking(host.events.argumentsOf(event, contextId)),
+          (contextId) =>
+              host.events.argumentSetsOf(event, contextId).any(_isBlocking),
         );
   }
 
@@ -188,17 +189,16 @@ class WebRequestApi extends ApiNamespace implements EventObserver {
       }
       if (!_mayObserve(extension, details)) continue;
 
+      // A context is asked when any one of its listeners wants the request.
       final contexts = [
         for (final context in host.listeners(extension.uuid, event))
-          if (_passes(
-                (host.events.argumentsOf(event, context.contextId) ?? const [])
-                    .firstOrNull,
-                details,
-              ) &&
-              (!blocking ||
-                  _isBlocking(
-                    host.events.argumentsOf(event, context.contextId),
-                  )))
+          if (host.events
+              .argumentSetsOf(event, context.contextId)
+              .any(
+                (arguments) =>
+                    _passes(arguments.firstOrNull, details) &&
+                    (!blocking || _isBlocking(arguments)),
+              ))
             context,
       ];
       if (contexts.isNotEmpty) yield (extension, contexts);

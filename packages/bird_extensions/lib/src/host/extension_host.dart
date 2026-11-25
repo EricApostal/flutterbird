@@ -52,6 +52,13 @@ class ExtensionHost {
     return text.length <= limit ? text : '${text.substring(0, limit)}...';
   }
 
+  final StreamController<ExtensionContentSize> _contentSizes =
+      StreamController<ExtensionContentSize>.broadcast();
+
+  /// How much room the content of an extension's top-level page takes, each
+  /// time it changes. A popup is sized from this.
+  Stream<ExtensionContentSize> get contentSizes => _contentSizes.stream;
+
   final Map<String, ApiNamespace> _apis = {};
   final Map<int, ExtensionContext> _contexts = {};
   final Map<int, _Dispatch> _dispatches = {};
@@ -101,6 +108,7 @@ class ExtensionHost {
   }
 
   Future<void> dispose() async {
+    await _contentSizes.close();
     for (final subscription in _subscriptions) {
       await subscription.cancel();
     }
@@ -365,6 +373,16 @@ class ExtensionHost {
         }
         return null;
 
+      case 'contentSize':
+        final width = at(0);
+        final height = at(1);
+        if (width is num && height is num) {
+          _contentSizes.add(
+            ExtensionContentSize(context, width.toDouble(), height.toDouble()),
+          );
+        }
+        return null;
+
       case 'portPost':
         final portId = at(0);
         if (portId is! String) return null;
@@ -419,7 +437,10 @@ class ExtensionHost {
         }
         return null;
       case 'removeListener':
-        events.remove(event, context.contextId);
+        final rest = args.length > 1 && args[1] is List
+            ? args[1]! as List<Object?>
+            : null;
+        events.remove(event, context.contextId, rest);
         for (final observer in _apis.values.whereType<EventObserver>()) {
           observer.listenerRemoved(this, context, event);
         }
@@ -658,4 +679,13 @@ class _Dispatch {
     _awaiting.remove(contextId);
     if (_awaiting.isEmpty) completer.complete(collectAll ? _collected : null);
   }
+}
+
+/// The size of the content of a page of an extension, as it laid itself out.
+class ExtensionContentSize {
+  const ExtensionContentSize(this.context, this.width, this.height);
+
+  final ExtensionContext context;
+  final double width;
+  final double height;
 }

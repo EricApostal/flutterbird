@@ -8,6 +8,7 @@
 //   __bird_send(string)          send a string to the browser
 //   __bird_set_receiver(fn)      register fn(string) for strings from the browser
 //   __bird_phase(name)           ask the engine to run the content scripts due
+//   __bird_eval(code)            run code as a script and return its value
 //                                at "document_end" or "document_idle"
 //
 // Everything else an extension can do is built from those. A call becomes
@@ -25,6 +26,8 @@
   var sendNative = globalThis.__bird_send;
   var setReceiver = globalThis.__bird_set_receiver;
   var requestPhase = globalThis.__bird_phase;
+  // Runs code the way a content script runs, which a page's CSP does not limit.
+  var runCode = globalThis.__bird_eval;
 
   // The extension's own scripts share this realm, so keep the natives out of
   // their reach: they are the browser's, not part of any extension API.
@@ -33,6 +36,7 @@
     delete globalThis.__bird_send;
     delete globalThis.__bird_set_receiver;
     delete globalThis.__bird_phase;
+    delete globalThis.__bird_eval;
   } catch (e) {
     // A global that cannot be deleted is harmless; the copies above are used.
   }
@@ -84,22 +88,22 @@
   // last one leaves, so it only does work for events somebody wants.
   function createEvent(name, tracked) {
     var listeners = [];
+    // What followed each listener in addListener, such as a webRequest filter.
+    var extras = [];
     var event = {
       addListener: function (listener) {
         if (typeof listener !== 'function' || listeners.indexOf(listener) >= 0) return;
+        var extra = Array.prototype.slice.call(arguments, 1);
         listeners.push(listener);
-        if (tracked && listeners.length === 1) {
-          tell('events', 'addListener', [name, Array.prototype.slice.call(arguments, 1)]);
-        } else if (tracked && arguments.length > 1) {
-          // Extra arguments (a webRequest filter) belong to the newest listener.
-          tell('events', 'addListener', [name, Array.prototype.slice.call(arguments, 1)]);
-        }
+        extras.push(extra);
+        if (tracked) tell('events', 'addListener', [name, extra]);
       },
       removeListener: function (listener) {
         var index = listeners.indexOf(listener);
         if (index < 0) return;
         listeners.splice(index, 1);
-        if (tracked && listeners.length === 0) tell('events', 'removeListener', [name]);
+        var extra = extras.splice(index, 1)[0];
+        if (tracked) tell('events', 'removeListener', [name, extra]);
       },
       hasListener: function (listener) {
         return listeners.indexOf(listener) >= 0;
@@ -109,6 +113,7 @@
       },
     };
     Object.defineProperty(event, '_listeners', { value: listeners, enumerable: false });
+    Object.defineProperty(event, '_extras', { value: extras, enumerable: false });
     if (name) events[name] = event;
     return event;
   }
@@ -125,10 +130,76 @@
     return { message: error && error.message ? String(error.message) : String(error) };
   }
 
+  // Whether `url` is covered by a match pattern such as "*://*.example.com/*".
+  function urlMatchesPattern(pattern, url) {
+    if (typeof pattern !== 'string' || typeof url !== 'string') return false;
+    var target = /^([a-z][a-z0-9+.-]*):\/\/([^\/?#]*)([^#]*)/i.exec(url);
+    if (!target) return false;
+    var scheme = target[1].toLowerCase();
+    var host = target[2].replace(/^[^@]*@/, '').replace(/:\d+$/, '').toLowerCase();
+    var path = target[3] || '/';
+    if (path.charAt(0) !== '/') path = '/' + path;
+
+    if (pattern === '<all_urls>') {
+      return ['http', 'https', 'ws', 'wss', 'ftp', 'ftps', 'file', 'data'].indexOf(scheme) >= 0;
+    }
+    var parts = /^(\*|[a-z][a-z0-9+.-]*):\/\/([^\/]*)(\/.*)$/i.exec(pattern);
+    if (!parts) return false;
+
+    var wantedScheme = parts[1].toLowerCase();
+    if (wantedScheme === '*') {
+      if (['http', 'https', 'ws', 'wss'].indexOf(scheme) < 0) return false;
+    } else if (wantedScheme !== scheme) {
+      return false;
+    }
+
+    var wantedHost = parts[2].toLowerCase();
+    if (wantedHost !== '*') {
+      if (wantedHost.indexOf('*.') === 0) {
+        var base = wantedHost.slice(2);
+        if (host !== base && host.slice(-(base.length + 1)) !== '.' + base) return false;
+      } else if (wantedHost !== host) {
+        return false;
+      }
+    }
+
+    var glob = parts[3].replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*');
+    return new RegExp('^' + glob + '$').test(path);
+  }
+
+  // Whether a listener asked to be told about `args`. Only webRequest has
+  // filters that are applied here: the browser cannot know which of a
+  // context's listeners a filter belonged to.
+  function listenerAccepts(name, extra, args, answered) {
+    if (name.indexOf('webRequest.') !== 0) return true;
+    var filter = extra && extra[0];
+    var details = args && args[0];
+    if (filter && typeof filter === 'object' && details) {
+      if (Array.isArray(filter.urls) && !filter.urls.some(function (pattern) {
+        return urlMatchesPattern(pattern, details.url);
+      })) return false;
+      if (Array.isArray(filter.types) && filter.types.indexOf(details.type) < 0) return false;
+      if (typeof filter.tabId === 'number' && filter.tabId !== details.tabId) return false;
+    }
+    // Only a listener that asked to block may change what the request does.
+    if (answered && !(extra && Array.isArray(extra[1]) && extra[1].indexOf('blocking') >= 0)) {
+      return false;
+    }
+    return true;
+  }
+
+  function acceptingListeners(event, name, args, answered) {
+    var chosen = [];
+    event._listeners.forEach(function (listener, index) {
+      if (listenerAccepts(name, event._extras[index], args, answered)) chosen.push(listener);
+    });
+    return chosen;
+  }
+
   function dispatchPlainEvent(message) {
     var event = events[message.event];
     if (!event) return;
-    event._listeners.slice().forEach(function (listener) {
+    acceptingListeners(event, message.event, message.args || [], false).forEach(function (listener) {
       try {
         listener.apply(undefined, message.args || []);
       } catch (error) {
@@ -144,7 +215,7 @@
     var args = message.args || [];
     var token = message.token;
     var event = events[message.event];
-    var listeners = event ? event._listeners.slice() : [];
+    var listeners = event ? acceptingListeners(event, message.event, args, true) : [];
 
     var settled = false;
     var waiting = 0;
@@ -278,7 +349,7 @@
         tell('bird', 'respond', [token, body]);
       };
       try {
-        var result = (0, eval)(String(args[0]));
+        var result = typeof runCode === 'function' ? runCode(String(args[0])) : (0, eval)(String(args[0]));
         if (result && typeof result.then === 'function') {
           result.then(function (value) {
             finish({ handled: true, value: value === undefined ? null : value });
@@ -436,13 +507,47 @@
     onInstalled: createEvent('runtime.onInstalled', true),
     onStartup: createEvent('runtime.onStartup', true),
     onUpdateAvailable: createEvent('runtime.onUpdateAvailable', true),
+    // Messages from other extensions and web pages are not supported, so these never fire.
+    onMessageExternal: createEvent(null, false),
+    onConnectExternal: createEvent(null, false),
     lastError: undefined,
   };
 
   // ---------------------------------------------------------------- storage
 
+  var storageChanged = createEvent('storage.onChanged', true);
+
+  // `storage.local.onChanged` and the like: the same changes, for one area.
+  function areaChangedEvent(area) {
+    var event = createEvent(null, false);
+    var add = event.addListener;
+    var remove = event.removeListener;
+    function forward(changes, areaName) {
+      if (areaName !== area) return;
+      event._listeners.slice().forEach(function (listener) {
+        try {
+          listener(changes);
+        } catch (error) {
+          reportListenerError(error);
+        }
+      });
+    }
+    event.addListener = function () {
+      var before = event._listeners.length;
+      add.apply(event, arguments);
+      if (before === 0 && event._listeners.length === 1) storageChanged.addListener(forward);
+    };
+    event.removeListener = function () {
+      var before = event._listeners.length;
+      remove.apply(event, arguments);
+      if (before === 1 && event._listeners.length === 0) storageChanged.removeListener(forward);
+    };
+    return event;
+  }
+
   function storageArea(area) {
     return {
+      onChanged: areaChangedEvent(area),
       get: function (keys) {
         return call('storage', 'get', [area, keys === undefined ? null : keys]);
       },
@@ -466,7 +571,7 @@
     sync: storageArea('sync'),
     session: storageArea('session'),
     managed: storageArea('managed'),
-    onChanged: createEvent('storage.onChanged', true),
+    onChanged: storageChanged,
   };
 
   // ---------------------------------------------------------------- i18n
@@ -771,6 +876,80 @@
     document.addEventListener('DOMContentLoaded', documentReady, { once: true });
   } else {
     documentReady();
+  }
+
+  // A popup is as big as its content, so an extension's own top-level page says
+  // how much room its content takes. The extent is that of what is in the body,
+  // because the body itself is as wide as the view.
+  if (isExtensionPage && globalThis.window === globalThis.top) {
+    var lastWidth = 0;
+    var lastHeight = 0;
+    var measureTimer = null;
+
+    var measure = function () {
+      measureTimer = null;
+      var body = document.body;
+      var root = document.documentElement;
+      if (!body || !root || !root.style) return;
+
+      // A block fills the view, so its box says nothing about how much room its
+      // content wants. The root is laid out as wide as its content for the
+      // moment it takes to read the boxes, and put back before anything paints.
+      var savedWidth = root.style.getPropertyValue('width');
+      var savedWidthPriority = root.style.getPropertyPriority('width');
+      var width = 0;
+      var height = 0;
+      try {
+        root.style.setProperty('width', 'max-content', 'important');
+        width = root.getBoundingClientRect().width;
+        var nodes = body.querySelectorAll('*');
+        for (var i = 0; i < nodes.length; i++) {
+          var rect = nodes[i].getBoundingClientRect();
+          if (rect.width === 0 && rect.height === 0) continue;
+          if (rect.bottom > height) height = rect.bottom;
+        }
+      } finally {
+        if (savedWidth) root.style.setProperty('width', savedWidth, savedWidthPriority);
+        else root.style.removeProperty('width');
+      }
+
+      width = Math.ceil(width);
+      height = Math.ceil(height + (globalThis.scrollY || 0));
+      if (width === 0 || height === 0) return;
+      if (width === lastWidth && height === lastHeight) return;
+      lastWidth = width;
+      lastHeight = height;
+      tell('bird', 'contentSize', [width, height]);
+    };
+
+    var scheduleMeasure = function () {
+      if (measureTimer === null) measureTimer = setTimeout(measure, 50);
+    };
+
+    var watchSize = function () {
+      scheduleMeasure();
+      if (typeof ResizeObserver === 'function') {
+        var observer = new ResizeObserver(scheduleMeasure);
+        observer.observe(document.documentElement);
+        observer.observe(document.body);
+      }
+      if (typeof MutationObserver === 'function') {
+        new MutationObserver(scheduleMeasure).observe(document.body, {
+          attributes: true,
+          childList: true,
+          subtree: true,
+        });
+      }
+    };
+
+    var startWatching = function () {
+      if (document.body) watchSize();
+    };
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', startWatching, { once: true });
+    } else {
+      startWatching();
+    }
   }
 
   // Tell the browser how far the document has got, so that webNavigation can

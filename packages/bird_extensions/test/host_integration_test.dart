@@ -90,6 +90,37 @@ void main() {
     return (context: context, world: world);
   }
 
+  group('content size', () {
+    test('a page tells how much room its content takes', () async {
+      await host.start();
+      final extension = await install();
+      final page = await openContext(
+        extension,
+        url: '${extension.origin}/popup.html',
+      );
+
+      final sizes = <ExtensionContentSize>[];
+      final subscription = host.contentSizes.listen(sizes.add);
+
+      transport.inject(
+        page.context.contextId,
+        jsonEncode({
+          'id': 1,
+          'ns': 'bird',
+          'method': 'contentSize',
+          'args': [340, 412],
+        }),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      await subscription.cancel();
+
+      expect(sizes, hasLength(1));
+      expect(sizes.single.context.contextId, page.context.contextId);
+      expect(sizes.single.width, 340);
+      expect(sizes.single.height, 412);
+    });
+  });
+
   group('state', () {
     test(
       'is given to the processes at start and when extensions change',
