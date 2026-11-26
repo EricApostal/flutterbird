@@ -176,6 +176,15 @@ class BrowserShell {
     return true;
   }
 
+  /// The tabs closed this session that can be brought back, the one closed
+  /// last first.
+  List<ClosedTabRecord> get recentlyClosed =>
+      _closedTabs.reversed.toList(growable: false);
+
+  /// Takes [record] off the tabs that can be brought back, for it to be shown
+  /// again in a tab that is already open.
+  void forgetClosedTab(ClosedTabRecord record) => _closedTabs.remove(record);
+
   /// The tab that opened [tabId], if both are still open.
   int? openerOf(int tabId) {
     final opener = _openerByTab[tabId];

@@ -229,7 +229,10 @@ class _BrowserOmniboxBarState extends ConsumerState<BrowserOmniboxBar> {
     final shouldHideDefaultSearchHome =
         _hideDefaultSearchHomeForTabs.contains(controller.viewId) &&
         omnibox.isUntouchedNewTabUrl(controller, currentUrl);
-    final displayText = shouldHideDefaultSearchHome ? '' : currentUrl;
+    // The new tab page has no address worth showing, however it was come to.
+    final displayText = shouldHideDefaultSearchHome || currentUrl == kNewTabUrl
+        ? ''
+        : currentUrl;
     if (_omniboxTextDirty && _omniboxFocusNode.hasFocus) return;
     _setOmniboxText(displayText);
   }
@@ -686,7 +689,7 @@ class _BrowserOmniboxBarState extends ConsumerState<BrowserOmniboxBar> {
                       tooltip: isBookmarked
                           ? 'Remove bookmark'
                           : 'Add bookmark',
-                      onPressed: normalized.isEmpty
+                      onPressed: normalized.isEmpty || url == kNewTabUrl
                           ? null
                           : () {
                               omniboxController.toggleBookmarkForCurrentView(

@@ -89,12 +89,14 @@ class LadybirdController {
   Size? _lastSize;
   double? _lastDevicePixelRatio;
   late final int _viewId;
-  // When null, the initial navigation falls back to [homeUrl], which is
-  // derived from the engine's configured search engine.
+  // When null, the initial navigation goes to [newTabUrl].
   final String? initialUrl;
   bool hasNavigatedInitial = false;
   bool _lastFocused = false;
   bool hasStartedNavigation = false;
+
+  /// The address last asked for through [navigate].
+  String? _requestedUrl;
 
   late final ffi.NativeCallable<ffi.Void Function()> _resizeCallback;
   late final ffi.NativeCallable<ffi.Void Function(ffi.Pointer<ffi.Char>)>
@@ -693,6 +695,7 @@ class LadybirdController {
   void navigate(String url) {
     String parsedUrl = url;
     hasStartedNavigation = true;
+    _requestedUrl = url;
     print("navigating to url: $url");
     // todo: more reliable system for other formats, such as file://
     // if (!url.startsWith("http")) {
@@ -908,7 +911,27 @@ class LadybirdController {
     return engines.isNotEmpty ? engines.first : fallbackSearchEngine;
   }
 
-  // The home/new-tab URL for the active search engine, e.g.
+  /// What a new tab opens. On a desktop the app shows its own page over the
+  /// engine's plain one at this address; elsewhere it is [homeUrl].
+  String get newTabUrl =>
+      Platform.isAndroid || Platform.isIOS ? homeUrl : 'about:newtab';
+
+  /// Whether the tab is on the new tab page, or is on its way there as a tab
+  /// that has only just opened.
+  bool get isOnNewTabPage {
+    // Only the desktop has a page of the app's own to show.
+    if (Platform.isAndroid || Platform.isIOS) return false;
+    final url = urlNotifier.value.trim();
+    if (url == 'about:newtab') return true;
+    // Before the engine reports an address, and while it is still on the empty
+    // document every view starts with.
+    if (url.isNotEmpty && url != 'about:blank') return false;
+    final requested = _requestedUrl;
+    if (requested != null) return requested == 'about:newtab';
+    return !hasStartedNavigation && initialUrl == null;
+  }
+
+  // The front page of the active search engine, e.g.
   // "https://duckduckgo.com/".
   String get homeUrl {
     final host = Uri.tryParse(activeSearchEngine.queryUrl)?.host;

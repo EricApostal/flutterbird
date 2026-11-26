@@ -10,6 +10,7 @@ import 'package:material_ui/material_ui.dart' show Theme;
 import 'package:rubisco_browser/features/browser/components/browser_context_menu.dart';
 import 'package:rubisco_browser/features/browser/components/tab_loading_bar.dart';
 import 'package:rubisco_browser/features/devtools/browser_devtools.dart';
+import 'package:rubisco_browser/features/new_tab/new_tab_page.dart';
 import 'package:rubisco_browser/features/browser/state/fullscreen_mode.dart';
 import 'package:rubisco_browser/features/windows/window_scope.dart';
 import 'package:ladybird/ladybird.dart';
@@ -242,11 +243,29 @@ class _BrowserWindowState extends ConsumerState<BrowserWindow> {
       children: [
         RepaintBoundary(
           key: _repaintBoundaryKey,
-          child: KeyedSubtree(
-            key: _viewKey,
-            child: LadybirdView(
-              controller: controller,
-              autofocus: isFocusedWindow,
+          child: ValueListenableBuilder<String>(
+            valueListenable: controller.urlNotifier,
+            // The view stays as it is under the new tab page, which is drawn
+            // over it until the tab goes somewhere.
+            child: KeyedSubtree(
+              key: _viewKey,
+              child: LadybirdView(
+                controller: controller,
+                autofocus: isFocusedWindow,
+              ),
+            ),
+            builder: (context, url, view) => Stack(
+              fit: StackFit.passthrough,
+              children: [
+                view!,
+                if (controller.isOnNewTabPage)
+                  Positioned.fill(
+                    child: NewTabPage(
+                      key: ValueKey(controller.viewId),
+                      tab: controller,
+                    ),
+                  ),
+              ],
             ),
           ),
         ),

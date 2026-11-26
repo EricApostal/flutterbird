@@ -512,14 +512,14 @@ class _LadybirdViewState extends State<LadybirdView>
         final currentUrl = widget.controller.urlNotifier.value.trim();
         // A fresh engine tab reports its initial empty document as about:blank
         // (new_tab_page_url's default). That is still an untouched tab, so the
-        // first navigation below replaces it with the configured home page.
+        // first navigation below replaces it with the new tab page.
         final isUntouchedBlankTab =
             currentUrl.isEmpty || currentUrl == 'about:blank';
         if (widget.controller.hasStartedNavigation || !isUntouchedBlankTab) {
           return;
         }
         widget.controller.navigate(
-          widget.controller.initialUrl ?? widget.controller.homeUrl,
+          widget.controller.initialUrl ?? widget.controller.newTabUrl,
         );
       });
     }

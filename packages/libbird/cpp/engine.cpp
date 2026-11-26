@@ -3230,6 +3230,35 @@ char *history_autocomplete_json(int view_id, const char *query, int limit) {
   return strdup(bytes.characters());
 }
 
+char *history_entries_json(int limit) {
+  if (!s_app || !g_history_store || limit <= 0)
+    return nullptr;
+
+  auto entries = g_history_store->list_entries({}, 0, static_cast<size_t>(limit));
+
+  JsonArray pages;
+  pages.ensure_capacity(entries.size());
+
+  for (auto const &entry : entries) {
+    JsonObject item;
+    item.set("url"sv, entry.url);
+    if (entry.title.has_value())
+      item.set("title"sv, *entry.title);
+    if (entry.favicon_png.has_value()) {
+      if (auto encoded = encode_base64(entry.favicon_png->bytes());
+          !encoded.is_error())
+        item.set("favicon"sv, encoded.release_value());
+    }
+    item.set("visitCount"sv, entry.visit_count);
+    item.set("lastVisited"sv, entry.last_visited_time.milliseconds_since_epoch());
+    pages.must_append(move(item));
+  }
+
+  auto json = JsonValue(move(pages)).serialized();
+  auto bytes = json.to_byte_string();
+  return strdup(bytes.characters());
+}
+
 // Settings exposes no accessor for its custom engines, and they can be added
 // either through this ABI or through the engine's own about:settings page, so
 // read them back out of the serialized settings -- the same JSON the engine

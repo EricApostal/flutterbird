@@ -100,11 +100,14 @@ class BrowserOmnibox extends _$BrowserOmnibox {
   }
 
   // True while [url] is still a new tab's untouched page: the initial
-  // about:blank document, or the configured search engine's home page
-  // (including a redirect that adds query parameters).
+  // about:blank document, the new tab page, or, where a new tab starts at the
+  // search engine, its home page (including a redirect that adds query
+  // parameters).
   bool isUntouchedNewTabUrl(LadybirdController controller, String url) {
     final value = url.trim();
-    if (value.isEmpty || value == 'about:blank') return true;
+    if (value.isEmpty || value == 'about:blank' || value == kNewTabUrl) {
+      return true;
+    }
     return isDefaultSearchHome(controller, value);
   }
 

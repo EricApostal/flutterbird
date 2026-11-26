@@ -23,6 +23,10 @@ class OmniboxSearchField extends StatefulWidget {
   final ValueChanged<String> onSubmitted;
   final ValueChanged<OmniboxSuggestion> onSuggestionSelected;
 
+  /// The large field in the middle of the new tab page, with nothing about the
+  /// page in it, as there is no page yet.
+  final bool prominent;
+
   const OmniboxSearchField({
     super.key,
     required this.currentTabController,
@@ -31,6 +35,7 @@ class OmniboxSearchField extends StatefulWidget {
     required this.omniboxController,
     required this.onSubmitted,
     required this.onSuggestionSelected,
+    this.prominent = false,
   });
 
   @override
@@ -315,6 +320,24 @@ class _OmniboxSearchFieldState extends State<OmniboxSearchField> {
         boxShadow: [BoxShadow(color: colors.shadow, blurRadius: 16)],
       );
     }
+    if (widget.prominent) {
+      // It sits on the page rather than in the toolbar, so it stands off it.
+      return BoxDecoration(
+        color: colors.panel,
+        borderRadius: BorderRadius.circular(kOmniboxProminentRadius),
+        border: Border.all(
+          color: focused ? colors.accent : colors.panelBorder,
+          width: focused ? 1.5 : 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: colors.shadow.withValues(alpha: 0.18),
+            blurRadius: 14,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      );
+    }
     return BoxDecoration(
       color: focused ? colors.fieldFocused : colors.field,
       borderRadius: BorderRadius.circular(kOmniboxFieldRadius),
@@ -338,15 +361,26 @@ class _OmniboxSearchFieldState extends State<OmniboxSearchField> {
           widget.currentTabController,
         );
 
+        final prominent = widget.prominent;
+        final textSize = prominent ? BirdTextSize.headline : BirdTextSize.body;
+
         return Container(
-          height: kOmniboxFieldHeight,
+          height: prominent
+              ? kOmniboxProminentHeight
+              : kOmniboxFieldHeight,
           decoration: _decoration(colors, focused: isFocused),
           child: Row(
             children: [
               SizedBox(
-                width: kSiteInfoButtonWidth,
+                width: prominent ? 46 : kSiteInfoButtonWidth,
                 child: Center(
-                  child: SiteInfoButton(tab: widget.currentTabController),
+                  child: prominent
+                      ? BirdIcon(
+                          BirdGlyph.search,
+                          size: 17,
+                          color: colors.textSecondary,
+                        )
+                      : SiteInfoButton(tab: widget.currentTabController),
                 ),
               ),
               Expanded(
@@ -366,20 +400,27 @@ class _OmniboxSearchFieldState extends State<OmniboxSearchField> {
                         focusNode: _focus,
                         // Not shown while the styled address is over it.
                         style: context.birdText(
-                          color: isFocused
+                          size: textSize,
+                          // The address bar shows its own styled copy of the
+                          // address while it is not being typed in.
+                          color: isFocused || prominent
                               ? colors.text
                               : const Color(0x00000000),
                         ),
                         placeholder: 'Search $engine or type a URL',
-                        padding: const EdgeInsets.symmetric(vertical: 7),
+                        padding: EdgeInsets.symmetric(
+                          vertical: prominent ? 12 : 7,
+                        ),
                       ),
                     ),
-                    if (!isFocused) _buildOverlayText(_text.text),
+                    if (!isFocused && !prominent)
+                      _buildOverlayText(_text.text),
                   ],
                 ),
               ),
-              PictureInPictureButton(tab: widget.currentTabController),
-              const SizedBox(width: 4),
+              if (!prominent)
+                PictureInPictureButton(tab: widget.currentTabController),
+              SizedBox(width: prominent ? 14 : 4),
             ],
           ),
         );

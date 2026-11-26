@@ -252,6 +252,13 @@ LADYBIRD_API void
 set_devtools_inspect_callback(DevToolsInspectCallback callback);
 LADYBIRD_API void devtools_inspect_element(int view_id, int x, int y);
 
+// A JSON array of the pages in the history, newest first, at most limit of
+// them, for the new tab page: each with "url", "visitCount" and "lastVisited"
+// (milliseconds since 1970), and "title" and "favicon" (a base64 PNG) when
+// there are any. From the non-private history, as suggestions are. Caller owns
+// returned memory and must free it.
+LADYBIRD_API char *history_entries_json(int limit);
+
 // Removes a page from the history, and so from what is suggested.
 LADYBIRD_API void remove_history_entry(const char *url);
 
