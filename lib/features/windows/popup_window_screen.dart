@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutterbird/features/browser/components/browser_window.dart';
 import 'package:flutterbird/features/browser/components/desktop/omnibox/omnibox_style.dart';
 import 'package:flutterbird/features/browser/components/desktop/omnibox/omnibox_url_text.dart';
+import 'package:flutterbird/features/browser/components/desktop/site_info/site_info_button.dart';
 import 'package:flutterbird/features/browser/state/fullscreen_mode.dart';
 import 'package:flutterbird/features/windows/browser_shell.dart';
 import 'package:flutterbird/features/windows/window_scope.dart';
@@ -107,31 +108,21 @@ class _PopupLocationBar extends StatelessWidget {
             color: theme.colorScheme.surfaceContainerHighest.withAlpha(110),
             borderRadius: BorderRadius.circular(8),
           ),
-          child: ValueListenableBuilder<String>(
-            valueListenable: tab.urlNotifier,
-            builder: (context, url, _) {
-              final uri = Uri.tryParse(url);
-              final secure = uri?.scheme == 'https';
-              return Row(
-                children: [
-                  const SizedBox(width: 8),
-                  Icon(
-                    secure ? Icons.lock_outline : Icons.info_outline,
-                    size: 14,
-                    color: theme.colorScheme.onSurfaceVariant,
+          child: Row(
+            children: [
+              SiteInfoButton(tab: tab),
+              Expanded(
+                child: ValueListenableBuilder<String>(
+                  valueListenable: tab.urlNotifier,
+                  builder: (context, url, _) => Text.rich(
+                    styledUrlSpan(theme, url),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text.rich(
-                      styledUrlSpan(theme, url),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                ],
-              );
-            },
+                ),
+              ),
+              const SizedBox(width: 8),
+            ],
           ),
         ),
       ),

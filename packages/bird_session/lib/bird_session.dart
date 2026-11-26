@@ -7,5 +7,6 @@ export 'package:bird_window/bird_window.dart'
 
 export 'src/browser_session.dart';
 export 'src/key_claims.dart';
+export 'src/site_security.dart';
 export 'src/tab_drag.dart';
 export 'src/window_placement.dart';

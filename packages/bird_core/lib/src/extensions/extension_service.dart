@@ -22,6 +22,7 @@ class ExtensionService {
     required this.installer,
     required this.host,
     required this.actions,
+    required this.pins,
     required this.menus,
     required this.webRequest,
     required ExtensionEngineBridge bridge,
@@ -37,6 +38,9 @@ class ExtensionService {
   final ExtensionRegistry registry;
   final ExtensionInstaller installer;
   final ExtensionHost host;
+
+  /// Which extensions' buttons are on the toolbar.
+  final ToolbarPins pins;
 
   /// The toolbar buttons of the extensions, for the app to draw.
   final ActionStore actions;
@@ -117,9 +121,17 @@ class ExtensionService {
       ],
     );
 
+    final pins = await ToolbarPins.open(File('${root.path}/toolbar.json'));
+
     // A button appears for each extension that has one, and goes with it.
     Future<void> describe(InstalledExtension extension) async {
       final manifest = await host.manifestOf(extension);
+      if (manifest?.action != null) {
+        await pins.introduce(
+          extension.uuid,
+          onToolbar: manifest!.action!.defaultArea == 'navbar',
+        );
+      }
       if (manifest?.action != null && extension.enabled) {
         actions.setDefaults(extension, manifest!);
       } else {
@@ -129,6 +141,7 @@ class ExtensionService {
 
     final subscription = registry.changes.listen((change) {
       if (change.kind == RegistryChangeKind.removed) {
+        unawaited(pins.forget(change.extension.uuid));
         actions.remove(change.extension);
       } else {
         unawaited(describe(change.extension));
@@ -171,6 +184,7 @@ class ExtensionService {
       installer: installer,
       host: host,
       actions: actions,
+      pins: pins,
       menus: menus,
       webRequest: webRequest,
       bridge: engine,
@@ -235,6 +249,7 @@ class ExtensionService {
     await host.dispose();
     await _traceFile.close();
     await registry.dispose();
+    await pins.dispose();
     _fetcher.close();
   }
 }
@@ -287,5 +302,14 @@ final extensionActionsProvider = StreamProvider<List<InstalledExtension>>((
   yield current();
   await for (final _ in service.actions.changes) {
     yield current();
+  }
+});
+
+/// The uuids of the extensions pinned to the toolbar, in order.
+final toolbarPinsProvider = StreamProvider<List<String>>((ref) async* {
+  final service = await ref.watch(extensionServiceProvider.future);
+  yield service.pins.pinned;
+  await for (final _ in service.pins.changes) {
+    yield service.pins.pinned;
   }
 });

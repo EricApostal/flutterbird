@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/src/widgets/_window.dart';
 import 'package:flutterbird/features/theme/app_theme.dart';
 import 'package:flutterbird/features/windows/desktop_window_home.dart';
+import 'package:flutterbird/features/windows/macos/mac_picture_in_picture.dart';
 import 'package:flutterbird/features/windows/macos/mac_window_system.dart';
 import 'package:flutterbird/features/windows/window_scope.dart';
 
@@ -17,7 +18,7 @@ class MultiWindowApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: system,
+      listenable: Listenable.merge([system, system.pictureInPicture]),
       builder: (context, _) => ViewCollection(
         views: [
           for (final window in system.windows)
@@ -25,6 +26,16 @@ class MultiWindowApp extends StatelessWidget {
               key: ValueKey(window.id),
               controller: window.controller,
               child: _BrowserWindowApp(windowId: window.id),
+            ),
+          for (final window in system.pictureInPicture.windows)
+            Window(
+              key: ValueKey('pip-${window.viewId}'),
+              controller: window.controller,
+              child: MaterialApp(
+                debugShowCheckedModeBanner: false,
+                theme: birdDarkTheme(),
+                home: PictureInPictureView(window: window),
+              ),
             ),
         ],
       ),

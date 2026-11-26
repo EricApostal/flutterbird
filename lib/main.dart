@@ -55,6 +55,11 @@ void _runMultiWindow() {
   // first tab is what starts the engine.
   final shell = container.read(browserShellProvider);
   windows.onCloseRequested = shell.closeWindow;
+  windows.pictureInPicture.onReturnToTab = (tabId) {
+    shell.showTab(tabId);
+    final window = shell.session.windowOfTab(tabId);
+    if (window != null) windows.raise(window.id);
+  };
   windows.start(container);
 
   // Extensions run for the life of the app, whichever windows come and go. The

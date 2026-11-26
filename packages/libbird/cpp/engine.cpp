@@ -43,6 +43,7 @@
 #include <AK/StringView.h>
 #include <AK/Time.h>
 #include <LibCore/Environment.h>
+#include <LibCompositing/PictureInPictureControls.h>
 #include <LibCore/EventLoop.h>
 #include <LibCore/Promise.h>
 #include <LibCore/ResourceImplementation.h>
@@ -75,6 +76,10 @@
 #include <LibWebView/HistoryDebug.h>
 #include <LibWebView/HistoryStore.h>
 #include <LibWebView/Options.h>
+#include <LibWebView/PictureInPictureWindow.h>
+#if defined(AK_OS_MACOS)
+#include <LibWebView/NotificationBackendMacOS.h>
+#endif
 #include <LibWebView/SearchEngine.h>
 #include <LibWebView/Settings.h>
 #include <LibWebView/URL.h>
@@ -472,6 +477,58 @@ private:
   Gfx::IntSize m_size;
 };
 #endif
+
+// ---------------------------------------------------------------------------
+// Permission prompts
+// ---------------------------------------------------------------------------
+
+// A prompt Flutter has been asked to show and has not answered yet.
+struct PendingFlutterPrompt {
+  int view_id;
+  WebView::PermissionPromptRequest request;
+  WebView::PermissionPromptCallback on_outcome;
+};
+
+static HashMap<u64, PendingFlutterPrompt> g_pending_prompts;
+static u64 g_next_prompt_id = 1;
+static PermissionPromptRequestCallback g_permission_request_callback = nullptr;
+static PermissionPromptCancelCallback g_permission_cancel_callback = nullptr;
+
+static void ask_for_permission(int view_id,
+                               WebView::PermissionPromptRequest const &request,
+                               WebView::PermissionPromptCallback on_outcome) {
+  if (!g_permission_request_callback) {
+    on_outcome(Web::Permissions::PromptOutcome::Cancelled);
+    return;
+  }
+
+  JsonObject description;
+  description.set("name"sv, MUST(String::from_utf8(Web::Permissions::to_string(request.name))));
+  description.set("origin"sv, request.top_level_origin.serialize());
+  description.set("isFile"sv, request.is_file);
+  description.set("showOsHint"sv, request.show_os_hint);
+  description.set("systemDenied"sv, request.kind == WebView::PermissionPromptKind::SystemDeniedNotice);
+  auto json = description.serialized().to_byte_string();
+
+  auto prompt_id = g_next_prompt_id++;
+  g_pending_prompts.set(prompt_id, PendingFlutterPrompt{view_id, request, move(on_outcome)});
+  g_permission_request_callback(view_id, prompt_id, strdup(json.characters()));
+}
+
+// The engine answers for a prompt it withdraws, so ours is only forgotten.
+static void withdraw_permission_prompt(int view_id,
+                                       WebView::PermissionPromptRequest const &request) {
+  Vector<u64> withdrawn;
+  for (auto const &entry : g_pending_prompts) {
+    if (entry.value.view_id == view_id && entry.value.request.is_same_request_as(request))
+      withdrawn.append(entry.key);
+  }
+  for (auto prompt_id : withdrawn) {
+    g_pending_prompts.remove(prompt_id);
+    if (g_permission_cancel_callback)
+      g_permission_cancel_callback(view_id, prompt_id);
+  }
+}
 
 // ---------------------------------------------------------------------------
 // FlutterViewImpl
@@ -1191,6 +1248,18 @@ public:
     return true;
   }
 
+  // Turns this view, already prepared for a traversable, into the one a
+  // Picture-in-Picture window shows.
+  void prepare_for_picture_in_picture(WebView::CanonicalTraversable &traversable,
+                                      Gfx::IntSize size) {
+    initialize_tab(Web::HTML::VisibilityState::Visible, traversable);
+    attach_signals();
+    m_viewport_width = size.width();
+    m_viewport_height = size.height();
+    push_viewport();
+    enable_picture_in_picture_controls();
+  }
+
   // Pushes the engine's viewport/window geometry for the currently-requested
   // render size. Ladybird 2026-10 moved viewport pushes behind
   // ViewImplementation::handle_resize()/set_window_size(); the device pixel
@@ -1247,6 +1316,14 @@ public:
   void attach_signals() {
     push_viewport();
     set_system_visibility_state(Web::HTML::VisibilityState::Visible);
+
+    on_request_permission = [this](WebView::PermissionPromptRequest const &request,
+                                   WebView::PermissionPromptCallback on_outcome) {
+      ask_for_permission(m_view_id, request, move(on_outcome));
+    };
+    on_cancel_permission_prompt = [this](WebView::PermissionPromptRequest const &request) {
+      withdraw_permission_prompt(m_view_id, request);
+    };
 
     // -----------------------------------------------------------------------
     // on_ready_to_paint — modelled after Qt's WebContentView pattern.
@@ -1912,6 +1989,105 @@ static bool open_path_with_host(ByteString const &path, bool reveal_in_folder) {
 static bool open_path_with_host(ByteString const &, bool) { return false; }
 #endif
 
+// ---------------------------------------------------------------------------
+// Picture-in-Picture
+// ---------------------------------------------------------------------------
+
+static PictureInPictureEventCallback g_picture_in_picture_callback = nullptr;
+static Gfx::IntSize g_picture_in_picture_screen_size{1440, 900};
+
+class FlutterPictureInPictureWindow;
+static std::map<int, FlutterPictureInPictureWindow *> g_picture_in_picture_windows;
+
+// The engine's handle on the window Flutter floats a video in. The view it
+// shows is held with every other view; the window itself is Flutter's.
+class FlutterPictureInPictureWindow final : public WebView::PictureInPictureWindow {
+  AK_ALLOC_WITH_KMALLOC;
+
+public:
+  FlutterPictureInPictureWindow(int owner_view_id, int view_id, Gfx::IntSize size,
+                                FlutterViewImpl &view)
+      : m_owner_view_id(owner_view_id), m_view_id(view_id), m_size(size), m_view(view) {
+    // Takes over the view's close and crash handlers.
+    report_page_close_of(m_view);
+    m_view.on_picture_in_picture_control_activated = [this](auto control) {
+      bool back_to_tab = control == Compositing::PictureInPictureControl::BackToTab;
+      if (back_to_tab)
+        report(LADYBIRD_PIP_BACK_TO_TAB);
+      // Closing destroys this window, so nothing may follow it.
+      if (on_close)
+        on_close(back_to_tab ? VideoKeepsPlaying::Yes : VideoKeepsPlaying::No);
+    };
+    g_picture_in_picture_windows[m_view_id] = this;
+  }
+
+  virtual ~FlutterPictureInPictureWindow() override {
+    g_picture_in_picture_windows.erase(m_view_id);
+    m_view.on_close = nullptr;
+    m_view.on_web_content_crashed = nullptr;
+    report(LADYBIRD_PIP_CLOSED);
+    // This can run inside one of the view's own callbacks, so the view goes
+    // on a later turn of the event loop. Destroying it twice is harmless.
+    Core::deferred_invoke([view_id = m_view_id] { destroy_web_view(view_id); });
+  }
+
+  virtual Gfx::IntSize size() const override { return m_size; }
+  virtual String handle() const override { return m_view.handle(); }
+  virtual void hide() override { report(LADYBIRD_PIP_HIDE); }
+
+  virtual void set_video_size(Gfx::IntSize video_size) override {
+    auto size = size_for_video_size(m_size, video_size, g_picture_in_picture_screen_size);
+    if (size == m_size)
+      return;
+    m_size = size;
+    report(LADYBIRD_PIP_RESIZE);
+    if (on_resize)
+      on_resize(size);
+  }
+
+  void resized_by_user(Gfx::IntSize size) {
+    if (size == m_size)
+      return;
+    m_size = size;
+    if (on_resize)
+      on_resize(size);
+  }
+
+private:
+  void report(int event) {
+    if (g_picture_in_picture_callback)
+      g_picture_in_picture_callback(m_owner_view_id, m_view_id, event, m_size.width(), m_size.height());
+  }
+
+  int m_owner_view_id;
+  int m_view_id;
+  Gfx::IntSize m_size;
+  FlutterViewImpl &m_view;
+};
+
+static OwnPtr<WebView::PictureInPictureWindow>
+create_flutter_picture_in_picture_window(WebView::WebContentPage &requesting_page,
+                                         WebView::CanonicalTraversable &traversable,
+                                         Gfx::IntSize video_size) {
+  if (!g_picture_in_picture_callback)
+    return {};
+
+  // Every view in this application is one of these.
+  auto &owner = static_cast<FlutterViewImpl &>(requesting_page.view());
+  auto size = WebView::PictureInPictureWindow::initial_size(video_size, g_picture_in_picture_screen_size);
+
+  auto created_view = FlutterViewImpl::create(g_next_view_id++).release_value();
+  created_view->prepare_for_picture_in_picture(traversable, size);
+
+  auto view_id = created_view->m_view_id;
+  auto &view = *created_view;
+  g_web_views[view_id] = std::move(created_view);
+
+  auto window = make<FlutterPictureInPictureWindow>(owner.m_view_id, view_id, size, view);
+  g_picture_in_picture_callback(owner.m_view_id, view_id, LADYBIRD_PIP_OPEN, size.width(), size.height());
+  return window;
+}
+
 class FlutterApplication : public WebView::Application {
   WEB_VIEW_APPLICATION(FlutterApplication)
   AK_ALLOC_WITH_KMALLOC;
@@ -1943,6 +2119,23 @@ public:
   virtual Core::EventLoop &create_platform_event_loop() override {
     return WebView::Application::create_platform_event_loop();
   }
+
+#if defined(AK_OS_MACOS)
+  // The Flutter side floats videos in a window of their own.
+  virtual bool supports_picture_in_picture() const override { return true; }
+
+  virtual OwnPtr<WebView::PictureInPictureWindow>
+  create_picture_in_picture_window(WebView::WebContentPage &requesting_page,
+                                   WebView::CanonicalTraversable &traversable,
+                                   Gfx::IntSize video_size) override {
+    return create_flutter_picture_in_picture_window(requesting_page, traversable, video_size);
+  }
+
+  virtual NonnullOwnPtr<WebView::NotificationBackend>
+  create_notification_backend() override {
+    return make<WebView::NotificationBackendMacOS>();
+  }
+#endif
 
   // FlutterBird is the browser: it owns its profile and its process, and a
   // second instance must start a second engine rather than hand its URLs to the
@@ -2203,7 +2396,131 @@ int create_web_view() {
 void destroy_web_view(int view_id) {
   if (g_active_view_id == view_id)
     g_active_view_id = -1;
+  // Nobody is left to answer the view's prompts.
+  Vector<u64> orphaned;
+  for (auto const &entry : g_pending_prompts) {
+    if (entry.value.view_id == view_id)
+      orphaned.append(entry.key);
+  }
+  for (auto prompt_id : orphaned)
+    g_pending_prompts.remove(prompt_id);
+
   g_web_views.erase(view_id);
+}
+
+void set_permission_callbacks(PermissionPromptRequestCallback request,
+                              PermissionPromptCancelCallback cancel) {
+  g_permission_request_callback = request;
+  g_permission_cancel_callback = cancel;
+}
+
+void permission_prompt_shown(uint64_t prompt_id) {
+  auto prompt = g_pending_prompts.find(prompt_id);
+  if (prompt == g_pending_prompts.end())
+    return;
+  auto view = g_web_views.find(prompt->value.view_id);
+  if (view != g_web_views.end())
+    view->second->did_show_permission_prompt(prompt->value.request);
+}
+
+void respond_permission_prompt(uint64_t prompt_id, int outcome) {
+  if (outcome < 0 || outcome > static_cast<int>(Web::Permissions::PromptOutcome::Cancelled))
+    return;
+  auto prompt = g_pending_prompts.take(prompt_id);
+  if (!prompt.has_value())
+    return;
+  prompt->on_outcome(static_cast<Web::Permissions::PromptOutcome>(outcome));
+}
+
+char *get_site_permissions(int view_id) {
+  auto view = g_web_views.find(view_id);
+  if (view == g_web_views.end())
+    return nullptr;
+
+  auto origin = view->second->permission_origin();
+  JsonArray rows;
+  for (auto const &row : view->second->site_permission_rows()) {
+    auto decision = "ask"sv;
+    if (row.decision == WebView::PermissionDecision::Allow)
+      decision = "allow"sv;
+    else if (row.decision == WebView::PermissionDecision::AllowOnce)
+      decision = "allow-once"sv;
+    else if (row.decision == WebView::PermissionDecision::Block)
+      decision = "block"sv;
+
+    JsonObject entry;
+    entry.set("name"sv, MUST(String::from_utf8(Web::Permissions::to_string(row.name))));
+    entry.set("decision"sv, MUST(String::from_utf8(decision)));
+    entry.set("requested"sv, row.requested_by_page);
+    rows.must_append(move(entry));
+  }
+
+  JsonObject site;
+  site.set("origin"sv, origin.serialize());
+  site.set("opaque"sv, origin.is_opaque());
+  site.set("rows"sv, move(rows));
+  auto json = site.serialized().to_byte_string();
+  return strdup(json.characters());
+}
+
+// The site a permission change is about, which the caller names itself so that
+// a panel left open still changes the site it shows.
+static Optional<URL::Origin> origin_of_site(char const *origin) {
+  if (!origin)
+    return {};
+  auto url = URL::Parser::basic_parse(StringView{origin, strlen(origin)});
+  if (!url.has_value())
+    return {};
+  auto parsed = url->origin();
+  if (parsed.is_opaque())
+    return {};
+  return parsed;
+}
+
+void set_site_permission(int view_id, const char *origin, const char *name,
+                         const char *decision) {
+  auto view = g_web_views.find(view_id);
+  auto site = origin_of_site(origin);
+  if (view == g_web_views.end() || !site.has_value() || !name || !decision)
+    return;
+  auto permission = Web::Permissions::permission_name_from_string(StringView{name, strlen(name)});
+  if (!permission.has_value())
+    return;
+
+  Optional<WebView::PermissionDecision> chosen;
+  if (StringView{decision, strlen(decision)} == "allow"sv)
+    chosen = WebView::PermissionDecision::Allow;
+  else if (StringView{decision, strlen(decision)} == "block"sv)
+    chosen = WebView::PermissionDecision::Block;
+  view->second->set_site_permission(*site, *permission, chosen);
+}
+
+void reset_site_permissions(int view_id, const char *origin) {
+  auto view = g_web_views.find(view_id);
+  auto site = origin_of_site(origin);
+  if (view != g_web_views.end() && site.has_value())
+    view->second->reset_site_permissions(*site);
+}
+
+void set_picture_in_picture_callback(PictureInPictureEventCallback callback) {
+  g_picture_in_picture_callback = callback;
+}
+
+void set_picture_in_picture_screen_size(int width, int height) {
+  if (width > 0 && height > 0)
+    g_picture_in_picture_screen_size = {width, height};
+}
+
+void picture_in_picture_resized(int view_id, int width, int height) {
+  auto window = g_picture_in_picture_windows.find(view_id);
+  if (window != g_picture_in_picture_windows.end() && width > 0 && height > 0)
+    window->second->resized_by_user({width, height});
+}
+
+void close_picture_in_picture(int view_id) {
+  auto window = g_picture_in_picture_windows.find(view_id);
+  if (window != g_picture_in_picture_windows.end() && window->second->on_close)
+    window->second->on_close(WebView::PictureInPictureWindow::VideoKeepsPlaying::No);
 }
 
 void *get_latest_pixel_buffer(int view_id) {

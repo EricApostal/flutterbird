@@ -12,6 +12,16 @@ const int _fullSizeContentViewMask = 1 << 15;
 // NSWindowTitleVisibility.
 const int _titleHidden = 1;
 
+// NSWindowCollectionBehavior.
+const int _canJoinAllSpaces = 1 << 0;
+const int _fullScreenAuxiliary = 1 << 8;
+
+// NSWindowLevel.
+const int _floatingWindowLevel = 3;
+
+// NSWindowButton: close, miniaturize and zoom.
+const List<int> _titleBarButtons = [0, 1, 2];
+
 // NSEventType.
 const int _leftMouseDown = 1;
 const int _leftMouseDragged = 6;
@@ -40,7 +50,12 @@ const Map<String, List<String>> instanceSelectorsUsed = {
     'performWindowDragWithEvent:',
     'zoom:',
     'screen',
+    'standardWindowButton:',
+    'setLevel:',
+    'setCollectionBehavior:',
+    'setContentAspectRatio:',
   ],
+  'NSView': ['setHidden:'],
   'NSScreen': ['frame', 'visibleFrame'],
   'NSArray': ['count', 'objectAtIndex:'],
   'NSEvent': ['type'],
@@ -256,6 +271,35 @@ final class MacWindow {
     msgVoidBool(handle, selector('setTitlebarAppearsTransparent:'), true);
     msgVoidInt(handle, selector('setTitleVisibility:'), _titleHidden);
     msgVoidBool(handle, selector('setMovable:'), false);
+  }
+
+  /// Makes this the kind of window a video floats in: above other windows,
+  /// on every space and over full screen apps, with no title bar to see.
+  void useFloatingVideoStyle() => withPool(() {
+    useHiddenTitleBar();
+    for (final which in _titleBarButtons) {
+      final button = msgIdInt(handle, selector('standardWindowButton:'), which);
+      if (button != nullptr) msgVoidBool(button, selector('setHidden:'), true);
+    }
+    msgVoidInt(handle, selector('setLevel:'), _floatingWindowLevel);
+    msgVoidInt(
+      handle,
+      selector('setCollectionBehavior:'),
+      _canJoinAllSpaces | _fullScreenAuxiliary,
+    );
+  });
+
+  /// Keeps what the window shows in this shape as the user resizes it.
+  void lockContentAspectRatio(double width, double height) {
+    if (width <= 0 || height <= 0) return;
+    final size = calloc<CGSize>();
+    try {
+      size.ref.width = width;
+      size.ref.height = height;
+      msgVoidSize(handle, selector('setContentAspectRatio:'), size.ref);
+    } finally {
+      calloc.free(size);
+    }
   }
 
   /// Takes the window out of sight and out of the mouse's way without taking it

@@ -31,6 +31,7 @@ export 'src/manifest.dart';
 export 'src/match_pattern.dart';
 export 'src/permissions.dart';
 export 'src/shim/shim_source.dart';
+export 'src/toolbar_pins.dart';
 export 'src/version.dart';
 export 'src/xpi_extractor.dart';
 export 'src/zip_reader.dart';

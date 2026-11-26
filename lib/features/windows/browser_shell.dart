@@ -77,6 +77,11 @@ class BrowserShell {
 
   /// Starts listening for what pages do to tabs.
   void start() {
+    // A phone has nowhere to show a prompt yet, so there the engine goes on
+    // refusing what pages ask for.
+    if (!Platform.isAndroid && !Platform.isIOS) {
+      LadybirdSiteBridge.instance.start();
+    }
     _ref.listen<List<LadybirdController>>(
       browserTabControllerProvider,
       (_, _) => _wireAll(_controllers),

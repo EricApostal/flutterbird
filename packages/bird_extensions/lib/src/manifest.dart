@@ -150,9 +150,14 @@ class ActionSpec {
     this.defaultIcon = const {},
     this.browserStyle = false,
     this.showMatches = const [],
+    this.defaultArea,
   });
 
   final ActionKind kind;
+
+  /// Where the button asks to start out: `navbar` for the toolbar. Anything
+  /// else, or nothing, leaves it in the extensions menu.
+  final String? defaultArea;
   final String? defaultTitle;
   final String? defaultPopup;
 
@@ -735,6 +740,7 @@ class Manifest {
       ),
       browserStyle: reader.boolean('browser_style') ?? false,
       showMatches: reader.strings('show_matches'),
+      defaultArea: reader.string('default_area'),
     );
   }
 

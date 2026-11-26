@@ -28,5 +28,11 @@
 	<string>MainMenu</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<key>NSLocationUsageDescription</key>
+	<string>Websites you allow can see your location.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Websites you allow can see your location.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Websites you allow can use your microphone.</string>
 </dict>
 </plist>

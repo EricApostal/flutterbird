@@ -15,6 +15,7 @@ import 'package:flutter/src/widgets/_window.dart';
 import 'package:flutter/src/widgets/_window_macos.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutterbird/features/windows/macos/mac_picture_in_picture.dart';
 import 'package:flutterbird/features/windows/window_system.dart';
 
 /// One browser window: Flutter's window and the `NSWindow` under it.
@@ -40,6 +41,15 @@ class MacWindowSystem extends WindowSystem
   /// Called when the user asks to close a window, with its close button.
   late void Function(int windowId) onCloseRequested;
 
+  /// The floating windows of Picture-in-Picture videos. They are not windows
+  /// of the session: they hold no tabs, and none of them keeps the app running.
+  late final MacPictureInPicture pictureInPicture = MacPictureInPicture(
+    ownerFrame: (tabId) {
+      final window = _session.windowOfTab(tabId);
+      return window == null ? null : frameOf(window.id);
+    },
+  );
+
   ProviderContainer? _container;
   final Map<int, MacBrowserWindow> _windows = {};
   final Map<int, ScreenRect> _prepared = {};
@@ -57,6 +67,7 @@ class MacWindowSystem extends WindowSystem
     WidgetsBinding.instance.addObserver(this);
     container.listen<BrowserSession>(browserSessionProvider, (_, _) => _sync());
     _sync();
+    pictureInPicture.start();
   }
 
   BrowserSession get _session => _container!.read(browserSessionProvider);

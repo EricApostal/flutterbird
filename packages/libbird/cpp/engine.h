@@ -424,6 +424,60 @@ set_get_clipboard_text_callback(GetClipboardTextCallback callback);
 LADYBIRD_API void
 set_set_clipboard_text_callback(SetClipboardTextCallback callback);
 
+// ---------------------------------------------------------------------------
+// Site permissions
+// ---------------------------------------------------------------------------
+
+// A page is asking for a permission. request_json is
+// {"name","origin","isFile","showOsHint","systemDenied"} and belongs to the
+// receiver, who must free it. The request waits until it is answered with
+// respond_permission_prompt, or is withdrawn.
+typedef void (*PermissionPromptRequestCallback)(int view_id, uint64_t prompt_id,
+                                                char *request_json);
+// The engine no longer wants an answer to the prompt.
+typedef void (*PermissionPromptCancelCallback)(int view_id, uint64_t prompt_id);
+
+LADYBIRD_API void
+set_permission_callbacks(PermissionPromptRequestCallback request,
+                         PermissionPromptCancelCallback cancel);
+// Call when the prompt has actually been put on screen.
+LADYBIRD_API void permission_prompt_shown(uint64_t prompt_id);
+// outcome: 0 allow always, 1 allow once, 2 block, 3 dismissed, 4 ignored,
+// 5 cancelled (Web::Permissions::PromptOutcome).
+LADYBIRD_API void respond_permission_prompt(uint64_t prompt_id, int outcome);
+
+// {"origin","opaque","rows":[{"name","decision","requested"}]} for the site the
+// view shows, or null for an unknown view. The caller must free it.
+LADYBIRD_API char *get_site_permissions(int view_id);
+// decision is "allow", "block" or "ask".
+LADYBIRD_API void set_site_permission(int view_id, const char *origin,
+                                      const char *name, const char *decision);
+LADYBIRD_API void reset_site_permissions(int view_id, const char *origin);
+
+// ---------------------------------------------------------------------------
+// Picture-in-Picture
+// ---------------------------------------------------------------------------
+
+#define LADYBIRD_PIP_OPEN 0
+#define LADYBIRD_PIP_RESIZE 1
+#define LADYBIRD_PIP_HIDE 2
+#define LADYBIRD_PIP_CLOSED 3
+#define LADYBIRD_PIP_BACK_TO_TAB 4
+
+// What the floating window of a video has to do. view_id is the view to show in
+// it, owner_view_id the tab the video is in. Sizes are in logical points.
+typedef void (*PictureInPictureEventCallback)(int owner_view_id, int view_id,
+                                              int event, int width, int height);
+
+LADYBIRD_API void
+set_picture_in_picture_callback(PictureInPictureEventCallback callback);
+LADYBIRD_API void set_picture_in_picture_screen_size(int width, int height);
+// The user resized the floating window.
+LADYBIRD_API void picture_in_picture_resized(int view_id, int width,
+                                             int height);
+// The floating window is being closed by something other than its own controls.
+LADYBIRD_API void close_picture_in_picture(int view_id);
+
 #ifdef __cplusplus
 }
 #endif

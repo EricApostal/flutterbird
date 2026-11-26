@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutterbird/features/browser/components/desktop/omnibox/omnibox_style.dart';
 import 'package:flutterbird/features/browser/components/desktop/omnibox/omnibox_suggestions_overlay.dart';
 import 'package:flutterbird/features/browser/components/desktop/omnibox/omnibox_url_text.dart';
+import 'package:flutterbird/features/browser/components/desktop/site_info/site_info_button.dart';
 import 'package:flutterbird/features/browser/state/omnibox_state.dart';
 import 'package:ladybird/ladybird.dart';
 
@@ -32,7 +33,7 @@ class OmniboxSearchField extends ConsumerWidget {
     return Positioned.fill(
       child: IgnorePointer(
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10),
+          padding: const EdgeInsets.only(left: kSiteInfoButtonWidth, right: 10),
           child: Align(
             alignment: Alignment.centerLeft,
             child: Text.rich(
@@ -91,6 +92,14 @@ class OmniboxSearchField extends ConsumerWidget {
                                 : Colors.transparent,
                           ),
                           decoration: InputDecoration(
+                            prefixIcon: SiteInfoButton(
+                              tab: currentTabController,
+                            ),
+                            prefixIconConstraints: const BoxConstraints(
+                              minWidth: kSiteInfoButtonWidth,
+                              maxWidth: kSiteInfoButtonWidth,
+                              minHeight: 30,
+                            ),
                             filled: true,
                             fillColor: omniboxSurfaceColor(theme),
                             isDense: true,

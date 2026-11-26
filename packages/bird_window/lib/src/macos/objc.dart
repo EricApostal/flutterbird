@@ -139,6 +139,10 @@ final msgIntPointInt = _msgSend
     .cast<NativeFunction<Int64 Function(Id, Sel, CGPoint, Int64)>>()
     .asFunction<int Function(Id, Sel, CGPoint, int)>();
 
+final msgIdInt = _msgSend
+    .cast<NativeFunction<Id Function(Id, Sel, Int64)>>()
+    .asFunction<Id Function(Id, Sel, int)>();
+
 // Setting values.
 
 final msgVoid = _msgSend
@@ -164,6 +168,10 @@ final msgVoidDouble = _msgSend
 final msgVoidPoint = _msgSend
     .cast<NativeFunction<Void Function(Id, Sel, CGPoint)>>()
     .asFunction<void Function(Id, Sel, CGPoint)>();
+
+final msgVoidSize = _msgSend
+    .cast<NativeFunction<Void Function(Id, Sel, CGSize)>>()
+    .asFunction<void Function(Id, Sel, CGSize)>();
 
 final msgVoidRectBool = _msgSend
     .cast<NativeFunction<Void Function(Id, Sel, CGRect, Bool)>>()
