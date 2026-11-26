@@ -2,9 +2,9 @@ import 'dart:io';
 
 import 'package:bird_core/bird_core.dart';
 import 'package:bird_extensions/bird_extensions.dart';
-import 'package:flutter/material.dart';
+import 'package:bird_ui/bird_ui.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:rubisco_browser/features/browser/components/desktop/omnibox/omnibox_style.dart';
 import 'package:rubisco_browser/features/extensions/install_prompt_dialog.dart';
 
 /// The list of installed extensions, with where to add more.
@@ -113,99 +113,85 @@ class _ExtensionsPanelState extends ConsumerState<ExtensionsPanel> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final extensions = ref.watch(installedExtensionsProvider);
 
-    return Material(
-      elevation: 6,
-      color: omniboxSurfaceColor(theme),
-      borderRadius: BorderRadius.circular(kOmniboxFieldRadius),
-      clipBehavior: Clip.antiAlias,
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 400, maxHeight: 520),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 10, 4, 10),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      'Extensions',
-                      style: theme.textTheme.titleSmall,
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.system_update_alt, size: 18),
-                    tooltip: 'Check for updates',
-                    onPressed: _busy ? null : _updateAll,
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.close, size: 18),
-                    tooltip: 'Close',
-                    onPressed: widget.onClose,
-                  ),
-                ],
+    return BirdPanel(
+      width: 400,
+      constraints: const BoxConstraints(maxHeight: 520),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          BirdPanelHeader(
+            'Extensions',
+            actions: [
+              BirdToolbarButton(
+                glyph: BirdGlyph.update,
+                tooltip: 'Check for updates',
+                size: 28,
+                iconSize: 14,
+                onPressed: _busy ? null : _updateAll,
               ),
-            ),
-            Divider(height: 1, color: theme.colorScheme.outline.withAlpha(50)),
-            Flexible(
-              child: extensions.when(
-                data: (list) => _InstalledList(extensions: list, busy: _busy),
-                loading: () => const Padding(
-                  padding: EdgeInsets.all(24),
-                  child: Center(child: CircularProgressIndicator()),
-                ),
-                error: (error, _) => Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Text('Extensions are unavailable: $error'),
+            ],
+            onClose: widget.onClose,
+          ),
+          Flexible(
+            child: extensions.when(
+              data: (list) => _InstalledList(extensions: list, busy: _busy),
+              loading: () => const Padding(
+                padding: EdgeInsets.all(24),
+                child: Center(child: BirdSpinner(size: 22)),
+              ),
+              error: (error, _) => Padding(
+                padding: const EdgeInsets.all(12),
+                child: BirdMessageBar(
+                  'Extensions are unavailable: $error',
+                  kind: BirdMessageKind.error,
                 ),
               ),
             ),
-            Divider(height: 1, color: theme.colorScheme.outline.withAlpha(50)),
-            Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
+          ),
+          const BirdSeparator(),
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _InputRow(
+                  controller: _amoController,
+                  hint: 'addons.mozilla.org link or name',
+                  action: 'Add',
+                  busy: _busy,
+                  onSubmit: _installFromAmo,
+                ),
+                if (_canLoadUnpacked) ...[
+                  const SizedBox(height: 8),
                   _InputRow(
-                    controller: _amoController,
-                    hint: 'addons.mozilla.org link or name',
-                    action: 'Add',
+                    controller: _folderController,
+                    hint: 'Folder of an unpacked extension',
+                    action: 'Load',
                     busy: _busy,
-                    onSubmit: _installFromAmo,
+                    onSubmit: _loadUnpacked,
                   ),
-                  if (_canLoadUnpacked) ...[
-                    const SizedBox(height: 8),
-                    _InputRow(
-                      controller: _folderController,
-                      hint: 'Folder of an unpacked extension',
-                      action: 'Load',
-                      busy: _busy,
-                      onSubmit: _loadUnpacked,
-                    ),
-                  ],
-                  if (_busy) ...[
-                    const SizedBox(height: 8),
-                    const LinearProgressIndicator(),
-                  ],
-                  if (_message != null) ...[
-                    const SizedBox(height: 8),
-                    Text(
-                      _message!,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: _messageIsError
-                            ? theme.colorScheme.error
-                            : theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
                 ],
-              ),
+                if (_busy) ...[
+                  const SizedBox(height: 10),
+                  const BirdProgressBar(),
+                ],
+                if (_message != null) ...[
+                  const SizedBox(height: 10),
+                  BirdMessageBar(
+                    _message!,
+                    kind: _messageIsError
+                        ? BirdMessageKind.error
+                        : BirdMessageKind.success,
+                  ),
+                ],
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -231,19 +217,16 @@ class _InputRow extends StatelessWidget {
     return Row(
       children: [
         Expanded(
-          child: TextField(
+          child: BirdTextField(
             controller: controller,
             enabled: !busy,
-            decoration: InputDecoration(
-              hintText: hint,
-              isDense: true,
-              border: const OutlineInputBorder(),
-            ),
+            placeholder: hint,
+            semanticLabel: hint,
             onSubmitted: (_) => onSubmit(),
           ),
         ),
-        const SizedBox(width: 8),
-        FilledButton(onPressed: busy ? null : onSubmit, child: Text(action)),
+        const SizedBox(width: 6),
+        BirdButton(action, onPressed: busy ? null : onSubmit),
       ],
     );
   }
@@ -257,20 +240,8 @@ class _InstalledList extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
-
     if (extensions.isEmpty) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 28),
-        child: Center(
-          child: Text(
-            'No extensions yet',
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-          ),
-        ),
-      );
+      return const BirdPlaceholder('No extensions yet');
     }
 
     return ListView.separated(
@@ -280,16 +251,16 @@ class _InstalledList extends ConsumerWidget {
       separatorBuilder: (_, _) => const SizedBox(height: 2),
       itemBuilder: (context, index) {
         final extension = extensions[index];
-        return ListTile(
-          dense: true,
-          leading: const Icon(Icons.extension_outlined),
-          title: Text(extension.name, overflow: TextOverflow.ellipsis),
-          subtitle: Text(extension.version, style: theme.textTheme.bodySmall),
+        return BirdListRow(
+          leading: const BirdIcon(BirdGlyph.extension),
+          title: extension.name,
+          subtitle: extension.version,
           trailing: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Switch(
+              BirdSwitch(
                 value: extension.enabled,
+                semanticLabel: 'Enable ${extension.name}',
                 onChanged: busy
                     ? null
                     : (enabled) async {
@@ -302,9 +273,12 @@ class _InstalledList extends ConsumerWidget {
                         );
                       },
               ),
-              IconButton(
-                icon: const Icon(Icons.delete_outline, size: 18),
+              const SizedBox(width: 6),
+              BirdToolbarButton(
+                glyph: BirdGlyph.trash,
                 tooltip: 'Remove',
+                size: 28,
+                iconSize: 14,
                 onPressed: busy
                     ? null
                     : () async {

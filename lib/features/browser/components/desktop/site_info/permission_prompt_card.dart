@@ -1,4 +1,5 @@
-import 'package:flutter/material.dart';
+import 'package:bird_ui/bird_ui.dart';
+import 'package:flutter/widgets.dart';
 import 'package:rubisco_browser/features/browser/components/desktop/site_info/permission_kinds.dart';
 import 'package:rubisco_browser/features/browser/components/desktop/site_info/site_card.dart';
 import 'package:ladybird/ladybird.dart';
@@ -34,7 +35,6 @@ class _PermissionPromptCardState extends State<PermissionPromptCard> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final prompt = widget.prompt;
     final kind = PermissionKind.of(prompt.name);
     final site = prompt.isFile ? 'This file' : prompt.origin;
@@ -47,7 +47,10 @@ class _PermissionPromptCardState extends State<PermissionPromptCard> {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(kind.icon, size: 20),
+              Padding(
+                padding: const EdgeInsets.only(top: 1),
+                child: BirdIcon(kind.glyph, size: 18),
+              ),
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
@@ -56,14 +59,14 @@ class _PermissionPromptCardState extends State<PermissionPromptCard> {
                             '$site cannot either. You can change this in '
                             'System Settings.'
                       : '$site wants to ${kind.action}',
-                  style: theme.textTheme.bodyMedium,
+                  style: context.birdText(weight: FontWeight.w600),
                 ),
               ),
-              IconButton(
+              BirdToolbarButton(
+                glyph: BirdGlyph.close,
                 tooltip: 'Not now',
-                iconSize: 16,
-                visualDensity: VisualDensity.compact,
-                icon: const Icon(Icons.close),
+                size: 22,
+                iconSize: 10,
                 onPressed: () => _answer(
                   prompt.isSystemDeniedNotice
                       ? PermissionOutcome.cancelled
@@ -76,33 +79,38 @@ class _PermissionPromptCardState extends State<PermissionPromptCard> {
             const SizedBox(height: 6),
             Text(
               'macOS may ask you as well.',
-              style: theme.textTheme.bodySmall,
+              style: context.birdText(
+                color: context.bird.textSecondary,
+                size: BirdTextSize.small,
+              ),
             ),
           ],
           const SizedBox(height: 12),
           if (prompt.isSystemDeniedNotice)
-            FilledButton(
+            BirdButton.primary(
+              'OK',
+              expand: true,
               onPressed: () => _answer(PermissionOutcome.cancelled),
-              child: const Text('OK'),
             )
           else ...[
-            FilledButton(
+            BirdButton.primary(
+              'Allow while visiting the site',
+              expand: true,
               onPressed: _ready
                   ? () => _answer(PermissionOutcome.allowAlways)
                   : null,
-              child: const Text('Allow while visiting the site'),
             ),
-            const SizedBox(height: 6),
-            FilledButton.tonal(
+            BirdButton(
+              'Allow this time',
+              expand: true,
               onPressed: _ready
                   ? () => _answer(PermissionOutcome.allowOnce)
                   : null,
-              child: const Text('Allow this time'),
             ),
-            const SizedBox(height: 6),
-            OutlinedButton(
+            BirdButton(
+              'Never allow',
+              expand: true,
               onPressed: _ready ? () => _answer(PermissionOutcome.block) : null,
-              child: const Text('Never allow'),
             ),
           ],
         ],

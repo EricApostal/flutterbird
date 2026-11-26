@@ -1,8 +1,9 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:bird_core/bird_core.dart';
-import 'package:flutter/material.dart';
+import 'package:bird_ui/bird_ui.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:rubisco_browser/features/browser/components/find/find_bar.dart';
 import 'package:rubisco_browser/features/devtools/browser_devtools.dart';
@@ -189,7 +190,6 @@ class _BrowserWindowScreenState extends ConsumerState<BrowserWindowScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final viewId = widget.viewId;
     final layoutMode = ref.watch(browserTabLayoutModeControllerProvider);
     final isVerticalLayout = layoutMode == BrowserTabLayoutMode.vertical;
@@ -245,13 +245,10 @@ class _BrowserWindowScreenState extends ConsumerState<BrowserWindowScreen> {
     return withFullscreenBackHandling(
       TabPreviewCapturer(
         controller: currentTabController,
-        child: Scaffold(
-          backgroundColor: Color.lerp(
-            Colors.black,
-            theme.colorScheme.primaryContainer,
-            0.5,
-          ),
-          body: Stack(
+        // The phone's layout returned above: from here on it is a desktop.
+        child: ColoredBox(
+          color: BirdTheme.of(context).frame,
+          child: Stack(
             children: [
               Row(
                 children: [
@@ -306,8 +303,7 @@ class _BrowserWindowScreenState extends ConsumerState<BrowserWindowScreen> {
                                     ),
                                     Expanded(
                                       child: Container(
-                                        color:
-                                            theme.colorScheme.primaryContainer,
+                                        color: BirdTheme.of(context).toolbar,
                                         child: ClipRRect(
                                           borderRadius: .only(
                                             topLeft: .circular(8),
@@ -367,17 +363,23 @@ class _FullscreenExitOverlay extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Over whatever the page shows, so light on dark in either theme.
+    const light = Color(0xFFFFFFFF);
     return Stack(
       children: [
         Positioned(
           top: 12,
           right: 12,
-          child: Material(
-            color: Colors.black45,
-            shape: const CircleBorder(),
-            child: IconButton(
+          child: Container(
+            decoration: const BoxDecoration(
+              color: Color(0x73000000),
+              shape: BoxShape.circle,
+            ),
+            child: BirdToolbarButton(
+              glyph: BirdGlyph.fullscreenExit,
               tooltip: 'Exit fullscreen',
-              icon: const Icon(Icons.fullscreen_exit, color: Colors.white),
+              color: light,
+              size: 38,
               onPressed: onExit,
             ),
           ),
@@ -397,12 +399,12 @@ class _FullscreenExitOverlay extends StatelessWidget {
                     vertical: 8,
                   ),
                   decoration: BoxDecoration(
-                    color: Colors.black87,
-                    borderRadius: BorderRadius.circular(8),
+                    color: const Color(0xDD000000),
+                    borderRadius: BorderRadius.circular(BirdRadius.panel),
                   ),
-                  child: const Text(
+                  child: Text(
                     'Press Esc to exit fullscreen',
-                    style: TextStyle(color: Colors.white, fontSize: 13),
+                    style: context.birdText(color: light),
                   ),
                 ),
               ),

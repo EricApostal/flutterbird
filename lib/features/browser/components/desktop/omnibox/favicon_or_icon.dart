@@ -1,10 +1,11 @@
 import 'dart:convert';
 
-import 'package:flutter/material.dart';
+import 'package:bird_ui/bird_ui.dart';
+import 'package:flutter/widgets.dart';
 
 class FaviconOrIcon extends StatelessWidget {
   final String? favicon;
-  final IconData fallback;
+  final BirdGlyph fallback;
   final double size;
   final Color? color;
 
@@ -20,7 +21,7 @@ class FaviconOrIcon extends StatelessWidget {
   Widget build(BuildContext context) {
     final favicon = this.favicon;
     if (favicon == null || favicon.isEmpty) {
-      return Icon(fallback, size: size, color: color);
+      return BirdIcon(fallback, size: size, color: color);
     }
 
     if (favicon.startsWith('http://') || favicon.startsWith('https://')) {
@@ -31,7 +32,7 @@ class FaviconOrIcon extends StatelessWidget {
         fit: BoxFit.cover,
         gaplessPlayback: true,
         errorBuilder: (context, error, stackTrace) {
-          return Icon(fallback, size: size, color: color);
+          return BirdIcon(fallback, size: size, color: color);
         },
       );
     }
@@ -42,7 +43,7 @@ class FaviconOrIcon extends StatelessWidget {
           : favicon;
       final bytes = base64Decode(base64Payload);
       if (bytes.isEmpty) {
-        return Icon(fallback, size: size, color: color);
+        return BirdIcon(fallback, size: size, color: color);
       }
 
       return Image.memory(
@@ -52,11 +53,11 @@ class FaviconOrIcon extends StatelessWidget {
         fit: BoxFit.cover,
         gaplessPlayback: true,
         errorBuilder: (context, error, stackTrace) {
-          return Icon(fallback, size: size, color: color);
+          return BirdIcon(fallback, size: size, color: color);
         },
       );
     } catch (_) {
-      return Icon(fallback, size: size, color: color);
+      return BirdIcon(fallback, size: size, color: color);
     }
   }
 }

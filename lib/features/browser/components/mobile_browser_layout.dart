@@ -1,5 +1,5 @@
 import 'package:bird_core/bird_core.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:rubisco_browser/features/browser/components/browser_window.dart';
 import 'package:rubisco_browser/features/browser/components/mobile_omnibox_bar.dart';

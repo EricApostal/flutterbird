@@ -1,11 +1,11 @@
 import 'package:bird_core/bird_core.dart';
-import 'package:flutter/material.dart';
+import 'package:bird_ui/bird_ui.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:rubisco_browser/features/browser/components/find/find_bar.dart';
 import 'package:rubisco_browser/features/browser/state/find_in_page.dart';
 import 'package:rubisco_browser/features/browser/components/browser_window.dart';
-import 'package:rubisco_browser/features/browser/components/desktop/omnibox/omnibox_style.dart';
 import 'package:rubisco_browser/features/browser/components/desktop/omnibox/omnibox_url_text.dart';
 import 'package:rubisco_browser/features/browser/components/desktop/site_info/picture_in_picture_button.dart';
 import 'package:rubisco_browser/features/browser/components/desktop/site_info/site_info_button.dart';
@@ -96,16 +96,15 @@ class _PopupWindowScreenState extends ConsumerState<PopupWindowScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final tab = ref.watch(browserTabProvider(widget.viewId));
     if (tab == null) return const SizedBox.shrink();
     final isFullscreen = ref.watch(
       browserFullscreenModeControllerProvider(_windowId),
     );
 
-    return Scaffold(
-      backgroundColor: omniboxSurfaceColor(theme),
-      body: Column(
+    return ColoredBox(
+      color: context.bird.frame,
+      child: Column(
         children: [
           if (!isFullscreen) _PopupLocationBar(tab: tab),
           Expanded(
@@ -130,24 +129,27 @@ class _PopupLocationBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return SizedBox(
+    return Container(
+      color: context.bird.toolbar,
       height: BrowserShell.popupLocationBarHeight,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         child: DecoratedBox(
           decoration: BoxDecoration(
-            color: theme.colorScheme.surfaceContainerHighest.withAlpha(110),
-            borderRadius: BorderRadius.circular(8),
+            color: context.bird.field,
+            borderRadius: BorderRadius.circular(BirdRadius.control),
           ),
           child: Row(
             children: [
-              SiteInfoButton(tab: tab),
+              SizedBox(
+                width: kSiteInfoButtonWidth,
+                child: Center(child: SiteInfoButton(tab: tab)),
+              ),
               Expanded(
                 child: ValueListenableBuilder<String>(
                   valueListenable: tab.urlNotifier,
                   builder: (context, url, _) => Text.rich(
-                    styledUrlSpan(theme, url),
+                    styledUrlSpan(context, url),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),

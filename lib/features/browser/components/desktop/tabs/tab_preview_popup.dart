@@ -2,7 +2,8 @@ import 'dart:async';
 import 'dart:ui' as ui;
 
 import 'package:bird_core/bird_core.dart';
-import 'package:flutter/material.dart';
+import 'package:bird_ui/bird_ui.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:rubisco_browser/features/browser/state/tab_preview_cache.dart';
 import 'package:rubisco_browser/features/windows/tab_drag_controller.dart';
@@ -82,11 +83,16 @@ class _TabPreviewHoverState extends State<TabPreviewHover> {
 
     final viewId = widget.viewId;
     final placement = widget.placement;
+    // The root overlay may be above this window's theme.
+    final colors = this.context.bird;
     _entry = OverlayEntry(
-      builder: (context) => _TabPreviewOverlay(
-        viewId: viewId,
-        anchor: anchor,
-        placement: placement,
+      builder: (context) => BirdTheme(
+        colors: colors,
+        child: _TabPreviewOverlay(
+          viewId: viewId,
+          anchor: anchor,
+          placement: placement,
+        ),
       ),
     );
     overlay.insert(_entry!);
@@ -230,86 +236,71 @@ class TabPreviewCard extends ConsumerWidget {
     final controller = ref.watch(browserTabProvider(viewId));
     if (controller == null) return const SizedBox.shrink();
 
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
+    final colors = context.bird;
 
-    return Material(
-      color: scheme.surfaceContainerHigh,
-      elevation: 10,
-      shadowColor: Colors.black,
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        width: thumbnailWidth + 16,
-        padding: const EdgeInsets.all(8),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: scheme.outlineVariant.withValues(alpha: 0.6),
-          ),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            ValueListenableBuilder<ui.Image?>(
-              valueListenable: TabPreviewCache.instance.listenableFor(viewId),
-              builder: (context, image, child) {
-                if (image == null) return const SizedBox.shrink();
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: Container(
-                      width: thumbnailWidth,
-                      height: thumbnailHeight,
-                      color: scheme.surfaceContainerLowest,
-                      // A page taller than 16:9 loses its bottom, as in a
-                      // browser's own tab previews.
-                      child: RawImage(
-                        image: image,
-                        fit: BoxFit.cover,
-                        alignment: Alignment.topCenter,
-                        filterQuality: FilterQuality.medium,
-                      ),
+    return BirdPanel(
+      width: thumbnailWidth + 18,
+      padding: const EdgeInsets.all(9),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ValueListenableBuilder<ui.Image?>(
+            valueListenable: TabPreviewCache.instance.listenableFor(viewId),
+            builder: (context, image, child) {
+              if (image == null) return const SizedBox.shrink();
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(BirdRadius.control),
+                  child: Container(
+                    width: thumbnailWidth,
+                    height: thumbnailHeight,
+                    color: colors.frame,
+                    // A page taller than 16:9 loses its bottom, as in a
+                    // browser's own tab previews.
+                    child: RawImage(
+                      image: image,
+                      fit: BoxFit.cover,
+                      alignment: Alignment.topCenter,
+                      filterQuality: FilterQuality.medium,
                     ),
-                  ),
-                );
-              },
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 2),
-              child: ValueListenableBuilder<String>(
-                valueListenable: controller.titleNotifier,
-                builder: (context, title, child) => Text(
-                  title.isEmpty ? 'New Tab' : title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.labelLarge?.copyWith(
-                    color: scheme.onSurface,
-                    fontWeight: FontWeight.w600,
                   ),
                 ),
+              );
+            },
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 2),
+            child: ValueListenableBuilder<String>(
+              valueListenable: controller.titleNotifier,
+              builder: (context, title, child) => Text(
+                title.isEmpty ? 'New Tab' : title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: context.birdText(weight: FontWeight.w600),
               ),
             ),
-            ValueListenableBuilder<String>(
-              valueListenable: controller.urlNotifier,
-              builder: (context, url, child) {
-                if (url.isEmpty) return const SizedBox.shrink();
-                return Padding(
-                  padding: const EdgeInsets.fromLTRB(2, 2, 2, 0),
-                  child: Text(
-                    url,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: scheme.onSurfaceVariant,
-                    ),
+          ),
+          ValueListenableBuilder<String>(
+            valueListenable: controller.urlNotifier,
+            builder: (context, url, child) {
+              if (url.isEmpty) return const SizedBox.shrink();
+              return Padding(
+                padding: const EdgeInsets.fromLTRB(2, 2, 2, 0),
+                child: Text(
+                  url,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: context.birdText(
+                    color: colors.textSecondary,
+                    size: BirdTextSize.caption,
                   ),
-                );
-              },
-            ),
-          ],
-        ),
+                ),
+              );
+            },
+          ),
+        ],
       ),
     );
   }

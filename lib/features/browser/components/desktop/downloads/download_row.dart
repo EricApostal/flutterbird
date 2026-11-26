@@ -1,4 +1,5 @@
-import 'package:flutter/material.dart';
+import 'package:bird_ui/bird_ui.dart';
+import 'package:flutter/widgets.dart';
 import 'package:ladybird/ladybird.dart';
 
 class DownloadRow extends StatelessWidget {
@@ -37,24 +38,24 @@ class DownloadRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final colors = context.bird;
     final subtitleColor = download.isFailed
-        ? theme.colorScheme.error
-        : theme.colorScheme.onSurfaceVariant;
+        ? colors.danger
+        : colors.textSecondary;
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(
-                _iconForStatus(download.status),
-                size: 18,
+              BirdIcon(
+                _glyphForStatus(download.status),
+                size: 16,
                 color: subtitleColor,
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 10),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -63,14 +64,15 @@ class DownloadRow extends StatelessWidget {
                       download.fileName,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodyMedium,
+                      style: context.birdText(),
                     ),
                     Text(
                       _statusLabel(),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodySmall?.copyWith(
+                      style: context.birdText(
                         color: subtitleColor,
+                        size: BirdTextSize.caption,
                       ),
                     ),
                   ],
@@ -95,18 +97,18 @@ class DownloadRow extends StatelessWidget {
     );
   }
 
-  IconData _iconForStatus(LadybirdDownloadStatus status) {
+  BirdGlyph _glyphForStatus(LadybirdDownloadStatus status) {
     switch (status) {
       case LadybirdDownloadStatus.inProgress:
-        return Icons.file_download_outlined;
+        return BirdGlyph.download;
       case LadybirdDownloadStatus.paused:
-        return Icons.pause_circle_outline;
+        return BirdGlyph.pause;
       case LadybirdDownloadStatus.completed:
-        return Icons.check_circle_outline;
+        return BirdGlyph.check;
       case LadybirdDownloadStatus.canceled:
-        return Icons.cancel_outlined;
+        return BirdGlyph.close;
       case LadybirdDownloadStatus.failed:
-        return Icons.error_outline;
+        return BirdGlyph.error;
     }
   }
 }
@@ -126,37 +128,30 @@ class _TrailingAction extends StatelessWidget {
     required this.onDismiss,
   });
 
+  Widget _button(BirdGlyph glyph, String tooltip, VoidCallback onPressed) =>
+      BirdToolbarButton(
+        glyph: glyph,
+        tooltip: tooltip,
+        size: 28,
+        iconSize: 14,
+        onPressed: onPressed,
+      );
+
   @override
   Widget build(BuildContext context) {
     if (download.isInProgress) {
-      return IconButton(
-        icon: const Icon(Icons.close, size: 18),
-        tooltip: 'Cancel',
-        onPressed: onCancel,
-      );
+      return _button(BirdGlyph.close, 'Cancel', onCancel);
     }
     if (download.isCompleted) {
       return Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          IconButton(
-            icon: const Icon(Icons.folder_open, size: 18),
-            tooltip: 'Show in folder',
-            onPressed: onShowInFolder,
-          ),
-          IconButton(
-            icon: const Icon(Icons.open_in_new, size: 18),
-            tooltip: 'Open',
-            onPressed: onOpen,
-          ),
+          _button(BirdGlyph.folder, 'Show in folder', onShowInFolder),
+          _button(BirdGlyph.openExternal, 'Open', onOpen),
         ],
       );
     }
-    return IconButton(
-      icon: const Icon(Icons.close, size: 18),
-      tooltip: 'Dismiss',
-      onPressed: onDismiss,
-    );
+    return _button(BirdGlyph.close, 'Dismiss', onDismiss);
   }
 }
 
@@ -172,18 +167,16 @@ class _AnimatedDownloadProgressBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final target = progress;
-    final bar = target == null
-        ? const LinearProgressIndicator(minHeight: 4)
+    return target == null
+        ? const BirdProgressBar()
         : TweenAnimationBuilder<double>(
             tween: Tween<double>(end: target),
             duration: const Duration(milliseconds: 300),
             curve: Curves.easeOutCubic,
             builder: (context, value, _) {
-              return LinearProgressIndicator(value: value, minHeight: 4);
+              return BirdProgressBar(value: value);
             },
           );
-
-    return ClipRRect(borderRadius: BorderRadius.circular(4), child: bar);
   }
 }
 

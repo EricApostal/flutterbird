@@ -1,5 +1,7 @@
 import 'package:bird_core/bird_core.dart';
-import 'package:flutter/material.dart';
+import 'package:bird_ui/bird_ui.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:rubisco_browser/features/browser/state/find_in_page.dart';
 import 'package:rubisco_browser/features/devtools/browser_devtools.dart';
@@ -385,15 +387,23 @@ class _BrowserOmniboxBarState extends ConsumerState<BrowserOmniboxBar> {
     LadybirdController currentTabController,
     List<BirdBookmark> bookmarks,
   ) {
+    // Only the keys the window answers to are named.
+    final isMac = defaultTargetPlatform == TargetPlatform.macOS;
+    String keys(String key, {bool shift = false}) => isMac
+        ? '${shift ? '⇧' : ''}⌘$key'
+        : 'Ctrl+${shift ? 'Shift+' : ''}$key';
+
     BrowserContextMenuItem actionItem({
       required _ToolbarMenuAction action,
       required String label,
       bool enabled = true,
+      String shortcut = '',
     }) {
       return BrowserContextMenuItem.action(
         label: label,
         value: _ToolbarMenuSelection.action(action),
         enabled: enabled,
+        shortcut: shortcut,
       );
     }
 
@@ -439,12 +449,21 @@ class _BrowserOmniboxBarState extends ConsumerState<BrowserOmniboxBar> {
         ref.read(browserTabLayoutModeControllerProvider) ==
         BrowserTabLayoutMode.vertical;
     return [
-      actionItem(action: _ToolbarMenuAction.newTab, label: 'New Tab'),
+      actionItem(
+        action: _ToolbarMenuAction.newTab,
+        label: 'New Tab',
+        shortcut: keys('T'),
+      ),
       if (ref.read(windowSystemProvider).supportsMultipleWindows)
-        actionItem(action: _ToolbarMenuAction.newWindow, label: 'New Window'),
+        actionItem(
+          action: _ToolbarMenuAction.newWindow,
+          label: 'New Window',
+          shortcut: keys('N'),
+        ),
       actionItem(
         action: _ToolbarMenuAction.closeCurrentTab,
         label: 'Close Current Tab',
+        shortcut: keys('W'),
       ),
       const BrowserContextMenuItem.separator(),
       actionItem(
@@ -457,10 +476,12 @@ class _BrowserOmniboxBarState extends ConsumerState<BrowserOmniboxBar> {
         actionItem(
           action: _ToolbarMenuAction.devTools,
           label: 'Web Developer Tools',
+          shortcut: isMac ? '⌥⌘I' : 'Ctrl+Shift+I',
         ),
       actionItem(
         action: _ToolbarMenuAction.findInPage,
         label: 'Find in Page…',
+        shortcut: keys('F'),
       ),
       const BrowserContextMenuItem.separator(),
       actionItem(
@@ -488,6 +509,7 @@ class _BrowserOmniboxBarState extends ConsumerState<BrowserOmniboxBar> {
         label: isVerticalLayout
             ? 'Switch to Horizontal Tabs'
             : 'Switch to Vertical Tabs',
+        shortcut: keys('S', shift: true),
       ),
       const BrowserContextMenuItem.separator(),
       actionItem(action: _ToolbarMenuAction.settings, label: 'Settings'),
@@ -596,7 +618,7 @@ class _BrowserOmniboxBarState extends ConsumerState<BrowserOmniboxBar> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final colors = context.bird;
 
     final omniboxController = ref.read(browserOmniboxProvider.notifier);
     final bookmarks = ref.watch(
@@ -605,9 +627,12 @@ class _BrowserOmniboxBarState extends ConsumerState<BrowserOmniboxBar> {
     final currentTabController = widget.currentTabController;
 
     return Container(
-      color: theme.colorScheme.primaryContainer,
+      decoration: BoxDecoration(
+        color: colors.toolbar,
+        border: Border(bottom: BorderSide(color: colors.toolbarBorder)),
+      ),
       child: Padding(
-        padding: const EdgeInsets.only(left: 4, right: 4, bottom: 4, top: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
         child: Column(
           children: [
             Row(
@@ -615,8 +640,9 @@ class _BrowserOmniboxBarState extends ConsumerState<BrowserOmniboxBar> {
                 ValueListenableBuilder<bool>(
                   valueListenable: currentTabController.canGoBackNotifier,
                   builder: (context, canGoBack, child) {
-                    return IconButton(
-                      icon: const Icon(Icons.arrow_back, size: 20),
+                    return BirdToolbarButton(
+                      glyph: BirdGlyph.back,
+                      tooltip: 'Back',
                       onPressed: canGoBack
                           ? () {
                               currentTabController.goBack();
@@ -629,8 +655,9 @@ class _BrowserOmniboxBarState extends ConsumerState<BrowserOmniboxBar> {
                 ValueListenableBuilder<bool>(
                   valueListenable: currentTabController.canGoForwardNotifier,
                   builder: (context, canGoForward, child) {
-                    return IconButton(
-                      icon: const Icon(Icons.arrow_forward, size: 20),
+                    return BirdToolbarButton(
+                      glyph: BirdGlyph.forward,
+                      tooltip: 'Forward',
                       onPressed: canGoForward
                           ? () {
                               currentTabController.goForward();
@@ -639,8 +666,9 @@ class _BrowserOmniboxBarState extends ConsumerState<BrowserOmniboxBar> {
                     );
                   },
                 ),
-                IconButton(
-                  icon: const Icon(Icons.refresh, size: 20),
+                BirdToolbarButton(
+                  glyph: BirdGlyph.reload,
+                  tooltip: 'Reload',
                   onPressed: () {
                     currentTabController.reload();
                   },
@@ -650,11 +678,11 @@ class _BrowserOmniboxBarState extends ConsumerState<BrowserOmniboxBar> {
                   builder: (context, url, child) {
                     final normalized = omniboxController.normalizeUrl(url);
                     final isBookmarked = omniboxController.isBookmarked(url);
-                    return IconButton(
-                      icon: Icon(
-                        isBookmarked ? Icons.bookmark : Icons.bookmark_border,
-                        size: 20,
-                      ),
+                    return BirdToolbarButton(
+                      glyph: isBookmarked
+                          ? BirdGlyph.starFilled
+                          : BirdGlyph.star,
+                      color: isBookmarked ? colors.accent : null,
                       tooltip: isBookmarked
                           ? 'Remove bookmark'
                           : 'Add bookmark',
@@ -688,22 +716,19 @@ class _BrowserOmniboxBarState extends ConsumerState<BrowserOmniboxBar> {
                         ),
                   ),
                 ),
-                const SizedBox(width: 6),
+                const SizedBox(width: 8),
                 const ExtensionActionButtons(),
                 const ExtensionsButton(),
-                const SizedBox(width: 6),
                 const DownloadsButton(),
-                const SizedBox(width: 6),
-                IconButton(
+                BirdToolbarButton(
+                  glyph: BirdGlyph.gear,
                   tooltip: 'Settings',
-                  icon: const Icon(Icons.settings, size: 20),
                   onPressed: _openSettingsInNewTab,
                 ),
-                const SizedBox(width: 6),
-                IconButton(
+                BirdToolbarButton(
                   key: _toolbarMenuButtonKey,
+                  glyph: BirdGlyph.menu,
                   tooltip: 'Open menu',
-                  icon: const Icon(Icons.menu, size: 20),
                   onPressed: () {
                     _showToolbarContextMenu(
                       omniboxController,
@@ -715,7 +740,7 @@ class _BrowserOmniboxBarState extends ConsumerState<BrowserOmniboxBar> {
               ],
             ),
             if (bookmarks.isNotEmpty) ...[
-              const SizedBox(height: 6),
+              const SizedBox(height: 4),
               SizedBox(
                 width: double.infinity,
                 child: OmniboxBookmarksBar(

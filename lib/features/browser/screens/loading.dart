@@ -1,8 +1,8 @@
 import 'package:bird_core/bird_core.dart';
-import 'package:flutter/material.dart';
-import 'package:flutter/widgets.dart';
+import 'package:bird_ui/bird_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:material_ui/material_ui.dart';
 
 class BrowserLoadingScreen extends ConsumerStatefulWidget {
   const BrowserLoadingScreen({super.key});
@@ -29,6 +29,12 @@ class _BrowserLoadingScreenState extends ConsumerState<BrowserLoadingScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (BirdTheme.maybeOf(context) case final colors?) {
+      return ColoredBox(
+        color: colors.frame,
+        child: const Center(child: BirdSpinner(size: 24)),
+      );
+    }
     return const Scaffold(
       body: Center(child: CircularProgressIndicator.adaptive()),
     );

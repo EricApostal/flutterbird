@@ -1,6 +1,6 @@
-import 'package:flutter/material.dart';
+import 'package:bird_ui/bird_ui.dart';
+import 'package:flutter/widgets.dart';
 import 'package:rubisco_browser/features/browser/components/desktop/downloads/download_row.dart';
-import 'package:rubisco_browser/features/browser/components/desktop/omnibox/omnibox_style.dart';
 import 'package:ladybird/ladybird.dart';
 
 class DownloadsPanel extends StatelessWidget {
@@ -15,72 +15,41 @@ class DownloadsPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Material(
-      elevation: 6,
-      color: omniboxSurfaceColor(theme),
-      borderRadius: BorderRadius.circular(kOmniboxFieldRadius),
-      clipBehavior: Clip.antiAlias,
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 360, maxHeight: 420),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 10, 4, 10),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text('Downloads', style: theme.textTheme.titleSmall),
+    return BirdPanel(
+      width: 360,
+      constraints: const BoxConstraints(maxHeight: 420),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          BirdPanelHeader('Downloads', onClose: onClose),
+          Flexible(
+            child: downloads.isEmpty
+                ? const BirdPlaceholder('No downloads yet')
+                : ListView.separated(
+                    shrinkWrap: true,
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    itemCount: downloads.length,
+                    separatorBuilder: (context, index) =>
+                        const BirdSeparator(),
+                    itemBuilder: (context, index) {
+                      final download = downloads[index];
+                      return DownloadRow(
+                        download: download,
+                        onCancel: () =>
+                            LadybirdController.cancelDownload(download.id),
+                        onOpen: () =>
+                            LadybirdController.openDownload(download.id),
+                        onShowInFolder: () =>
+                            LadybirdController.showDownloadInFolder(
+                              download.id,
+                            ),
+                        onDismiss: () => _dismiss(download.id),
+                      );
+                    },
                   ),
-                  IconButton(
-                    icon: const Icon(Icons.close, size: 18),
-                    tooltip: 'Close',
-                    onPressed: onClose,
-                  ),
-                ],
-              ),
-            ),
-            Divider(height: 1, color: theme.colorScheme.outline.withAlpha(50)),
-            Flexible(
-              child: downloads.isEmpty
-                  ? Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 28),
-                      child: Text(
-                        'No downloads yet',
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    )
-                  : ListView.separated(
-                      shrinkWrap: true,
-                      padding: const EdgeInsets.symmetric(vertical: 4),
-                      itemCount: downloads.length,
-                      separatorBuilder: (context, index) => Divider(
-                        height: 1,
-                        color: theme.colorScheme.outline.withAlpha(50),
-                      ),
-                      itemBuilder: (context, index) {
-                        final download = downloads[index];
-                        return DownloadRow(
-                          download: download,
-                          onCancel: () =>
-                              LadybirdController.cancelDownload(download.id),
-                          onOpen: () =>
-                              LadybirdController.openDownload(download.id),
-                          onShowInFolder: () =>
-                              LadybirdController.showDownloadInFolder(
-                                download.id,
-                              ),
-                          onDismiss: () => _dismiss(download.id),
-                        );
-                      },
-                    ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

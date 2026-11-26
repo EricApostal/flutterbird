@@ -2,8 +2,9 @@ import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:bird_core/bird_core.dart';
-import 'package:flutter/material.dart';
+import 'package:bird_ui/bird_ui.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:rubisco_browser/features/browser/components/desktop/omnibox/omnibox_bar.dart';
 import 'package:rubisco_browser/features/browser/components/desktop/tabs/tab.dart';
@@ -29,8 +30,8 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar> {
   static const double _kMinTabWidth = 170;
   static const double _kMaxTabWidth = 225;
   static const double _kTabSpacing = 2;
-  static const double _kAddButtonWidth = 48;
-  static const double _kLayoutToggleButtonWidth = 40;
+  static const double _kAddButtonWidth = 40;
+  static const double _kLayoutToggleButtonWidth = 36;
   static const double _kStripHeight = 40;
   static const double _kStripPadding = 4;
 
@@ -113,9 +114,17 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar> {
   }
 
   Widget _buildAddButton() {
-    return IconButton(
-      icon: const Icon(Icons.add, size: 20),
-      onPressed: () => BrowserTabActions.openNewTab(ref, context),
+    return SizedBox(
+      width: _kAddButtonWidth,
+      child: Center(
+        child: BirdToolbarButton(
+          glyph: BirdGlyph.plus,
+          tooltip: 'New tab',
+          size: 30,
+          iconSize: 14,
+          onPressed: () => BrowserTabActions.openNewTab(ref, context),
+        ),
+      ),
     );
   }
 
@@ -140,9 +149,10 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar> {
 
     return Column(
       children: [
-        SizedBox(
+        Container(
           key: _stripKey,
           height: _kStripHeight,
+          color: context.bird.frame,
           child: Row(
             children: [
               if (!Platform.isAndroid)
@@ -154,9 +164,10 @@ class _BrowserTabBarState extends ConsumerState<BrowserTabBar> {
                 ),
               SizedBox(
                 width: _kLayoutToggleButtonWidth,
-                child: IconButton(
-                  icon: const Icon(Icons.dashboard),
+                child: BirdToolbarButton(
+                  glyph: BirdGlyph.sidebar,
                   tooltip: 'Switch to vertical tabs',
+                  size: 30,
                   onPressed: () {
                     ref
                         .read(browserTabLayoutModeControllerProvider.notifier)

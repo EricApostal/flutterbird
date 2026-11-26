@@ -7,6 +7,8 @@ environment:
   sdk: ^3.11.0
 
 dependencies:
+  bird_ui:
+    path: ../bird_ui
   flutter:
     sdk: flutter
 

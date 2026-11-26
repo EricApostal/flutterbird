@@ -1,7 +1,7 @@
 import 'dart:ui' as ui;
 
 import 'package:bird_core/bird_core.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:rubisco_browser/features/browser/state/tab_actions.dart';
 import 'package:rubisco_browser/features/browser/state/tab_preview_cache.dart';

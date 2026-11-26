@@ -1,10 +1,10 @@
 import 'dart:io';
 
 import 'package:bird_core/bird_core.dart';
-import 'package:flutter/material.dart';
+import 'package:bird_ui/bird_ui.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:rubisco_browser/features/browser/components/desktop/omnibox/omnibox_style.dart';
 import 'package:rubisco_browser/features/browser/components/desktop/tabs/tab.dart';
 import 'package:rubisco_browser/features/browser/components/desktop/tabs/tab_strip.dart';
 import 'package:rubisco_browser/features/browser/state/tab_actions.dart';
@@ -31,7 +31,7 @@ class _BrowserVerticalTabSidebarState
   static const double _kSidebarWidth = BrowserVerticalTabSidebar.sidebarWidth;
   static const double _kSidebarPadding = 8;
   static const double _kTabHeight = 36;
-  static const double _kTabSpacing = 6;
+  static const double _kTabSpacing = 3;
   static const double _kTabSlot = _kTabHeight + _kTabSpacing;
   static const double _kNewTabExtent = _kTabHeight + 8;
   static const double _kMacControlsWidth = 78;
@@ -97,38 +97,32 @@ class _BrowserVerticalTabSidebarState
     );
   }
 
-  Widget _buildNewTabButton(ThemeData theme) {
+  Widget _buildNewTabButton() {
     return Padding(
-      padding: const EdgeInsets.only(top: 4, bottom: 4),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(8.0),
-          onTap: () {
-            HapticFeedback.lightImpact();
-            BrowserTabActions.openNewTab(ref, context);
-          },
+      padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 1),
+      child: BirdPressable(
+        onPressed: () {
+          HapticFeedback.lightImpact();
+          BrowserTabActions.openNewTab(ref, context);
+        },
+        builder: (context, state) => BirdFocusRing(
+          visible: state.focused,
           child: Container(
             decoration: BoxDecoration(
-              color: Color.lerp(
-                Colors.black,
-                theme.colorScheme.primaryContainer,
-                0.5,
-              )!,
-              borderRadius: BorderRadius.circular(8.0),
+              color: state.pressed
+                  ? context.bird.pressed
+                  : (state.hovered ? context.bird.hover : null),
+              borderRadius: BorderRadius.circular(BirdRadius.control),
             ),
             child: Row(
               children: [
                 const SizedBox(width: 10),
-                Icon(Icons.add, size: 16, color: theme.colorScheme.onSurface),
-                const SizedBox(width: 8),
+                const BirdIcon(BirdGlyph.plus, size: 14),
+                const SizedBox(width: 9),
                 Expanded(
                   child: Text(
                     'New Tab',
-                    style: TextStyle(
-                      color: theme.colorScheme.onSurface,
-                      fontSize: 13,
-                    ),
+                    style: context.birdText(size: BirdTextSize.small),
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
@@ -147,17 +141,15 @@ class _BrowserVerticalTabSidebarState
     final tabIds =
         ref.watch(browserWindowProvider(windowId))?.tabIds ?? const <int>[];
     final closingViewIds = ref.watch(closingTabsProvider);
-    final theme = Theme.of(context);
+    final colors = context.bird;
     final padding = MediaQuery.paddingOf(context);
 
     return Container(
       key: _sidebarKey,
       width: _kSidebarWidth,
       decoration: BoxDecoration(
-        color: omniboxSurfaceColor(theme),
-        border: Border(
-          right: BorderSide(color: theme.colorScheme.outline.withAlpha(36)),
-        ),
+        color: colors.frame,
+        border: Border(right: BorderSide(color: colors.toolbarBorder)),
       ),
       child: Column(
         children: [
@@ -175,15 +167,17 @@ class _BrowserVerticalTabSidebarState
                     ),
                   ),
                 ),
-                IconButton(
-                  icon: const Icon(Icons.splitscreen_outlined, size: 18),
+                BirdToolbarButton(
+                  glyph: BirdGlyph.tabs,
                   tooltip: 'Switch to horizontal tabs',
+                  size: 30,
                   onPressed: () {
                     ref
                         .read(browserTabLayoutModeControllerProvider.notifier)
                         .setHorizontal();
                   },
                 ),
+                const SizedBox(width: _kSidebarPadding),
               ],
             ),
           ),
@@ -203,7 +197,7 @@ class _BrowserVerticalTabSidebarState
                     crossExtent: _kSidebarWidth - _kSidebarPadding * 2,
                     spacing: _kTabSpacing,
                     scrollController: _scrollController,
-                    trailing: _buildNewTabButton(theme),
+                    trailing: _buildNewTabButton(),
                     trailingExtent: _kNewTabExtent,
                     itemBuilder: (context, id) => BrowserTab(
                       viewId: id,

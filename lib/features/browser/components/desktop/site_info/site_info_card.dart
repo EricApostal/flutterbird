@@ -1,5 +1,6 @@
 import 'package:bird_session/bird_session.dart';
-import 'package:flutter/material.dart';
+import 'package:bird_ui/bird_ui.dart';
+import 'package:flutter/widgets.dart';
 import 'package:rubisco_browser/features/browser/components/desktop/site_info/permission_kinds.dart';
 import 'package:rubisco_browser/features/browser/components/desktop/site_info/site_card.dart';
 import 'package:ladybird/ladybird.dart';
@@ -10,40 +11,40 @@ class SiteInfoCard extends StatelessWidget {
 
   final LadybirdController tab;
 
-  static (IconData, String, String?) _connection(SiteSecurityKind kind) =>
+  static (BirdGlyph, String, String?) _connection(SiteSecurityKind kind) =>
       switch (kind) {
         SiteSecurityKind.https => (
-          Icons.lock_outline,
+          BirdGlyph.lock,
           'This address uses HTTPS',
           'Secure connection',
         ),
         SiteSecurityKind.insecure => (
-          Icons.no_encryption_outlined,
+          BirdGlyph.lockOff,
           'Connection is not secure',
           'Others on the network can read or change what you send here. Do '
               'not enter passwords or card numbers.',
         ),
         SiteSecurityKind.local => (
-          Icons.computer,
+          BirdGlyph.computer,
           'Served by this computer',
           null,
         ),
         SiteSecurityKind.file => (
-          Icons.insert_drive_file_outlined,
+          BirdGlyph.file,
           'A file on this computer',
           null,
         ),
         SiteSecurityKind.extension => (
-          Icons.extension_outlined,
+          BirdGlyph.extension,
           'A page of an extension',
           null,
         ),
-        SiteSecurityKind.internal => (Icons.public, 'A browser page', null),
+        SiteSecurityKind.internal => (BirdGlyph.globe, 'A browser page', null),
       };
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final colors = context.bird;
 
     return ListenableBuilder(
       listenable: Listenable.merge([
@@ -52,7 +53,7 @@ class SiteInfoCard extends StatelessWidget {
       ]),
       builder: (context, _) {
         final security = SiteSecurity.of(tab.urlNotifier.value);
-        final (icon, title, detail) = _connection(security.kind);
+        final (glyph, title, detail) = _connection(security.kind);
         final site = LadybirdSiteBridge.instance.sitePermissions(tab.viewId);
         final isWeb = switch (security.kind) {
           SiteSecurityKind.https ||
@@ -71,18 +72,18 @@ class SiteInfoCard extends StatelessWidget {
                   security.host,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.titleSmall,
+                  style: context.birdText(weight: FontWeight.w600),
                 ),
-                const Divider(height: 20),
+                const BirdSeparator(space: 10),
               ],
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(
-                    icon,
-                    size: 18,
+                  BirdIcon(
+                    glyph,
+                    size: 16,
                     color: security.kind == SiteSecurityKind.insecure
-                        ? theme.colorScheme.error
+                        ? colors.danger
                         : null,
                   ),
                   const SizedBox(width: 10),
@@ -90,13 +91,16 @@ class SiteInfoCard extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(title, style: theme.textTheme.bodyMedium),
+                        Text(title, style: context.birdText()),
                         if (detail != null)
                           Padding(
-                            padding: const EdgeInsets.only(top: 2),
+                            padding: const EdgeInsets.only(top: 3),
                             child: Text(
                               detail,
-                              style: theme.textTheme.bodySmall,
+                              style: context.birdText(
+                                color: colors.textSecondary,
+                                size: BirdTextSize.small,
+                              ),
                             ),
                           ),
                       ],
@@ -105,9 +109,12 @@ class SiteInfoCard extends StatelessWidget {
                 ],
               ),
               if (isWeb && site != null && !site.isOpaque) ...[
-                const Divider(height: 22),
-                Text('Permissions', style: theme.textTheme.labelLarge),
-                const SizedBox(height: 4),
+                const BirdSeparator(space: 11),
+                Text(
+                  'Permissions',
+                  style: context.birdText(weight: FontWeight.w600),
+                ),
+                const SizedBox(height: 6),
                 for (final permission in site.permissions)
                   _PermissionRow(
                     viewId: tab.viewId,
@@ -117,12 +124,16 @@ class SiteInfoCard extends StatelessWidget {
                 if (site.permissions.any(
                   (p) => p.setting != PermissionSetting.ask,
                 ))
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: TextButton(
-                      onPressed: () => LadybirdSiteBridge.instance
-                          .resetSitePermissions(tab.viewId, site.origin),
-                      child: const Text('Reset permissions'),
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: BirdButton(
+                        'Reset permissions',
+                        small: true,
+                        onPressed: () => LadybirdSiteBridge.instance
+                            .resetSitePermissions(tab.viewId, site.origin),
+                      ),
                     ),
                   ),
               ],
@@ -147,58 +158,49 @@ class _PermissionRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final kind = PermissionKind.of(permission.name);
     final once = permission.setting == PermissionSetting.allowOnce;
 
-    return Row(
-      children: [
-        Icon(kind.icon, size: 18),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Text(
-            permission.requestedByPage &&
-                    permission.setting == PermissionSetting.ask
-                ? '${kind.label} (requested)'
-                : kind.label,
-            style: theme.textTheme.bodyMedium,
+    return SizedBox(
+      height: 30,
+      child: Row(
+        children: [
+          BirdIcon(kind.glyph, size: 16),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              permission.requestedByPage &&
+                      permission.setting == PermissionSetting.ask
+                  ? '${kind.label} (requested)'
+                  : kind.label,
+              style: context.birdText(),
+            ),
           ),
-        ),
-        DropdownButton<PermissionSetting>(
-          value: permission.setting,
-          underline: const SizedBox.shrink(),
-          isDense: true,
-          style: theme.textTheme.bodySmall,
-          items: [
-            const DropdownMenuItem(
-              value: PermissionSetting.ask,
-              child: Text('Ask'),
-            ),
-            const DropdownMenuItem(
-              value: PermissionSetting.allow,
-              child: Text('Allow'),
-            ),
-            if (once)
-              const DropdownMenuItem(
-                value: PermissionSetting.allowOnce,
-                child: Text('Allowed for now'),
-              ),
-            const DropdownMenuItem(
-              value: PermissionSetting.block,
-              child: Text('Block'),
-            ),
-          ],
-          onChanged: (setting) {
-            if (setting == null || setting == permission.setting) return;
-            LadybirdSiteBridge.instance.setSitePermission(
-              viewId,
-              origin,
-              permission.name,
-              setting,
-            );
-          },
-        ),
-      ],
+          BirdSelect<PermissionSetting>(
+            value: permission.setting,
+            small: true,
+            semanticLabel: kind.label,
+            options: [
+              const BirdOption(PermissionSetting.ask, 'Ask'),
+              const BirdOption(PermissionSetting.allow, 'Allow'),
+              if (once)
+                const BirdOption(
+                  PermissionSetting.allowOnce,
+                  'Allowed for now',
+                ),
+              const BirdOption(PermissionSetting.block, 'Block'),
+            ],
+            onChanged: (setting) {
+              LadybirdSiteBridge.instance.setSitePermission(
+                viewId,
+                origin,
+                permission.name,
+                setting,
+              );
+            },
+          ),
+        ],
+      ),
     );
   }
 }

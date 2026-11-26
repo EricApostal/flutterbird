@@ -1,8 +1,8 @@
 import 'package:bird_session/bird_session.dart';
-import 'package:flutter/material.dart';
+import 'package:bird_ui/bird_ui.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart';
 import 'package:ladybird/ladybird.dart';
-import 'package:rubisco_browser/features/browser/components/desktop/omnibox/omnibox_style.dart';
 import 'package:rubisco_browser/features/browser/state/find_in_page.dart';
 
 /// A page, with its find bar over the top right corner while it is open.
@@ -124,103 +124,75 @@ class _FindBarState extends State<_FindBar> {
     return KeyEventResult.ignored;
   }
 
-  Widget _button(String tooltip, IconData icon, VoidCallback? onPressed) {
-    return IconButton(
+  Widget _button(String tooltip, BirdGlyph glyph, VoidCallback? onPressed) {
+    return BirdToolbarButton(
       tooltip: tooltip,
-      icon: Icon(icon),
-      iconSize: 18,
-      visualDensity: VisualDensity.compact,
+      glyph: glyph,
+      size: 28,
+      iconSize: 13,
       onPressed: onPressed,
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final colors = context.bird;
 
-    return Material(
-      elevation: 8,
-      color: omniboxSurfaceColor(theme),
-      borderRadius: BorderRadius.circular(kOmniboxFieldRadius),
-      child: SizedBox(
-        width: 360,
-        height: 46,
-        child: ValueListenableBuilder<FindResult?>(
-          valueListenable: LadybirdFind.instance.results(_viewId),
-          builder: (context, result, _) {
-            final query = _search.queryOf(_viewId);
-            final total = result == null || result.total < 0
-                ? null
-                : result.total;
-            final canStep = query.isNotEmpty && total != 0;
+    return BirdPanel(
+      width: 370,
+      height: 40,
+      child: ValueListenableBuilder<FindResult?>(
+        valueListenable: LadybirdFind.instance.results(_viewId),
+        builder: (context, result, _) {
+          final query = _search.queryOf(_viewId);
+          final total = result == null || result.total < 0
+              ? null
+              : result.total;
+          final canStep = query.isNotEmpty && total != 0;
 
-            return Row(
-              children: [
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Focus(
-                    canRequestFocus: false,
-                    skipTraversal: true,
-                    onKeyEvent: _key,
-                    child: TextField(
-                      controller: _text,
-                      focusNode: _focus,
-                      autocorrect: false,
-                      enableSuggestions: false,
-                      onChanged: (value) => _search.search(_viewId, value),
-                      style: theme.textTheme.bodyMedium?.copyWith(fontSize: 13),
-                      decoration: const InputDecoration(
-                        isDense: true,
-                        filled: false,
-                        hintText: 'Find in page',
-                        border: InputBorder.none,
-                        enabledBorder: InputBorder.none,
-                        focusedBorder: InputBorder.none,
-                      ),
-                    ),
-                  ),
+          return Row(
+            children: [
+              const SizedBox(width: 6),
+              Expanded(
+                child: BirdTextField(
+                  controller: _text,
+                  focusNode: _focus,
+                  placeholder: 'Find in page',
+                  keepFocusOnSubmit: true,
+                  onKey: (event) => _key(_focus, event),
+                  onChanged: (value) => _search.search(_viewId, value),
                 ),
-                Text(
-                  findCountLabel(
-                    query: query,
-                    current: result?.current ?? 0,
-                    total: total,
-                  ),
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: total == 0
-                        ? theme.colorScheme.error
-                        : theme.colorScheme.onSurface.withAlpha(150),
-                  ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                findCountLabel(
+                  query: query,
+                  current: result?.current ?? 0,
+                  total: total,
                 ),
-                const SizedBox(width: 8),
-                SizedBox(
-                  height: 22,
-                  child: VerticalDivider(
-                    width: 1,
-                    color: theme.colorScheme.onSurface.withAlpha(50),
-                  ),
+                style: context.birdText(
+                  color: total == 0 ? colors.danger : colors.textSecondary,
+                  size: BirdTextSize.caption,
                 ),
-                const SizedBox(width: 2),
-                _button(
-                  'Previous match',
-                  Icons.keyboard_arrow_up,
-                  canStep
-                      ? () => _search.step(_viewId, forwards: false)
-                      : null,
-                ),
-                _button(
-                  'Next match',
-                  Icons.keyboard_arrow_down,
-                  canStep
-                      ? () => _search.step(_viewId, forwards: true)
-                      : null,
-                ),
-                _button('Close', Icons.close, _close),
-                const SizedBox(width: 4),
-              ],
-            );
-          },
-        ),
+              ),
+              const SizedBox(width: 8),
+              const BirdSeparator(vertical: true, length: 22),
+              const SizedBox(width: 2),
+              _button(
+                'Previous match',
+                BirdGlyph.chevronUp,
+                canStep ? () => _search.step(_viewId, forwards: false) : null,
+              ),
+              _button(
+                'Next match',
+                BirdGlyph.chevronDown,
+                canStep ? () => _search.step(_viewId, forwards: true) : null,
+              ),
+              _button('Close', BirdGlyph.close, _close),
+              const SizedBox(width: 4),
+            ],
+          );
+        },
       ),
     );
   }

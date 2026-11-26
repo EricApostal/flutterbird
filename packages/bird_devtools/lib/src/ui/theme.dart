@@ -1,3 +1,4 @@
+import 'package:bird_ui/bird_ui.dart';
 import 'package:flutter/widgets.dart';
 
 import '../util/syntax.dart';
@@ -127,6 +128,23 @@ class DtColors {
   final Color searchHit;
 
   bool get isDark => brightness == Brightness.dark;
+
+  /// These colours as the shared widgets know them: their menus, tooltips,
+  /// fields and scroll bars.
+  BirdColors get bird => BirdColors.forBrightness(brightness).copyWith(
+    panel: popup,
+    panelBorder: popupBorder,
+    separator: splitter,
+    text: textStrong,
+    textSecondary: textDim,
+    textDisabled: textDim.withValues(alpha: 0.55),
+    icon: text,
+    accent: accent,
+    inputBackground: inputBackground,
+    inputBorder: inputBorder,
+    hover: toolbarHover,
+    pressed: toolbarActive,
+  );
 
   static const DtColors light = DtColors(
     brightness: Brightness.light,
@@ -274,10 +292,10 @@ class DtColors {
 
 /// The fonts of the tools. Firefox uses the system's own for its chrome.
 class DtFonts {
-  static const String ui = '.AppleSystemUIFont';
-  static const List<String> uiFallback = ['Segoe UI', 'Ubuntu', 'Roboto', 'sans-serif'];
-  static const String mono = 'Menlo';
-  static const List<String> monoFallback = ['SF Mono', 'Consolas', 'DejaVu Sans Mono', 'Roboto Mono', 'monospace'];
+  static const String ui = BirdFonts.ui;
+  static const List<String> uiFallback = BirdFonts.uiFallback;
+  static const String mono = BirdFonts.mono;
+  static const List<String> monoFallback = BirdFonts.monoFallback;
 
   static const double uiSize = 12;
   static const double monoSize = 11;

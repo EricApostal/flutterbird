@@ -1,6 +1,7 @@
 import 'package:bird_session/bird_session.dart';
-import 'package:flutter/material.dart';
+import 'package:bird_ui/bird_ui.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart';
 import 'package:rubisco_browser/features/browser/components/desktop/omnibox/omnibox_style.dart';
 import 'package:rubisco_browser/features/browser/components/desktop/omnibox/omnibox_suggestions_overlay.dart';
 import 'package:rubisco_browser/features/browser/components/desktop/omnibox/omnibox_url_text.dart';
@@ -241,38 +242,19 @@ class _OmniboxSearchFieldState extends State<OmniboxSearchField> {
     return KeyEventResult.ignored;
   }
 
-  Widget _buildOverlayText(ThemeData theme, String text) {
+  Widget _buildOverlayText(String text) {
     return Positioned.fill(
       child: IgnorePointer(
-        child: Padding(
-          // Clear of the buttons at either end of the field.
-          padding: const EdgeInsets.only(
-            left: kSiteInfoButtonWidth,
-            right: kPictureInPictureButtonWidth,
-          ),
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: Text.rich(
-              styledUrlSpan(theme, text),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              strutStyle: StrutStyle.fromTextStyle(theme.textTheme.bodyMedium!),
-            ),
+        child: Align(
+          alignment: Alignment.centerLeft,
+          child: Text.rich(
+            styledUrlSpan(context, text),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            strutStyle: StrutStyle.fromTextStyle(context.birdText()),
           ),
         ),
       ),
-    );
-  }
-
-  /// The field's shape and fill. It has no outline: open, it is the top of the
-  /// panel, so its lower corners are square where the suggestions carry on.
-  InputBorder _border(bool open) {
-    const top = Radius.circular(kOmniboxPanelRadius);
-    return OutlineInputBorder(
-      borderRadius: open
-          ? const BorderRadius.vertical(top: top)
-          : BorderRadius.circular(kOmniboxFieldRadius),
-      borderSide: BorderSide.none,
     );
   }
 
@@ -301,8 +283,6 @@ class _OmniboxSearchFieldState extends State<OmniboxSearchField> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
     return ValueListenableBuilder<String>(
       valueListenable: widget.currentTabController.urlNotifier,
       builder: (context, url, child) {
@@ -314,7 +294,7 @@ class _OmniboxSearchFieldState extends State<OmniboxSearchField> {
               child: OverlayPortal(
                 controller: _overlay,
                 overlayChildBuilder: _buildSuggestions,
-                child: _buildField(context, theme),
+                child: _buildField(),
               ),
             );
           },
@@ -323,68 +303,85 @@ class _OmniboxSearchFieldState extends State<OmniboxSearchField> {
     );
   }
 
-  Widget _buildField(BuildContext context, ThemeData theme) {
-    return ValueListenableBuilder<TextEditingValue>(
-      valueListenable: _text,
-      builder: (context, editingValue, child) {
-        final isFocused = _focus.hasFocus;
-        final border = _border(_isOpen);
+  /// The field's box. Open, it is the top of the one panel it makes with the
+  /// suggestions: square below, where they carry on.
+  BoxDecoration _decoration(BirdColors colors, {required bool focused}) {
+    if (_isOpen) {
+      return BoxDecoration(
+        color: colors.fieldFocused,
+        borderRadius: const BorderRadius.vertical(
+          top: Radius.circular(kOmniboxPanelRadius),
+        ),
+        boxShadow: [BoxShadow(color: colors.shadow, blurRadius: 16)],
+      );
+    }
+    return BoxDecoration(
+      color: focused ? colors.fieldFocused : colors.field,
+      borderRadius: BorderRadius.circular(kOmniboxFieldRadius),
+      border: Border.all(
+        color: focused ? colors.accent : const Color(0x00000000),
+      ),
+      // The second pixel of the ring, outside, so that nothing moves.
+      boxShadow: focused
+          ? [BoxShadow(color: colors.accent, spreadRadius: 1)]
+          : null,
+    );
+  }
 
-        return Stack(
-          children: [
-            Focus(
-              // Only to hear the keys the field itself has no use for.
-              canRequestFocus: false,
-              skipTraversal: true,
-              onKeyEvent: _key,
-              child: TextField(
-                onChanged: _edited,
-                onSubmitted: _submit,
-                controller: _text,
-                focusNode: _focus,
-                autocorrect: false,
-                enableSuggestions: false,
-                style: theme.textTheme.bodyMedium!.copyWith(
-                  fontSize: 13,
-                  color: isFocused
-                      ? theme.colorScheme.onSurface
-                      : Colors.transparent,
-                ),
-                decoration: InputDecoration(
-                  prefixIcon: SiteInfoButton(tab: widget.currentTabController),
-                  prefixIconConstraints: const BoxConstraints(
-                    minWidth: kSiteInfoButtonWidth,
-                    maxWidth: kSiteInfoButtonWidth,
-                    minHeight: 30,
-                  ),
-                  suffixIcon: PictureInPictureButton(
-                    tab: widget.currentTabController,
-                  ),
-                  suffixIconConstraints: const BoxConstraints(
-                    minHeight: 30,
-                    maxWidth: kPictureInPictureButtonWidth,
-                  ),
-                  filled: true,
-                  fillColor: omniboxSurfaceColor(theme),
-                  hoverColor: Colors.transparent,
-                  isDense: true,
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 12,
-                  ),
-                  hintText:
-                      'Search ${widget.omniboxController.searchEngineLabel(widget.currentTabController)} or type a URL',
-                  hintStyle: theme.textTheme.bodyMedium?.copyWith(
-                    color: theme.colorScheme.onSurface.withAlpha(150),
-                  ),
-                  border: border,
-                  enabledBorder: border,
-                  focusedBorder: border,
+  Widget _buildField() {
+    return ListenableBuilder(
+      listenable: Listenable.merge([_text, _focus]),
+      builder: (context, child) {
+        final colors = context.bird;
+        final isFocused = _focus.hasFocus;
+        final engine = widget.omniboxController.searchEngineLabel(
+          widget.currentTabController,
+        );
+
+        return Container(
+          height: kOmniboxFieldHeight,
+          decoration: _decoration(colors, focused: isFocused),
+          child: Row(
+            children: [
+              SizedBox(
+                width: kSiteInfoButtonWidth,
+                child: Center(
+                  child: SiteInfoButton(tab: widget.currentTabController),
                 ),
               ),
-            ),
-            if (!isFocused) _buildOverlayText(theme, editingValue.text),
-          ],
+              Expanded(
+                child: Stack(
+                  fit: StackFit.passthrough,
+                  children: [
+                    Focus(
+                      // Only to hear the keys the field itself has no use for.
+                      canRequestFocus: false,
+                      skipTraversal: true,
+                      onKeyEvent: _key,
+                      child: BirdTextInput(
+                        onChanged: _edited,
+                        onSubmitted: _submit,
+                        keepFocusOnSubmit: false,
+                        controller: _text,
+                        focusNode: _focus,
+                        // Not shown while the styled address is over it.
+                        style: context.birdText(
+                          color: isFocused
+                              ? colors.text
+                              : const Color(0x00000000),
+                        ),
+                        placeholder: 'Search $engine or type a URL',
+                        padding: const EdgeInsets.symmetric(vertical: 7),
+                      ),
+                    ),
+                    if (!isFocused) _buildOverlayText(_text.text),
+                  ],
+                ),
+              ),
+              PictureInPictureButton(tab: widget.currentTabController),
+              const SizedBox(width: 4),
+            ],
+          ),
         );
       },
     );

@@ -2,7 +2,8 @@ import 'dart:async';
 
 import 'package:bird_core/bird_core.dart';
 import 'package:bird_extensions/bird_extensions.dart';
-import 'package:flutter/material.dart';
+import 'package:bird_ui/bird_ui.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:rubisco_browser/features/extensions/extension_popup.dart';
 import 'package:rubisco_browser/features/extensions/extension_toolbar.dart';
@@ -41,7 +42,6 @@ class _PinnedButton extends ConsumerStatefulWidget {
 
 class _PinnedButtonState extends ConsumerState<_PinnedButton> {
   final OverlayPortalController _overlay = OverlayPortalController();
-  final LayerLink _link = LayerLink();
   final List<StreamSubscription<Object?>> _subscriptions = [];
 
   @override
@@ -91,22 +91,17 @@ class _PinnedButtonState extends ConsumerState<_PinnedButton> {
     super.dispose();
   }
 
-  Future<void> _showMenu(ExtensionService service, Offset at) async {
-    final overlay =
-        Overlay.of(context).context.findRenderObject()! as RenderBox;
-    final choice = await showMenu<String>(
-      context: context,
-      position: RelativeRect.fromRect(
-        at & Size.zero,
-        Offset.zero & overlay.size,
-      ),
-      items: const [
-        PopupMenuItem(value: 'unpin', child: Text('Unpin from toolbar')),
-      ],
+  void _showMenu(ExtensionService service, Offset at) {
+    unawaited(
+      showBirdMenu(context, at, [
+        BirdMenuItem(
+          'Unpin from toolbar',
+          onSelected: () => unawaited(
+            service.pins.setPinned(widget.extension.uuid, pinned: false),
+          ),
+        ),
+      ]),
     );
-    if (choice == 'unpin') {
-      await service.pins.setPinned(widget.extension.uuid, pinned: false);
-    }
   }
 
   @override
@@ -121,39 +116,32 @@ class _PinnedButtonState extends ConsumerState<_PinnedButton> {
     );
     final enabled = state.enabled ?? true;
 
-    return CompositedTransformTarget(
-      link: _link,
-      child: OverlayPortal(
-        controller: _overlay,
-        overlayChildBuilder: (context) => ToolbarDropdown(
-          link: _link,
-          onDismiss: _overlay.hide,
-          child: ExtensionPopup(
-            url: '${extension.origin}/${state.popup}',
-            contentSizes: service.host.contentSizes,
-            onClose: _overlay.hide,
-          ),
-        ),
-        child: GestureDetector(
-          onSecondaryTapDown: (details) =>
-              unawaited(_showMenu(service, details.globalPosition)),
-          child: IconButton(
-            tooltip: state.title ?? extension.name,
-            onPressed: enabled
-                ? () {
-                    if (_overlay.isShowing) {
-                      _overlay.hide();
-                    } else if (pressExtensionAction(ref, service, extension)) {
-                      _overlay.show();
-                    }
-                  }
-                : null,
-            icon: ExtensionActionIcon(
-              service: service,
-              extension: extension,
-              state: state,
-            ),
-          ),
+    return BirdPopover(
+      controller: _overlay,
+      align: BirdPopoverAlign.end,
+      popoverBuilder: (context) => ExtensionPopup(
+        url: '${extension.origin}/${state.popup}',
+        contentSizes: service.host.contentSizes,
+        onClose: _overlay.hide,
+      ),
+      child: BirdToolbarButton(
+        tooltip: state.title ?? extension.name,
+        // A disabled extension still has its menu.
+        onSecondaryTapDown: (details) =>
+            _showMenu(service, details.globalPosition),
+        onPressed: enabled
+            ? () {
+                if (_overlay.isShowing) {
+                  _overlay.hide();
+                } else if (pressExtensionAction(ref, service, extension)) {
+                  _overlay.show();
+                }
+              }
+            : null,
+        icon: ExtensionActionIcon(
+          service: service,
+          extension: extension,
+          state: state,
         ),
       ),
     );

@@ -1,31 +1,31 @@
-import 'package:flutter/material.dart';
+import 'package:bird_ui/bird_ui.dart';
 
 /// How a permission of the engine is shown.
 class PermissionKind {
-  const PermissionKind(this.label, this.action, this.icon);
+  const PermissionKind(this.label, this.action, this.glyph);
 
   final String label;
 
   /// What a site that has it can do, to finish "wants to ...".
   final String action;
-  final IconData icon;
+  final BirdGlyph glyph;
 
   static PermissionKind of(String name) => switch (name) {
     'geolocation' => const PermissionKind(
       'Location',
       'know your location',
-      Icons.location_on_outlined,
+      BirdGlyph.location,
     ),
     'microphone' => const PermissionKind(
       'Microphone',
       'use your microphone',
-      Icons.mic_none,
+      BirdGlyph.microphone,
     ),
     'notifications' => const PermissionKind(
       'Notifications',
       'send you notifications',
-      Icons.notifications_none,
+      BirdGlyph.bell,
     ),
-    _ => PermissionKind(name, 'use "$name"', Icons.shield_outlined),
+    _ => PermissionKind(name, 'use "$name"', BirdGlyph.shield),
   };
 }

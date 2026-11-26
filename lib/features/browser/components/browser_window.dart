@@ -2,9 +2,11 @@ import 'dart:ui' as ui;
 
 import 'package:bird_core/bird_core.dart';
 import 'package:bird_devtools/bird_devtools.dart';
-import 'package:flutter/material.dart';
+import 'package:bird_ui/bird_ui.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:material_ui/material_ui.dart' show Theme;
 import 'package:rubisco_browser/features/browser/components/browser_context_menu.dart';
 import 'package:rubisco_browser/features/browser/components/tab_loading_bar.dart';
 import 'package:rubisco_browser/features/devtools/browser_devtools.dart';
@@ -214,14 +216,16 @@ class _BrowserWindowState extends ConsumerState<BrowserWindow> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    // The desktop's colours, or Android's Material ones.
+    final brightness =
+        BirdTheme.maybeOf(context)?.brightness ?? Theme.of(context).brightness;
     final controller = ref.watch(browserTabProvider(widget.viewId));
     if (controller == null) {
       return const SizedBox.shrink();
     }
 
     _bindController(controller);
-    controller.updateColorScheme(Theme.of(context).brightness);
+    controller.updateColorScheme(brightness);
 
     final windowId = BrowserWindowScope.of(context);
     final isFullscreen = ref.watch(
@@ -264,7 +268,7 @@ class _BrowserWindowState extends ConsumerState<BrowserWindow> {
       manager: devTools,
       tabId: widget.viewId,
       hidden: isFullscreen,
-      autoBrightness: theme.brightness,
+      autoBrightness: brightness,
       page: page,
     );
   }

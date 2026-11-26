@@ -1,5 +1,6 @@
 import 'package:bird_session/bird_session.dart';
-import 'package:flutter/material.dart';
+import 'package:bird_ui/bird_ui.dart';
+import 'package:flutter/widgets.dart';
 import 'package:rubisco_browser/features/browser/components/desktop/site_info/permission_prompt_card.dart';
 import 'package:rubisco_browser/features/browser/components/desktop/site_info/site_info_card.dart';
 import 'package:ladybird/ladybird.dart';
@@ -21,7 +22,6 @@ class SiteInfoButton extends StatefulWidget {
 
 class _SiteInfoButtonState extends State<SiteInfoButton> {
   final OverlayPortalController _overlay = OverlayPortalController();
-  final LayerLink _link = LayerLink();
   final LadybirdSiteBridge _bridge = LadybirdSiteBridge.instance;
 
   /// The prompt this has already opened itself for, so that one the user put
@@ -71,97 +71,63 @@ class _SiteInfoButtonState extends State<SiteInfoButton> {
     setState(() {});
   }
 
-  static (IconData, String?) _look(SiteSecurityKind kind) => switch (kind) {
-    SiteSecurityKind.https => (Icons.lock_outline, null),
-    SiteSecurityKind.insecure => (Icons.no_encryption_outlined, 'Not secure'),
-    SiteSecurityKind.local => (Icons.info_outline, null),
-    SiteSecurityKind.file => (Icons.insert_drive_file_outlined, null),
-    SiteSecurityKind.extension => (Icons.extension_outlined, null),
-    SiteSecurityKind.internal => (Icons.public, null),
+  static (BirdGlyph, String?) _look(SiteSecurityKind kind) => switch (kind) {
+    SiteSecurityKind.https => (BirdGlyph.lock, null),
+    SiteSecurityKind.insecure => (BirdGlyph.lockOff, 'Not secure'),
+    SiteSecurityKind.local => (BirdGlyph.info, null),
+    SiteSecurityKind.file => (BirdGlyph.file, null),
+    SiteSecurityKind.extension => (BirdGlyph.extension, null),
+    SiteSecurityKind.internal => (BirdGlyph.globe, null),
   };
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final colors = context.bird;
 
-    return CompositedTransformTarget(
-      link: _link,
-      child: OverlayPortal(
-        controller: _overlay,
-        overlayChildBuilder: _buildPanel,
-        child: ValueListenableBuilder<String>(
-          valueListenable: widget.tab.urlNotifier,
-          builder: (context, url, _) {
-            final (icon, warning) = _look(SiteSecurity.of(url).kind);
-            final waiting = _bridge.promptFor(widget.tab.viewId) != null;
-            return IconButton(
-              tooltip: waiting
-                  ? 'This site is asking for a permission'
-                  : warning ?? 'Site information',
-              iconSize: 16,
-              visualDensity: VisualDensity.compact,
-              constraints: const BoxConstraints.tightFor(
-                width: kSiteInfoButtonWidth,
-                height: 30,
-              ),
-              padding: EdgeInsets.zero,
-              onPressed: () {
-                setState(_overlay.toggle);
-              },
-              icon: Icon(
-                waiting ? Icons.live_help_outlined : icon,
-                color: waiting
-                    ? theme.colorScheme.primary
-                    : warning != null
-                    ? theme.colorScheme.error
-                    : theme.colorScheme.onSurfaceVariant,
-              ),
-            );
-          },
-        ),
+    return BirdPopover(
+      controller: _overlay,
+      gap: 8,
+      // A prompt opens by itself, and must not take what is being typed. A
+      // press anywhere else puts the panel away; a prompt stays asked, and
+      // the button brings it back.
+      takeFocus: false,
+      popoverBuilder: _buildPanel,
+      child: ValueListenableBuilder<String>(
+        valueListenable: widget.tab.urlNotifier,
+        builder: (context, url, _) {
+          final (glyph, warning) = _look(SiteSecurity.of(url).kind);
+          final waiting = _bridge.promptFor(widget.tab.viewId) != null;
+          // Filled in would say it holds something; a lit one asks to be
+          // looked at.
+          final asking = waiting ? colors.accent : null;
+          return BirdToolbarButton(
+            glyph: waiting ? BirdGlyph.help : glyph,
+            tooltip: waiting
+                ? 'This site is asking for a permission'
+                : warning ?? 'Site information',
+            size: 26,
+            iconSize: 15,
+            color:
+                asking ??
+                (warning != null ? colors.danger : colors.textSecondary),
+            onPressed: () {
+              setState(_overlay.toggle);
+            },
+          );
+        },
       ),
     );
   }
 
   Widget _buildPanel(BuildContext context) {
-    return Positioned.fill(
-      child: Stack(
-        children: [
-          // A press anywhere else puts the panel away. A prompt stays asked:
-          // the button brings it back.
-          Positioned.fill(
-            child: GestureDetector(
-              behavior: HitTestBehavior.translucent,
-              onTap: _hide,
-            ),
-          ),
-          CompositedTransformFollower(
-            link: _link,
-            targetAnchor: Alignment.bottomLeft,
-            followerAnchor: Alignment.topLeft,
-            offset: const Offset(0, 8),
-            child: Align(
-              alignment: Alignment.topLeft,
-              // A text field lies under the button, and a press in the panel
-              // is none of its business.
-              child: TextFieldTapRegion(
-                child: ListenableBuilder(
-                  listenable: _bridge,
-                  builder: (context, _) {
-                    final prompt = _bridge.promptFor(widget.tab.viewId);
-                    return prompt != null
-                        ? PermissionPromptCard(
-                            key: ValueKey(prompt.id),
-                            prompt: prompt,
-                          )
-                        : SiteInfoCard(tab: widget.tab);
-                  },
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
+    return ListenableBuilder(
+      listenable: _bridge,
+      builder: (context, _) {
+        final prompt = _bridge.promptFor(widget.tab.viewId);
+        return prompt != null
+            ? PermissionPromptCard(key: ValueKey(prompt.id), prompt: prompt)
+            : SiteInfoCard(tab: widget.tab);
+      },
     );
   }
 }

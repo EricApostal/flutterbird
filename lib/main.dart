@@ -1,13 +1,17 @@
 import 'dart:io';
 
-import 'package:flutter/material.dart';
+import 'package:bird_ui/bird_ui.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:material_ui/material_ui.dart'
+    show MaterialApp, MaterialUiCompatibilityBridge, ThemeMode;
 import 'package:bird_core/bird_core.dart';
 import 'package:rubisco_browser/features/devtools/browser_devtools.dart';
 import 'package:rubisco_browser/features/downloads/downloads_bootstrap.dart';
 import 'package:rubisco_browser/features/extensions/app_browser_bridge.dart';
 import 'package:rubisco_browser/features/router/controller.dart';
 import 'package:rubisco_browser/features/theme/app_theme.dart';
+import 'package:rubisco_browser/features/theme/appearance.dart';
 import 'package:rubisco_browser/features/windows/browser_shell.dart';
 import 'package:rubisco_browser/features/windows/legacy_window_system.dart';
 import 'package:rubisco_browser/features/windows/macos/mac_devtools_windows.dart';
@@ -137,18 +141,29 @@ class _MainAppState extends ConsumerState<MainApp> {
   Widget build(BuildContext context) {
     return BrowserWindowScope(
       windowId: _windowId,
-      child: MaterialApp.router(
-        routerConfig: routerController,
-        themeMode: ThemeMode.dark,
-        darkTheme: birdDarkTheme(),
-        theme: birdLightTheme(),
-        builder: (context, child) {
-          return PopScope(
-            canPop: false,
-            child: child ?? const SizedBox.shrink(),
-          );
-        },
-      ),
+      child: Platform.isAndroid ? _androidApp() : _desktopApp(),
     );
   }
+
+  // A browser is not left by going back from its first page.
+  Widget _keepOpen(Widget? child) =>
+      PopScope(canPop: false, child: child ?? const SizedBox.shrink());
+
+  Widget _desktopApp() => BirdApp.router(
+    routerConfig: routerController,
+    themeMode: desktopThemeMode,
+    builder: (context, child) => _keepOpen(child),
+  );
+
+  Widget _androidApp() => MaterialApp.router(
+    routerConfig: routerController,
+    themeMode: ThemeMode.dark,
+    darkTheme: birdDarkTheme(),
+    theme: birdLightTheme(),
+    // For the packages that still use the framework's own Material, such as
+    // the one the tab switcher's grid is from. It goes when they move.
+    builder: (context, child) =>
+        // ignore: deprecated_member_use
+        MaterialUiCompatibilityBridge(child: _keepOpen(child)),
+  );
 }

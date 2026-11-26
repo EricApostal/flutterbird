@@ -1,14 +1,12 @@
-import 'package:flutter/material.dart';
+import 'package:bird_ui/bird_ui.dart';
+import 'package:flutter/widgets.dart';
 
 /// Splits [rawUrl] into scheme/path (dim) vs host (prominent) spans so the
 /// host stands out in suggestion rows and the omnibox overlay, matching the
 /// way most browser address bars style the authority.
-TextSpan styledUrlSpan(ThemeData theme, String rawUrl) {
-  final baseStyle = theme.textTheme.bodyMedium!;
-  final primary = baseStyle.copyWith(color: theme.colorScheme.onSurface);
-  final secondary = baseStyle.copyWith(
-    color: theme.colorScheme.onSurface.withAlpha(140),
-  );
+TextSpan styledUrlSpan(BuildContext context, String rawUrl) {
+  final primary = context.birdText();
+  final secondary = context.birdText(color: context.bird.textSecondary);
 
   final url = rawUrl.trim();
   if (url.isEmpty) {

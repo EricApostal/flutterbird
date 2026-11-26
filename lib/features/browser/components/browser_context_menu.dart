@@ -1,4 +1,5 @@
-import 'package:flutter/material.dart';
+import 'package:bird_ui/bird_ui.dart';
+import 'package:material_ui/material_ui.dart';
 
 enum BrowserContextMenuItemKind { action, separator, submenu }
 
@@ -9,6 +10,7 @@ class BrowserContextMenuItem {
     this.enabled = true,
     this.checkable = false,
     this.checked = false,
+    this.shortcut = '',
   }) : kind = BrowserContextMenuItemKind.action,
        children = const [];
 
@@ -19,6 +21,7 @@ class BrowserContextMenuItem {
       enabled = false,
       checkable = false,
       checked = false,
+      shortcut = '',
       children = const [];
 
   const BrowserContextMenuItem.submenu({
@@ -28,7 +31,8 @@ class BrowserContextMenuItem {
        value = null,
        enabled = false,
        checkable = false,
-       checked = false;
+       checked = false,
+       shortcut = '';
 
   final BrowserContextMenuItemKind kind;
   final String label;
@@ -36,6 +40,9 @@ class BrowserContextMenuItem {
   final bool enabled;
   final bool checkable;
   final bool checked;
+
+  /// The keys that do the same, shown on the desktop.
+  final String shortcut;
   final List<BrowserContextMenuItem> children;
 
   bool get isAction => kind == BrowserContextMenuItemKind.action;
@@ -49,6 +56,12 @@ class BrowserContextMenuPresenter {
     required Rect anchorRect,
     required List<BrowserContextMenuItem> items,
   }) async {
+    // Under a Bird interface, the desktop's, the menu is a desktop one, with
+    // submenus. It opens under a button, or at the pointer.
+    if (BirdTheme.maybeOf(context) != null) {
+      return _showDesktop(context, anchorRect, items);
+    }
+
     final overlayRenderObject = Overlay.of(context).context.findRenderObject();
     if (overlayRenderObject is! RenderBox) return null;
 
@@ -73,6 +86,36 @@ class BrowserContextMenuPresenter {
       ),
       items: popupItems,
     );
+  }
+
+  static Future<Object?> _showDesktop(
+    BuildContext context,
+    Rect anchor,
+    List<BrowserContextMenuItem> items,
+  ) async {
+    Object? chosen;
+    List<BirdMenuEntry> entries(List<BrowserContextMenuItem> items) => [
+      for (final item in items)
+        if (item.isSeparator)
+          const BirdMenuItem.separator()
+        else if (item.isSubmenu)
+          BirdMenuItem(item.label, submenu: entries(item.children))
+        else
+          BirdMenuItem(
+            item.label,
+            shortcut: item.shortcut,
+            enabled: item.enabled && item.value != null,
+            checked: item.checkable ? item.checked : null,
+            onSelected: () => chosen = item.value,
+          ),
+    ];
+    await showBirdMenu(
+      context,
+      anchor.bottomLeft,
+      entries(items),
+      alignRight: anchor.right,
+    );
+    return chosen;
   }
 
   static List<PopupMenuEntry<Object>> _buildPopupEntries(

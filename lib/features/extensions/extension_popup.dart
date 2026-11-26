@@ -1,8 +1,8 @@
 import 'dart:async';
 
 import 'package:bird_extensions/bird_extensions.dart';
-import 'package:flutter/material.dart';
-import 'package:rubisco_browser/features/browser/components/desktop/omnibox/omnibox_style.dart';
+import 'package:bird_ui/bird_ui.dart';
+import 'package:flutter/widgets.dart';
 import 'package:ladybird/ladybird.dart';
 
 /// The most room a popup may take, as in Firefox.
@@ -75,22 +75,14 @@ class _ExtensionPopupState extends State<ExtensionPopup> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
     // Nothing of the popup shows until it has its size: not its page, and not
     // the card it sits on, which would be as big as the most room it can have.
     return Offstage(
       offstage: !_measured,
-      child: Material(
-        elevation: 6,
-        color: omniboxSurfaceColor(theme),
-        borderRadius: BorderRadius.circular(kOmniboxFieldRadius),
-        clipBehavior: Clip.antiAlias,
-        child: SizedBox(
-          width: _size.width,
-          height: _size.height,
-          child: LadybirdView(controller: _controller),
-        ),
+      child: BirdPanel(
+        width: _size.width,
+        height: _size.height,
+        child: LadybirdView(controller: _controller),
       ),
     );
   }

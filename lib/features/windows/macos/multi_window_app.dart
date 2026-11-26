@@ -2,9 +2,10 @@
 // ignore_for_file: implementation_imports, invalid_use_of_internal_member
 
 import 'package:bird_devtools/bird_devtools.dart';
-import 'package:flutter/material.dart';
+import 'package:bird_ui/bird_ui.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter/src/widgets/_window.dart';
-import 'package:rubisco_browser/features/theme/app_theme.dart';
+import 'package:rubisco_browser/features/theme/appearance.dart';
 import 'package:rubisco_browser/features/windows/desktop_window_home.dart';
 import 'package:rubisco_browser/features/windows/macos/mac_devtools_windows.dart';
 import 'package:rubisco_browser/features/windows/macos/mac_picture_in_picture.dart';
@@ -34,16 +35,13 @@ class MultiWindowApp extends StatelessWidget {
             Window(
               key: ValueKey('devtools-${window.tabId}'),
               controller: window.controller,
-              child: MaterialApp(
-                debugShowCheckedModeBanner: false,
-                themeMode: ThemeMode.dark,
-                darkTheme: birdDarkTheme(),
-                theme: birdLightTheme(),
+              child: BirdApp(
+                themeMode: desktopThemeMode,
                 home: Builder(
                   builder: (context) => DevToolsToolboxHost(
                     manager: devTools.manager,
                     tabId: window.tabId,
-                    autoBrightness: Theme.of(context).brightness,
+                    autoBrightness: context.bird.brightness,
                   ),
                 ),
               ),
@@ -52,9 +50,8 @@ class MultiWindowApp extends StatelessWidget {
             Window(
               key: ValueKey('pip-${window.viewId}'),
               controller: window.controller,
-              child: MaterialApp(
-                debugShowCheckedModeBanner: false,
-                theme: birdDarkTheme(),
+              child: BirdApp(
+                themeMode: BirdThemeMode.dark,
                 home: PictureInPictureView(window: window),
               ),
             ),
@@ -75,12 +72,9 @@ class _BrowserWindowApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return BrowserWindowScope(
       windowId: windowId,
-      child: MaterialApp(
-        debugShowCheckedModeBanner: false,
-        themeMode: ThemeMode.dark,
-        darkTheme: birdDarkTheme(),
-        theme: birdLightTheme(),
-        home: const DesktopWindowHome(),
+      child: const BirdApp(
+        themeMode: desktopThemeMode,
+        home: DesktopWindowHome(),
       ),
     );
   }

@@ -1,11 +1,11 @@
 import 'package:bird_session/bird_session.dart';
-import 'package:flutter/material.dart';
+import 'package:bird_ui/bird_ui.dart';
+import 'package:flutter/widgets.dart';
 import 'package:rubisco_browser/features/browser/components/desktop/omnibox/favicon_or_icon.dart';
 import 'package:rubisco_browser/features/browser/components/desktop/site_info/site_info_button.dart';
 import 'package:rubisco_browser/features/browser/state/omnibox_state.dart';
 
-const double _rowHeight = 38;
-const Radius _pill = Radius.circular(_rowHeight / 2);
+const double _rowHeight = 32;
 
 /// One suggestion, on one line: what it is, then where it goes, with what the
 /// user typed in bold.
@@ -38,12 +38,12 @@ class OmniboxSuggestionRow extends StatefulWidget {
 class _OmniboxSuggestionRowState extends State<OmniboxSuggestionRow> {
   bool _hovered = false;
 
-  static IconData _iconFor(OmniboxSuggestionType type) => switch (type) {
-    OmniboxSuggestionType.bookmark => Icons.star_border,
+  static BirdGlyph _iconFor(OmniboxSuggestionType type) => switch (type) {
+    OmniboxSuggestionType.bookmark => BirdGlyph.star,
     OmniboxSuggestionType.history ||
-    OmniboxSuggestionType.address => Icons.public,
+    OmniboxSuggestionType.address => BirdGlyph.globe,
     OmniboxSuggestionType.searchQuery ||
-    OmniboxSuggestionType.searchAction => Icons.search,
+    OmniboxSuggestionType.searchAction => BirdGlyph.search,
   };
 
   /// [text] in [style], bold where it is what was asked for.
@@ -70,16 +70,19 @@ class _OmniboxSuggestionRowState extends State<OmniboxSuggestionRow> {
     return spans;
   }
 
-  TextSpan _line(ThemeData theme) {
+  /// The row's words, [highlighted] when it is the one Enter would take.
+  TextSpan _line(BuildContext context, {required bool highlighted}) {
+    final colors = context.bird;
     final option = widget.option;
-    final plain = theme.textTheme.bodyMedium!.copyWith(
-      fontSize: 13,
-      color: theme.colorScheme.onSurface,
+    final plain = context.birdText(
+      color: highlighted ? colors.onSelection : colors.text,
     );
     final quiet = plain.copyWith(
-      color: theme.colorScheme.onSurface.withAlpha(150),
+      color: highlighted ? colors.onSelection : colors.textSecondary,
     );
-    final link = plain.copyWith(color: theme.colorScheme.primary);
+    final link = plain.copyWith(
+      color: highlighted ? colors.onSelection : colors.accent,
+    );
 
     switch (option.type) {
       case OmniboxSuggestionType.searchAction:
@@ -113,11 +116,13 @@ class _OmniboxSuggestionRowState extends State<OmniboxSuggestionRow> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final active = widget.isSelected || _hovered;
+    final colors = context.bird;
+    final highlighted = widget.isSelected;
+    final active = highlighted || _hovered;
+    final foreground = highlighted ? colors.onSelection : colors.textSecondary;
 
     return MouseRegion(
-      cursor: SystemMouseCursors.click,
+      cursor: SystemMouseCursors.basic,
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
       child: GestureDetector(
@@ -125,48 +130,42 @@ class _OmniboxSuggestionRowState extends State<OmniboxSuggestionRow> {
         onTap: widget.onTap,
         child: Container(
           height: _rowHeight,
-          margin: const EdgeInsets.only(right: 12),
           decoration: BoxDecoration(
-            color: active
-                ? theme.colorScheme.onSurface.withAlpha(
-                    widget.isSelected ? 30 : 18,
-                  )
-                : null,
-            borderRadius: const BorderRadius.horizontal(right: _pill),
+            color: highlighted
+                ? colors.selection
+                : (_hovered ? colors.hover : null),
+            borderRadius: BorderRadius.circular(BirdRadius.control),
           ),
           child: Row(
             children: [
-              // The mark of the one Enter would take, at the panel's edge.
-              Container(
-                width: 3,
-                color: widget.isSelected ? theme.colorScheme.primary : null,
-              ),
-              // Its icon sits under the one at the start of the field.
+              // Its icon sits under the one at the start of the field, which
+              // is this much further out than the row.
               SizedBox(
-                width: kSiteInfoButtonWidth - 3,
+                width: kSiteInfoButtonWidth - 6,
                 child: Center(
                   child: FaviconOrIcon(
                     favicon: widget.option.favicon,
                     fallback: _iconFor(widget.option.type),
-                    size: 16,
-                    color: theme.colorScheme.onSurfaceVariant,
+                    size: 15,
+                    color: foreground,
                   ),
                 ),
               ),
-              const SizedBox(width: 4),
+              const SizedBox(width: 8),
               Expanded(
                 child: Text.rich(
-                  _line(theme),
+                  _line(context, highlighted: highlighted),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
               if (widget.onRemove != null && active)
-                IconButton(
+                BirdToolbarButton(
+                  glyph: BirdGlyph.close,
                   tooltip: 'Remove from history',
-                  iconSize: 15,
-                  visualDensity: VisualDensity.compact,
-                  icon: const Icon(Icons.close),
+                  size: 24,
+                  iconSize: 10,
+                  color: foreground,
                   onPressed: widget.onRemove,
                 ),
               const SizedBox(width: 4),

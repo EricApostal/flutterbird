@@ -2,7 +2,8 @@ import 'dart:async';
 
 import 'package:bird_core/bird_core.dart';
 import 'package:bird_extensions/bird_extensions.dart';
-import 'package:flutter/material.dart';
+import 'package:bird_ui/bird_ui.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:rubisco_browser/features/extensions/extension_popup.dart';
 import 'package:rubisco_browser/features/extensions/extension_toolbar.dart';
@@ -40,7 +41,6 @@ class ExtensionsButton extends ConsumerStatefulWidget {
 
 class _ExtensionsButtonState extends ConsumerState<ExtensionsButton> {
   final OverlayPortalController _overlayController = OverlayPortalController();
-  final LayerLink _layerLink = LayerLink();
   StreamSubscription<String>? _popupRequests;
   _Showing _showing = const _Menu();
 
@@ -98,27 +98,21 @@ class _ExtensionsButtonState extends ConsumerState<ExtensionsButton> {
       _Popup() => const SizedBox.shrink(),
     };
 
-    return ToolbarDropdown(
-      link: _layerLink,
-      onDismiss: _overlayController.hide,
-      child: child,
-    );
+    return child;
   }
 
   @override
   Widget build(BuildContext context) {
-    return CompositedTransformTarget(
-      link: _layerLink,
-      child: OverlayPortal(
-        controller: _overlayController,
-        overlayChildBuilder: _buildPanel,
-        child: IconButton(
-          tooltip: 'Extensions',
-          icon: const Icon(Icons.extension_outlined, size: 20),
-          onPressed: () => _overlayController.isShowing
-              ? _overlayController.hide()
-              : _show(const _Menu()),
-        ),
+    return BirdPopover(
+      controller: _overlayController,
+      align: BirdPopoverAlign.end,
+      popoverBuilder: _buildPanel,
+      child: BirdToolbarButton(
+        glyph: BirdGlyph.extension,
+        tooltip: 'Extensions',
+        onPressed: () => _overlayController.isShowing
+            ? _overlayController.hide()
+            : _show(const _Menu()),
       ),
     );
   }

@@ -1,7 +1,7 @@
 import 'package:bird_core/bird_core.dart';
-import 'package:flutter/material.dart';
+import 'package:bird_ui/bird_ui.dart';
+import 'package:flutter/widgets.dart';
 import 'package:rubisco_browser/features/browser/components/desktop/omnibox/favicon_or_icon.dart';
-import 'package:rubisco_browser/features/browser/state/omnibox_state.dart';
 
 class OmniboxBookmarksBar extends StatelessWidget {
   final List<BirdBookmark> bookmarks;
@@ -26,7 +26,7 @@ class OmniboxBookmarksBar extends StatelessWidget {
           for (final bookmark in bookmarks)
             Padding(
               padding: const EdgeInsets.only(right: 2),
-              child: _BookmarkChip(
+              child: _BookmarkButton(
                 bookmark: bookmark,
                 onTap: () => onBookmarkTap(bookmark.url),
               ),
@@ -37,44 +37,52 @@ class OmniboxBookmarksBar extends StatelessWidget {
   }
 }
 
-class _BookmarkChip extends StatelessWidget {
+class _BookmarkButton extends StatelessWidget {
   final BirdBookmark bookmark;
   final VoidCallback onTap;
 
-  const _BookmarkChip({required this.bookmark, required this.onTap});
+  const _BookmarkButton({required this.bookmark, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final colors = context.bird;
 
-    return Tooltip(
+    return BirdTooltip(
       message: bookmark.url,
-      child: OutlinedButton(
+      child: BirdPressable(
         onPressed: onTap,
-        style: OutlinedButton.styleFrom(
-          visualDensity: VisualDensity.compact,
-          minimumSize: const Size(0, 28),
-          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-          side: BorderSide(width: 0, color: Colors.transparent),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            FaviconOrIcon(
-              favicon: bookmark.favicon,
-              fallback: Icons.bookmark,
-              size: 14,
+        builder: (context, state) => BirdFocusRing(
+          visible: state.focused,
+          child: Container(
+            height: 24,
+            constraints: const BoxConstraints(maxWidth: 190),
+            padding: const EdgeInsets.symmetric(horizontal: 6),
+            decoration: BoxDecoration(
+              color: state.pressed
+                  ? colors.pressed
+                  : (state.hovered ? colors.hover : null),
+              borderRadius: BorderRadius.circular(BirdRadius.control),
             ),
-            const SizedBox(width: 6),
-            Text(
-              bookmark.title,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.bodySmall,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                FaviconOrIcon(
+                  favicon: bookmark.favicon,
+                  fallback: BirdGlyph.globe,
+                  size: 14,
+                ),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Text(
+                    bookmark.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: context.birdText(size: BirdTextSize.small),
+                  ),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );

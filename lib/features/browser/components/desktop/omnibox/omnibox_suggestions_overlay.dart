@@ -1,4 +1,5 @@
-import 'package:flutter/material.dart';
+import 'package:bird_ui/bird_ui.dart';
+import 'package:flutter/widgets.dart';
 import 'package:rubisco_browser/features/browser/components/desktop/omnibox/omnibox_style.dart';
 import 'package:rubisco_browser/features/browser/components/desktop/omnibox/omnibox_suggestion_row.dart';
 import 'package:rubisco_browser/features/browser/state/omnibox_state.dart';
@@ -27,21 +28,33 @@ class OmniboxSuggestionsOverlay extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final colors = context.bird;
 
     return ClipRect(
       // A shadow around the sides and below, but none up over the field, which
       // would draw a line where the two meet.
       clipper: const _NothingAbove(),
-      child: Material(
-        elevation: 10,
-        color: omniboxSurfaceColor(theme),
-        borderRadius: const BorderRadius.vertical(
-          bottom: Radius.circular(kOmniboxPanelRadius),
+      child: Container(
+        decoration: BoxDecoration(
+          color: colors.fieldFocused,
+          borderRadius: const BorderRadius.vertical(
+            bottom: Radius.circular(kOmniboxPanelRadius),
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: colors.shadow,
+              blurRadius: 16,
+              offset: const Offset(0, 6),
+            ),
+          ],
         ),
         clipBehavior: Clip.antiAlias,
-        child: Padding(
-          padding: const EdgeInsets.only(top: 2, bottom: 10),
+        child: Container(
+          margin: const EdgeInsets.symmetric(horizontal: 6),
+          padding: const EdgeInsets.only(top: 4, bottom: 6),
+          decoration: BoxDecoration(
+            border: Border(top: BorderSide(color: colors.separator)),
+          ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,

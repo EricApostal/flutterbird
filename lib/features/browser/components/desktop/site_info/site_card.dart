@@ -1,5 +1,5 @@
-import 'package:flutter/material.dart';
-import 'package:rubisco_browser/features/browser/components/desktop/omnibox/omnibox_style.dart';
+import 'package:bird_ui/bird_ui.dart';
+import 'package:flutter/widgets.dart';
 
 /// The panel that hangs from the site information button.
 class SiteCard extends StatelessWidget {
@@ -9,14 +9,11 @@ class SiteCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      elevation: 8,
-      color: omniboxSurfaceColor(Theme.of(context)),
-      borderRadius: BorderRadius.circular(kOmniboxFieldRadius),
-      child: SizedBox(
-        width: 340,
-        child: Padding(padding: const EdgeInsets.all(14), child: child),
-      ),
+    return BirdPanel(
+      width: 340,
+      padding: const EdgeInsets.all(14),
+      // A long list of permissions in a short window.
+      child: SingleChildScrollView(child: child),
     );
   }
 }

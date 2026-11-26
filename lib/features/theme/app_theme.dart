@@ -1,18 +1,38 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:rubisco_browser/features/theme/base.dart';
-import 'package:go_transitions/go_transitions.dart';
+
+/// Pages change at once, as a browser's do.
+class _NoTransition extends PageTransitionsBuilder {
+  const _NoTransition();
+
+  @override
+  Duration get transitionDuration => Duration.zero;
+
+  @override
+  Duration get reverseTransitionDuration => Duration.zero;
+
+  @override
+  Widget buildTransitions<T>(
+    PageRoute<T> route,
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    Widget child,
+  ) => child;
+}
 
 const PageTransitionsTheme _noPageTransitions = PageTransitionsTheme(
   builders: {
-    TargetPlatform.fuchsia: GoTransitions.none,
-    TargetPlatform.iOS: GoTransitions.none,
-    TargetPlatform.linux: GoTransitions.none,
-    TargetPlatform.macOS: GoTransitions.none,
-    TargetPlatform.windows: GoTransitions.none,
+    TargetPlatform.fuchsia: _NoTransition(),
+    TargetPlatform.iOS: _NoTransition(),
+    TargetPlatform.linux: _NoTransition(),
+    TargetPlatform.macOS: _NoTransition(),
+    TargetPlatform.windows: _NoTransition(),
   },
 );
 
-/// The app's themes, the same in every window.
+/// The themes of the Android app, which is a Material one. The desktop
+/// interface is drawn with bird_ui instead.
 ThemeData birdDarkTheme() => ThemeData(
   pageTransitionsTheme: _noPageTransitions,
   colorScheme: ColorScheme.fromSeed(

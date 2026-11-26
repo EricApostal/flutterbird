@@ -1,6 +1,7 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:bird_ui/bird_ui.dart';
+import 'package:flutter/widgets.dart';
 import 'package:ladybird/ladybird.dart';
 
 /// The width the button takes at the end of the address field.
@@ -57,27 +58,25 @@ class _PictureInPictureButtonState extends State<PictureInPictureButton> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
     return ValueListenableBuilder<VideoState>(
       valueListenable: _bridge.videoState(widget.tab.viewId),
       builder: (context, video, _) {
         if (!video.available) return const SizedBox.shrink();
-        return IconButton(
-          tooltip: video.active ? 'Bring the video back' : 'Picture in Picture',
-          iconSize: 16,
-          visualDensity: VisualDensity.compact,
-          constraints: const BoxConstraints.tightFor(
-            width: kPictureInPictureButtonWidth,
-            height: 30,
-          ),
-          padding: EdgeInsets.zero,
-          onPressed: _press,
-          icon: Icon(
-            Icons.picture_in_picture_alt,
-            color: video.active
-                ? theme.colorScheme.primary
-                : theme.colorScheme.onSurfaceVariant,
+        return SizedBox(
+          width: kPictureInPictureButtonWidth,
+          child: Center(
+            child: BirdToolbarButton(
+              glyph: BirdGlyph.pictureInPicture,
+              tooltip: video.active
+                  ? 'Bring the video back'
+                  : 'Picture in Picture',
+              size: 26,
+              iconSize: 15,
+              color: video.active
+                  ? context.bird.accent
+                  : context.bird.textSecondary,
+              onPressed: _press,
+            ),
           ),
         );
       },

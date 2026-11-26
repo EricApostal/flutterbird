@@ -1,5 +1,6 @@
 import 'package:bird_core/bird_core.dart';
-import 'package:flutter/material.dart';
+import 'package:bird_ui/bird_ui.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:rubisco_browser/features/browser/screens/browser.dart';
 import 'package:rubisco_browser/features/windows/popup_window_screen.dart';
@@ -21,7 +22,7 @@ class DesktopWindowHome extends ConsumerWidget {
 
     // A window whose only tab is docked in another, until the drag ends.
     if (window == null || tab == null) {
-      return ColoredBox(color: Theme.of(context).scaffoldBackgroundColor);
+      return ColoredBox(color: context.bird.frame);
     }
 
     return _WindowTitle(

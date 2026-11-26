@@ -2,7 +2,8 @@ import 'dart:io';
 
 import 'package:bird_core/bird_core.dart';
 import 'package:bird_extensions/bird_extensions.dart';
-import 'package:flutter/material.dart';
+import 'package:bird_ui/bird_ui.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:rubisco_browser/features/windows/window_scope.dart';
 import 'package:rubisco_browser/features/windows/window_system.dart';
@@ -56,22 +57,28 @@ class ExtensionActionIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const fallback = Icon(Icons.extension_outlined, size: 20);
+    const fallback = BirdIcon(BirdGlyph.extension, size: 17);
     final iconPath = state.iconPath;
     final badge = state.badgeText ?? '';
     final badgeColor = state.badgeBackground;
+    final background = badgeColor == null
+        ? null
+        : Color.fromARGB(
+            badgeColor[3],
+            badgeColor[0],
+            badgeColor[1],
+            badgeColor[2],
+          );
 
-    return Badge(
-      isLabelVisible: badge.isNotEmpty,
-      label: Text(badge, style: const TextStyle(fontSize: 9)),
-      backgroundColor: badgeColor == null
+    return BirdBadge(
+      label: badge,
+      color: background,
+      // Words an extension's own colour can be read under.
+      textColor: background == null
           ? null
-          : Color.fromARGB(
-              badgeColor[3],
-              badgeColor[0],
-              badgeColor[1],
-              badgeColor[2],
-            ),
+          : (background.computeLuminance() > 0.45
+                ? const Color(0xFF000000)
+                : const Color(0xFFFFFFFF)),
       child: Opacity(
         opacity: (state.enabled ?? true) ? 1 : 0.4,
         child: iconPath == null
@@ -80,49 +87,10 @@ class ExtensionActionIcon extends StatelessWidget {
                 File(
                   '${service.registry.directoryFor(extension).path}/$iconPath',
                 ),
-                width: 20,
-                height: 20,
+                width: 18,
+                height: 18,
                 errorBuilder: (_, _, _) => fallback,
               ),
-      ),
-    );
-  }
-}
-
-/// A panel hanging below the right end of a toolbar button, which a press
-/// anywhere else dismisses.
-class ToolbarDropdown extends StatelessWidget {
-  const ToolbarDropdown({
-    required this.link,
-    required this.onDismiss,
-    required this.child,
-    super.key,
-  });
-
-  final LayerLink link;
-  final VoidCallback onDismiss;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    return Positioned.fill(
-      child: GestureDetector(
-        behavior: HitTestBehavior.translucent,
-        onTap: onDismiss,
-        child: CompositedTransformFollower(
-          link: link,
-          targetAnchor: Alignment.bottomRight,
-          followerAnchor: Alignment.topRight,
-          offset: const Offset(0, 8),
-          child: Align(
-            alignment: Alignment.topRight,
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: () {}, // swallow so it doesn't bubble to the barrier
-              child: child,
-            ),
-          ),
-        ),
       ),
     );
   }

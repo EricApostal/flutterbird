@@ -1,5 +1,5 @@
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
 
 // Ladybird's brand colors (UI/Qt/BrandColors.h in the engine's tree).
 class _BrandColors {
@@ -184,9 +184,9 @@ class _TabLoadingBarPainter extends CustomPainter {
       Paint()
         ..shader = LinearGradient(
           colors: [
-            Colors.white.withValues(alpha: 0),
-            Colors.white.withValues(alpha: 0.55),
-            Colors.white.withValues(alpha: 0),
+            const Color(0xFFFFFFFF).withValues(alpha: 0),
+            const Color(0xFFFFFFFF).withValues(alpha: 0.55),
+            const Color(0xFFFFFFFF).withValues(alpha: 0),
           ],
         ).createShader(band),
     );

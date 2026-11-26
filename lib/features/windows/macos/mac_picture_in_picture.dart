@@ -6,7 +6,7 @@ import 'dart:async';
 import 'package:bird_core/bird_core.dart';
 import 'package:bird_window/bird_window.dart';
 import 'package:flutter/gestures.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter/src/widgets/_window.dart';
 import 'package:flutter/src/widgets/_window_macos.dart';
 import 'package:ladybird/ladybird.dart';
@@ -220,7 +220,7 @@ class _PictureInPictureViewState extends State<PictureInPictureView> {
   @override
   Widget build(BuildContext context) {
     return ColoredBox(
-      color: Colors.black,
+      color: const Color(0xFF000000),
       child: LayoutBuilder(
         builder: (context, constraints) {
           _reportSize(constraints.biggest);

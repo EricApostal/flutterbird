@@ -1,3 +1,4 @@
+import 'package:bird_ui/bird_ui.dart';
 import 'package:flutter/widgets.dart';
 
 import '../model/settings.dart';
@@ -47,13 +48,19 @@ class _DevToolsScopeState extends State<DevToolsScope> {
       final colors = brightness == Brightness.dark ? DtColors.dark : DtColors.light;
       Widget content = DtTheme(
         colors: colors,
-        child: DefaultTextEditingShortcuts(
-          child: ScrollConfiguration(
-            behavior: const DtScrollBehavior(),
-            child: DefaultSelectionStyle(
-              cursorColor: colors.textStrong,
-              selectionColor: colors.accent.withValues(alpha: 0.35),
-              child: Builder(builder: (context) => widget.child),
+        child: BirdTheme(
+          colors: colors.bird,
+          child: BirdMenuTheme(
+            compact: true,
+            child: DefaultTextEditingShortcuts(
+              child: ScrollConfiguration(
+                behavior: const DtScrollBehavior(),
+                child: DefaultSelectionStyle(
+                  cursorColor: colors.textStrong,
+                  selectionColor: colors.accent.withValues(alpha: 0.35),
+                  child: Builder(builder: (context) => widget.child),
+                ),
+              ),
             ),
           ),
         ),
