@@ -1,0 +1,368 @@
+import 'dart:math' as math;
+
+import 'package:flutter/widgets.dart';
+
+import 'theme.dart';
+
+/// The icons of the tools, drawn on a 16 by 16 grid as Firefox's are.
+enum DtGlyph {
+  picker, inspector, console, debugger, network, styleEditor, performance,
+  memory, storage, accessibility, application, close, meatball, dockBottom,
+  dockLeft, dockRight, dockWindow, search, trash, filter, gear, plus, reload,
+  chevronRight, chevronDown, chevronUp, twistyRight, twistyDown, pause, play,
+  stepOver, stepIn, stepOut, deactivate, prettyPrint, eye, eyeOff, check,
+  error, warning, info, prompt, result, command, folder, file, script, globe,
+  copy, responsive, record, stop, importFile, save, sun, moon, print, target,
+  database, cookie, paneToggle, rotate, sortUp, sortDown, circle, logpoint,
+  blackbox, stopwatch, splitConsole, editorMode, domain, frame, image,
+}
+
+class DtIcon extends StatelessWidget {
+  const DtIcon(this.glyph, {super.key, this.size = 16, this.color});
+
+  final DtGlyph glyph;
+  final double size;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) => SizedBox.square(
+    dimension: size,
+    child: CustomPaint(
+      painter: _GlyphPainter(glyph, color ?? context.dt.text),
+    ),
+  );
+}
+
+class _GlyphPainter extends CustomPainter {
+  _GlyphPainter(this.glyph, this.color);
+
+  final DtGlyph glyph;
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.save();
+    canvas.scale(size.width / 16, size.height / 16);
+    final stroke = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.25
+      ..strokeJoin = StrokeJoin.round
+      ..strokeCap = StrokeCap.round;
+    final fill = Paint()
+      ..color = color
+      ..style = PaintingStyle.fill;
+
+    void line(double x1, double y1, double x2, double y2) =>
+        canvas.drawLine(Offset(x1, y1), Offset(x2, y2), stroke);
+    void rect(double l, double t, double r, double b, [double radius = 1.5]) =>
+        canvas.drawRRect(
+          RRect.fromLTRBR(l, t, r, b, Radius.circular(radius)),
+          stroke,
+        );
+    void circle(double x, double y, double r, [Paint? paint]) =>
+        canvas.drawCircle(Offset(x, y), r, paint ?? stroke);
+    void poly(List<double> points, {bool close = false, Paint? paint}) {
+      final path = Path()..moveTo(points[0], points[1]);
+      for (var i = 2; i < points.length; i += 2) {
+        path.lineTo(points[i], points[i + 1]);
+      }
+      if (close) path.close();
+      canvas.drawPath(path, paint ?? stroke);
+    }
+
+    void text(String value, double size, [double dy = 0]) {
+      final painter = TextPainter(
+        text: TextSpan(
+          text: value,
+          style: TextStyle(
+            fontFamily: DtFonts.mono,
+            fontFamilyFallback: DtFonts.monoFallback,
+            fontSize: size,
+            fontWeight: FontWeight.w700,
+            color: color,
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      painter.paint(
+        canvas,
+        Offset(8 - painter.width / 2, 8 - painter.height / 2 + dy),
+      );
+      painter.dispose();
+    }
+
+    switch (glyph) {
+      case DtGlyph.picker:
+        poly([6.5, 13, 3, 13, 2, 12, 2, 3, 3, 2, 12, 2, 13, 3, 13, 6.5]);
+        poly([7.5, 7.5, 14, 10, 11.2, 11.2, 10, 14], close: true);
+      case DtGlyph.inspector:
+        rect(2, 2, 14, 14);
+        poly([7, 7, 12.5, 9.2, 10, 10, 9.2, 12.5], close: true);
+      case DtGlyph.console:
+        rect(1.5, 2.5, 14.5, 13.5);
+        poly([4, 6, 6.5, 8, 4, 10]);
+        line(8, 10.5, 11.5, 10.5);
+      case DtGlyph.debugger:
+        poly([2, 3.5, 9, 3.5, 14, 8, 9, 12.5, 2, 12.5], close: true);
+      case DtGlyph.network:
+        line(2, 4, 11, 4);
+        line(5, 8, 14, 8);
+        line(2, 12, 9, 12);
+      case DtGlyph.styleEditor:
+        text('{}', 11, -0.5);
+      case DtGlyph.performance:
+        poly([1.5, 11, 5, 6, 7.5, 9.5, 11, 3.5, 14.5, 8]);
+        line(1.5, 14, 14.5, 14);
+      case DtGlyph.memory:
+        circle(8, 8, 6);
+        line(8, 8, 8, 2.5);
+        line(8, 8, 12.5, 11.5);
+      case DtGlyph.storage:
+        canvas.drawOval(const Rect.fromLTRB(2.5, 2, 13.5, 6), stroke);
+        line(2.5, 4, 2.5, 12);
+        line(13.5, 4, 13.5, 12);
+        canvas.drawArc(const Rect.fromLTRB(2.5, 10, 13.5, 14), 0, math.pi, false, stroke);
+        canvas.drawArc(const Rect.fromLTRB(2.5, 6, 13.5, 10), 0, math.pi, false, stroke);
+      case DtGlyph.accessibility:
+        circle(8, 3, 1.4, fill);
+        line(2.5, 5.5, 13.5, 5.5);
+        poly([5.5, 14.5, 7, 9.5, 7, 5.5]);
+        poly([10.5, 14.5, 9, 9.5, 9, 5.5]);
+      case DtGlyph.application:
+        rect(2, 2, 7, 7);
+        rect(9, 2, 14, 7);
+        rect(2, 9, 7, 14);
+        rect(9, 9, 14, 14);
+      case DtGlyph.close:
+        line(4, 4, 12, 12);
+        line(12, 4, 4, 12);
+      case DtGlyph.meatball:
+        circle(3, 8, 1.4, fill);
+        circle(8, 8, 1.4, fill);
+        circle(13, 8, 1.4, fill);
+      case DtGlyph.dockBottom:
+        rect(1.5, 2.5, 14.5, 13.5);
+        canvas.drawRect(const Rect.fromLTRB(2, 9, 14, 13), fill);
+      case DtGlyph.dockLeft:
+        rect(1.5, 2.5, 14.5, 13.5);
+        canvas.drawRect(const Rect.fromLTRB(2, 3, 6.5, 13), fill);
+      case DtGlyph.dockRight:
+        rect(1.5, 2.5, 14.5, 13.5);
+        canvas.drawRect(const Rect.fromLTRB(9.5, 3, 14, 13), fill);
+      case DtGlyph.dockWindow:
+        rect(1.5, 4.5, 11.5, 13.5);
+        poly([4.5, 4.5, 4.5, 2.5, 14.5, 2.5, 14.5, 10.5, 11.5, 10.5]);
+      case DtGlyph.search:
+        circle(6.5, 6.5, 4);
+        line(9.5, 9.5, 14, 14);
+      case DtGlyph.trash:
+        line(2.5, 4, 13.5, 4);
+        poly([6, 4, 6, 2.5, 10, 2.5, 10, 4]);
+        poly([4, 4, 4.8, 14, 11.2, 14, 12, 4]);
+        line(6.5, 6.5, 6.8, 11.5);
+        line(9.5, 6.5, 9.2, 11.5);
+      case DtGlyph.filter:
+        poly([2, 3, 14, 3, 9.5, 8.5, 9.5, 13.5, 6.5, 12, 6.5, 8.5], close: true);
+      case DtGlyph.gear:
+        circle(8, 8, 2.2);
+        circle(8, 8, 4.6);
+        for (var i = 0; i < 8; i++) {
+          final a = i * math.pi / 4;
+          line(8 + 4.6 * math.cos(a), 8 + 4.6 * math.sin(a), 8 + 6.4 * math.cos(a), 8 + 6.4 * math.sin(a));
+        }
+      case DtGlyph.plus:
+        line(8, 3, 8, 13);
+        line(3, 8, 13, 8);
+      case DtGlyph.reload:
+        canvas.drawArc(const Rect.fromLTRB(3, 3, 13, 13), -0.2, math.pi * 1.7, false, stroke);
+        poly([13.4, 2.8, 13.2, 7, 9.2, 6.4]);
+      case DtGlyph.chevronRight:
+        poly([6, 4, 10, 8, 6, 12]);
+      case DtGlyph.chevronDown:
+        poly([4, 6, 8, 10, 12, 6]);
+      case DtGlyph.chevronUp:
+        poly([4, 10, 8, 6, 12, 10]);
+      case DtGlyph.twistyRight:
+        poly([5.5, 4, 12, 8, 5.5, 12], close: true, paint: fill);
+      case DtGlyph.twistyDown:
+        poly([4, 5.5, 12, 5.5, 8, 12], close: true, paint: fill);
+      case DtGlyph.pause:
+        canvas.drawRect(const Rect.fromLTRB(4.5, 3, 6.8, 13), fill);
+        canvas.drawRect(const Rect.fromLTRB(9.2, 3, 11.5, 13), fill);
+      case DtGlyph.play:
+        poly([4.5, 3, 13, 8, 4.5, 13], close: true);
+      case DtGlyph.stepOver:
+        canvas.drawArc(const Rect.fromLTRB(2.5, 3, 13, 12), math.pi * 1.08, math.pi * 0.86, false, stroke);
+        poly([13.5, 3.5, 13, 7.5, 9.2, 6.6]);
+        circle(8, 12.5, 1.7, fill);
+      case DtGlyph.stepIn:
+        line(8, 1.5, 8, 8.5);
+        poly([5, 6, 8, 9, 11, 6]);
+        circle(8, 13, 1.7, fill);
+      case DtGlyph.stepOut:
+        line(8, 2, 8, 9);
+        poly([5, 5, 8, 2, 11, 5]);
+        circle(8, 13, 1.7, fill);
+      case DtGlyph.deactivate:
+        poly([2, 4.5, 9.5, 4.5, 13, 8, 9.5, 11.5, 2, 11.5], close: true);
+        line(2.5, 13.5, 13.5, 2.5);
+      case DtGlyph.prettyPrint:
+        text('{ }', 9);
+      case DtGlyph.eye:
+      case DtGlyph.eyeOff:
+        final path = Path()
+          ..moveTo(1.5, 8)
+          ..quadraticBezierTo(8, 1.5, 14.5, 8)
+          ..quadraticBezierTo(8, 14.5, 1.5, 8);
+        canvas.drawPath(path, stroke);
+        circle(8, 8, 2.2);
+        if (glyph == DtGlyph.eyeOff) line(2.5, 13.5, 13.5, 2.5);
+      case DtGlyph.check:
+        poly([3, 8.5, 6.5, 12, 13, 4]);
+      case DtGlyph.error:
+        circle(8, 8, 6.5, fill);
+        final cross = Paint()
+          ..color = const Color(0xFFFFFFFF)
+          ..strokeWidth = 1.6
+          ..strokeCap = StrokeCap.round;
+        canvas.drawLine(const Offset(5.7, 5.7), const Offset(10.3, 10.3), cross);
+        canvas.drawLine(const Offset(10.3, 5.7), const Offset(5.7, 10.3), cross);
+      case DtGlyph.warning:
+        poly([8, 1.5, 15, 14, 1, 14], close: true, paint: fill);
+        final mark = Paint()
+          ..color = const Color(0xFF3A3000)
+          ..strokeWidth = 1.7
+          ..strokeCap = StrokeCap.round;
+        canvas.drawLine(const Offset(8, 6), const Offset(8, 9.8), mark);
+        canvas.drawCircle(const Offset(8, 12), 0.95, mark);
+      case DtGlyph.info:
+        circle(8, 8, 6.5, fill);
+        final mark = Paint()
+          ..color = const Color(0xFFFFFFFF)
+          ..strokeWidth = 1.7
+          ..strokeCap = StrokeCap.round;
+        canvas.drawLine(const Offset(8, 7.5), const Offset(8, 11.5), mark);
+        canvas.drawCircle(const Offset(8, 4.8), 1, mark);
+      case DtGlyph.prompt:
+        poly([3.5, 4, 7.5, 8, 3.5, 12]);
+        poly([8.5, 4, 12.5, 8, 8.5, 12]);
+      case DtGlyph.command:
+        poly([6, 4, 10, 8, 6, 12]);
+      case DtGlyph.result:
+        line(3, 8, 13, 8);
+        poly([7, 4, 3, 8, 7, 12]);
+      case DtGlyph.folder:
+        poly([1.5, 13, 1.5, 3, 6, 3, 7.5, 5, 14.5, 5, 14.5, 13], close: true);
+      case DtGlyph.file:
+      case DtGlyph.script:
+        poly([3, 1.5, 9.5, 1.5, 13, 5, 13, 14.5, 3, 14.5], close: true);
+        poly([9.5, 1.5, 9.5, 5, 13, 5]);
+        if (glyph == DtGlyph.script) text('JS', 5.5, 2);
+      case DtGlyph.globe:
+      case DtGlyph.domain:
+        circle(8, 8, 6);
+        canvas.drawOval(const Rect.fromLTRB(5, 2, 11, 14), stroke);
+        line(2, 8, 14, 8);
+      case DtGlyph.copy:
+        rect(5, 5, 13.5, 14);
+        poly([3, 11, 2.5, 11, 2.5, 2, 11, 2, 11, 3]);
+      case DtGlyph.responsive:
+        rect(1.5, 2.5, 10.5, 13.5);
+        rect(9, 6, 14.5, 13.5);
+      case DtGlyph.record:
+        circle(8, 8, 6);
+        circle(8, 8, 3, fill);
+      case DtGlyph.stop:
+        canvas.drawRRect(RRect.fromLTRBR(4, 4, 12, 12, const Radius.circular(1)), fill);
+      case DtGlyph.importFile:
+        line(8, 2, 8, 10);
+        poly([5, 7, 8, 10, 11, 7]);
+        poly([2.5, 10.5, 2.5, 13.5, 13.5, 13.5, 13.5, 10.5]);
+      case DtGlyph.save:
+        poly([2.5, 2.5, 11, 2.5, 13.5, 5, 13.5, 13.5, 2.5, 13.5], close: true);
+        rect(5, 9, 11, 13.5, 0);
+        line(5.5, 2.5, 5.5, 5.5);
+        line(5.5, 5.5, 10, 5.5);
+      case DtGlyph.sun:
+        circle(8, 8, 3);
+        for (var i = 0; i < 8; i++) {
+          final a = i * math.pi / 4;
+          line(8 + 5 * math.cos(a), 8 + 5 * math.sin(a), 8 + 6.5 * math.cos(a), 8 + 6.5 * math.sin(a));
+        }
+      case DtGlyph.moon:
+        final path = Path()
+          ..moveTo(10, 2.5)
+          ..cubicTo(4, 3, 2.5, 8, 4.5, 11)
+          ..cubicTo(7, 14.5, 12, 14, 13.5, 10)
+          ..cubicTo(9, 11.5, 6.5, 6.5, 10, 2.5);
+        canvas.drawPath(path, stroke);
+      case DtGlyph.print:
+        poly([4.5, 6, 4.5, 2, 11.5, 2, 11.5, 6]);
+        poly([4.5, 11.5, 2, 11.5, 2, 6, 14, 6, 14, 11.5, 11.5, 11.5]);
+        rect(4.5, 9.5, 11.5, 14, 0);
+      case DtGlyph.target:
+        circle(8, 8, 4.5);
+        circle(8, 8, 1.2, fill);
+        line(8, 1, 8, 4);
+        line(8, 12, 8, 15);
+        line(1, 8, 4, 8);
+        line(12, 8, 15, 8);
+      case DtGlyph.database:
+        canvas.drawOval(const Rect.fromLTRB(3, 2, 13, 5.5), stroke);
+        line(3, 3.8, 3, 12.5);
+        line(13, 3.8, 13, 12.5);
+        canvas.drawArc(const Rect.fromLTRB(3, 10.5, 13, 14), 0, math.pi, false, stroke);
+      case DtGlyph.cookie:
+        circle(8, 8, 6);
+        circle(6, 6, 0.9, fill);
+        circle(10, 8, 0.9, fill);
+        circle(7, 10.5, 0.9, fill);
+      case DtGlyph.paneToggle:
+        rect(1.5, 2.5, 14.5, 13.5);
+        line(6, 2.5, 6, 13.5);
+        line(10.5, 2.5, 10.5, 13.5);
+      case DtGlyph.rotate:
+        rect(5, 5, 11, 14);
+        canvas.drawArc(const Rect.fromLTRB(2, 1.5, 10, 9.5), math.pi, math.pi / 2, false, stroke);
+        poly([5, 0.5, 6.5, 1.8, 5, 3.4]);
+      case DtGlyph.sortUp:
+        poly([4.5, 10, 8, 6, 11.5, 10], close: true, paint: fill);
+      case DtGlyph.sortDown:
+        poly([4.5, 6, 8, 10, 11.5, 6], close: true, paint: fill);
+      case DtGlyph.circle:
+        circle(8, 8, 4, fill);
+      case DtGlyph.logpoint:
+        poly([2, 4, 10, 4, 14, 8, 10, 12, 2, 12], close: true, paint: fill);
+      case DtGlyph.blackbox:
+        rect(2.5, 2.5, 13.5, 13.5);
+        line(3, 13, 13, 3);
+      case DtGlyph.stopwatch:
+        circle(8, 9, 5.2);
+        line(8, 9, 8, 6);
+        line(6.5, 1.8, 9.5, 1.8);
+        line(8, 1.8, 8, 3.8);
+      case DtGlyph.splitConsole:
+        rect(1.5, 2.5, 14.5, 13.5);
+        line(1.5, 8.5, 14.5, 8.5);
+        poly([3.8, 10, 5.4, 11.2, 3.8, 12.4]);
+      case DtGlyph.editorMode:
+        rect(1.5, 2.5, 14.5, 13.5);
+        line(7.5, 2.5, 7.5, 13.5);
+        line(3.5, 5.5, 5.5, 5.5);
+        line(3.5, 8, 5.5, 8);
+      case DtGlyph.frame:
+        rect(2, 3, 14, 13);
+        line(2, 6, 14, 6);
+      case DtGlyph.image:
+        rect(2, 3, 14, 13);
+        circle(5.8, 6.2, 1.2, fill);
+        poly([2.5, 12, 7, 8.5, 9.5, 10.5, 11.5, 9, 13.5, 11]);
+    }
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(_GlyphPainter old) =>
+      old.glyph != glyph || old.color != color;
+}

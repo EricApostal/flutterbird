@@ -56,6 +56,13 @@ packages:
       relative: true
     source: path
     version: "0.0.1"
+  bird_devtools:
+    dependency: "direct main"
+    description:
+      path: "packages/bird_devtools"
+      relative: true
+    source: path
+    version: "0.1.0"
   bird_extensions:
     dependency: "direct main"
     description:

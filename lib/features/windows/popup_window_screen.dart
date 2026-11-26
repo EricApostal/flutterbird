@@ -10,6 +10,7 @@ import 'package:rubisco_browser/features/browser/components/desktop/omnibox/omni
 import 'package:rubisco_browser/features/browser/components/desktop/site_info/picture_in_picture_button.dart';
 import 'package:rubisco_browser/features/browser/components/desktop/site_info/site_info_button.dart';
 import 'package:rubisco_browser/features/browser/state/fullscreen_mode.dart';
+import 'package:rubisco_browser/features/devtools/browser_devtools.dart';
 import 'package:rubisco_browser/features/windows/browser_shell.dart';
 import 'package:rubisco_browser/features/windows/window_scope.dart';
 import 'package:rubisco_browser/features/windows/window_system.dart';
@@ -51,8 +52,22 @@ class _PopupWindowScreenState extends ConsumerState<PopupWindowScreen> {
   // Keyboard handlers hear every window's keys, so each acts only on its own.
   bool _handleKeyEvent(KeyEvent event) {
     if (event is! KeyDownEvent) return false;
+    if (handleDevToolsShortcut(
+      ref,
+      event,
+      windowId: _windowId,
+      tabId: widget.viewId,
+    )) {
+      return true;
+    }
     final keyboard = HardwareKeyboard.instance;
     if (!keyboard.isMetaPressed && !keyboard.isControlPressed) return false;
+    // Searching, with the keyboard in the developer tools, is theirs.
+    if (devToolsHasFocus(ref, widget.viewId) &&
+        (event.logicalKey == LogicalKeyboardKey.keyF ||
+            event.logicalKey == LogicalKeyboardKey.keyG)) {
+      return false;
+    }
     if (!ref.read(windowSystemProvider).claimShortcut(_windowId, event)) {
       return false;
     }

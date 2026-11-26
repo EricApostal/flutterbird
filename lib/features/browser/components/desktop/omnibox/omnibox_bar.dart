@@ -2,6 +2,7 @@ import 'package:bird_core/bird_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:rubisco_browser/features/browser/state/find_in_page.dart';
+import 'package:rubisco_browser/features/devtools/browser_devtools.dart';
 import 'package:rubisco_browser/features/browser/components/browser_context_menu.dart';
 import 'package:rubisco_browser/features/browser/components/desktop/downloads/downloads_button.dart';
 import 'package:rubisco_browser/features/browser/components/desktop/extensions/extensions_button.dart';
@@ -33,6 +34,7 @@ enum _ToolbarMenuAction {
   toggleBookmark,
   openBookmark,
   toggleTabLayout,
+  devTools,
 }
 
 class _ToolbarMenuSelection {
@@ -451,6 +453,11 @@ class _BrowserOmniboxBarState extends ConsumerState<BrowserOmniboxBar> {
       ),
       actionItem(action: _ToolbarMenuAction.pasteFromClipboard, label: 'Paste'),
       actionItem(action: _ToolbarMenuAction.viewSource, label: 'View Source'),
+      if (devToolsSupported)
+        actionItem(
+          action: _ToolbarMenuAction.devTools,
+          label: 'Web Developer Tools',
+        ),
       actionItem(
         action: _ToolbarMenuAction.findInPage,
         label: 'Find in Page…',
@@ -538,6 +545,9 @@ class _BrowserOmniboxBarState extends ConsumerState<BrowserOmniboxBar> {
         break;
       case _ToolbarMenuAction.pasteFromClipboard:
         currentTabController.pasteFromClipboard();
+        break;
+      case _ToolbarMenuAction.devTools:
+        ref.read(devToolsProvider)?.toggle(currentTabController.viewId);
         break;
       case _ToolbarMenuAction.viewSource:
         currentTabController.viewSource();

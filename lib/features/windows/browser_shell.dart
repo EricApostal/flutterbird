@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:bird_core/bird_core.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:rubisco_browser/features/browser/components/browser_window.dart';
+import 'package:rubisco_browser/features/devtools/browser_devtools.dart';
 import 'package:rubisco_browser/features/browser/state/history_bitmap_cache.dart';
 import 'package:rubisco_browser/features/browser/state/tab_preview_cache.dart';
 import 'package:rubisco_browser/features/router/controller.dart';
@@ -209,6 +210,8 @@ class BrowserShell {
   }
 
   void _disposeTab(int tabId) {
+    // While the tab's view still exists, so that its tools can let go of it.
+    _ref.read(devToolsProvider)?.tabClosed(tabId);
     _openerByTab.remove(tabId);
     _openerByTab.removeWhere((_, opener) => opener == tabId);
     _tabs.remove(tabId);

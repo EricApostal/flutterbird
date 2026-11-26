@@ -1,11 +1,13 @@
 import 'dart:ui' as ui;
 
 import 'package:bird_core/bird_core.dart';
+import 'package:bird_devtools/bird_devtools.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:rubisco_browser/features/browser/components/browser_context_menu.dart';
 import 'package:rubisco_browser/features/browser/components/tab_loading_bar.dart';
+import 'package:rubisco_browser/features/devtools/browser_devtools.dart';
 import 'package:rubisco_browser/features/browser/state/fullscreen_mode.dart';
 import 'package:rubisco_browser/features/windows/window_scope.dart';
 import 'package:ladybird/ladybird.dart';
@@ -230,7 +232,7 @@ class _BrowserWindowState extends ConsumerState<BrowserWindow> {
     final isFocusedWindow =
         ref.read(browserSessionProvider).focusedWindowId == windowId;
 
-    return Stack(
+    final page = Stack(
       // The page keeps the constraints it always had; the bar only overlays it.
       fit: StackFit.passthrough,
       children: [
@@ -254,6 +256,16 @@ class _BrowserWindowState extends ConsumerState<BrowserWindow> {
             child: TabLoadingBar(isLoading: controller.isLoadingNotifier),
           ),
       ],
+    );
+
+    final devTools = ref.read(devToolsProvider);
+    if (devTools == null) return page;
+    return DevToolsDockLayout(
+      manager: devTools,
+      tabId: widget.viewId,
+      hidden: isFullscreen,
+      autoBrightness: theme.brightness,
+      page: page,
     );
   }
 }

@@ -3,12 +3,14 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:bird_core/bird_core.dart';
+import 'package:rubisco_browser/features/devtools/browser_devtools.dart';
 import 'package:rubisco_browser/features/downloads/downloads_bootstrap.dart';
 import 'package:rubisco_browser/features/extensions/app_browser_bridge.dart';
 import 'package:rubisco_browser/features/router/controller.dart';
 import 'package:rubisco_browser/features/theme/app_theme.dart';
 import 'package:rubisco_browser/features/windows/browser_shell.dart';
 import 'package:rubisco_browser/features/windows/legacy_window_system.dart';
+import 'package:rubisco_browser/features/windows/macos/mac_devtools_windows.dart';
 import 'package:rubisco_browser/features/windows/macos/mac_window_system.dart';
 import 'package:rubisco_browser/features/windows/macos/multi_window_app.dart';
 import 'package:rubisco_browser/features/windows/window_scope.dart';
@@ -66,10 +68,13 @@ void _runMultiWindow() {
   // provider is only built once.
   container.read(extensionServiceProvider);
 
+  // From the start, so that pages offer "Inspect" before the tools are opened.
+  final devTools = MacDevToolsWindows(container.read(devToolsProvider)!);
+
   runWidget(
     UncontrolledProviderScope(
       container: container,
-      child: MultiWindowApp(system: windows),
+      child: MultiWindowApp(system: windows, devTools: devTools),
     ),
   );
 }
@@ -121,6 +126,8 @@ class _MainAppState extends ConsumerState<MainApp> {
     super.initState();
     // The shell starts listening to tabs, and makes the first one.
     final shell = ref.read(browserShellProvider);
+    // From the start, so that pages offer "Inspect" before the tools are opened.
+    ref.read(devToolsProvider);
     _windowId = ref.read(browserSessionProvider).windows.first.id;
     // Not while widgets are being built, when providers cannot change.
     WidgetsBinding.instance.addPostFrameCallback((_) => shell.keepOnlyWindow());

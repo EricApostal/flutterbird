@@ -228,6 +228,24 @@ LADYBIRD_API void find_in_page_next(int view_id);
 LADYBIRD_API void find_in_page_previous(int view_id);
 LADYBIRD_API void find_in_page_end(int view_id);
 
+// Developer tools. devtools_start() turns on the engine's DevTools server, if it
+// is off, and returns the port it listens on at 127.0.0.1, or 0 if it could not
+// start. devtools_stop() turns it off. The server has no authentication, so it
+// should only be on while the embedder's tools are open.
+LADYBIRD_API int devtools_start();
+LADYBIRD_API void devtools_stop();
+
+// The number the DevTools server knows a view by, or 0 for no such view.
+LADYBIRD_API uint64_t devtools_browser_id(int view_id);
+
+// Called when the user asks to inspect an element while no tools are connected:
+// the embedder opens them, then passes the same position (in the view's pixels)
+// to devtools_inspect_element().
+typedef void (*DevToolsInspectCallback)(int view_id, int x, int y);
+LADYBIRD_API void
+set_devtools_inspect_callback(DevToolsInspectCallback callback);
+LADYBIRD_API void devtools_inspect_element(int view_id, int x, int y);
+
 // Removes a page from the history, and so from what is suggested.
 LADYBIRD_API void remove_history_entry(const char *url);
 

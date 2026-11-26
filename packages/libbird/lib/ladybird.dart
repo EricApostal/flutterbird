@@ -1,4 +1,5 @@
 export 'src/controller.dart';
+export 'src/devtools_bridge.dart';
 export 'src/extension_bridge.dart';
 export 'src/find_bridge.dart';
 export 'src/history_bridge.dart';

@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>DevTools Probe</title>
+  <style>
+    :root { --accent: #0a84ff; }
+    body { font-family: sans-serif; margin: 20px; color: #222; }
+    #main { display: flex; gap: 8px; padding: 10px 12px; border: 2px solid var(--accent); }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+    .item { background: #eee; }
+    .item:hover { background: #ddd; }
+    .item::before { content: "• "; }
+    @media (min-width: 100px) { h1 { letter-spacing: 1px; } }
+  </style>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <h1 class="title big" data-x="1">Hello DevTools</h1>
+  <!-- a comment -->
+  <div id="main"><span class="item">One</span><span class="item" style="color: red; margin-left: 4px">Two</span></div>
+  <div class="grid"><div>a</div><div>b</div></div>
+  <button id="btn" onclick="go()">Click</button>
+  <script src="app.js"></script>
+  <script>
+    window.settings = { theme: "dark", retries: 3, tags: ["a", "b"] };
+    function inline(n) {
+      let total = 0;
+      for (let i = 0; i < n; i++) total += i;
+      return total;
+    }
+  </script>
+</body>
+</html>

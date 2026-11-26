@@ -16,6 +16,8 @@ dependencies:
     path: packages/libbird
   bird_core:
     path: packages/bird_core
+  bird_devtools:
+    path: packages/bird_devtools
   bird_extensions:
     path: packages/bird_extensions
   bird_session:

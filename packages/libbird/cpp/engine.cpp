@@ -495,6 +495,9 @@ struct PendingFlutterPrompt {
 static PictureInPictureAvailabilityCallback
     g_picture_in_picture_availability_callback = nullptr;
 static FindInPageCallback g_find_in_page_callback = nullptr;
+static DevToolsInspectCallback g_devtools_inspect_callback = nullptr;
+// The port the DevTools server listens on, while it is on.
+static int g_devtools_port = 0;
 
 static HashMap<u64, PendingFlutterPrompt> g_pending_prompts;
 static u64 g_next_prompt_id = 1;
@@ -987,13 +990,22 @@ public:
 
   // The element is the one under the cursor when the context menu opened, so a
   // page that changes while the menu is open still inspects the right element.
+  // The view only looks for it while developer tools are listening; otherwise
+  // the embedder is asked to open them and then to inspect this position.
   void add_inspect_element_action(JsonArray &items,
                                   WebView::ContextMenuRequest const &request) {
-    if (!request.can_inspect_element)
+    bool const is_listening = request.can_inspect_element;
+    if (!is_listening && !g_devtools_inspect_callback)
       return;
     add_separator(items);
-    add_action(items, "Inspect Element"sv,
-               [this] { inspect_context_menu_element(); });
+    add_action(items, "Inspect"sv,
+               [this, is_listening, position = request.widget_position] {
+                 if (is_listening)
+                   inspect_context_menu_element();
+                 else if (g_devtools_inspect_callback)
+                   g_devtools_inspect_callback(m_view_id, position.x(),
+                                               position.y());
+               });
   }
 
   JsonArray create_page_context_menu(WebView::ContextMenuRequest const &request) {
@@ -1788,6 +1800,36 @@ public:
     return Web::ScrollGesturePhase::None;
   }
 
+  // Shows the element at a position in the developer tools that are listening.
+  void inspect_element_at(int x, int y) {
+    prepare_inspect_element({x, y});
+    inspect_context_menu_element();
+  }
+
+  // While developer tools are picking an element, the pointer names elements
+  // instead of using the page: moving highlights, a click picks, and a click
+  // with Control or Command previews. Scrolling still scrolls.
+  bool handle_node_picker_mouse_event(Web::MouseEvent::Type type,
+                                      Web::DevicePixelPoint position,
+                                      int button, int modifiers) {
+    if (!is_node_picker_active() || type == Web::MouseEvent::Type::MouseWheel)
+      return false;
+    if (type == Web::MouseEvent::Type::MouseMove) {
+      node_picker_hover(position);
+    } else if (type == Web::MouseEvent::Type::MouseLeave) {
+      clear_node_picker();
+    } else if (type == Web::MouseEvent::Type::MouseUp &&
+               static_cast<Web::UIEvents::MouseButton>(button) ==
+                   Web::UIEvents::MouseButton::Primary) {
+      if (modifiers &
+          (Web::UIEvents::Mod_Ctrl | Web::UIEvents::Mod_Super))
+        node_picker_preview(position);
+      else
+        node_picker_pick(position);
+    }
+    return true;
+  }
+
   void dispatch_mouse_event(int abi_type, int x, int y, int button, int buttons,
                             int modifiers, double wheel_delta_x,
                             double wheel_delta_y, int abi_precision,
@@ -1801,6 +1843,9 @@ public:
 
     Web::DevicePixelPoint position = {x, y};
     Web::DevicePixelPoint screen_position = {x, y};
+
+    if (handle_node_picker_mouse_event(*type, position, button, modifiers))
+      return;
 
     // Flutter says which of its input produced the deltas and where they sit in
     // their gesture (see window.dart: a touchpad's pan steps against a mouse
@@ -1838,6 +1883,13 @@ public:
 
   void dispatch_key_event(Web::KeyEvent::Type type, int keycode, int modifiers,
                           uint32_t code_point, bool repeat) {
+    if (is_node_picker_active() &&
+        static_cast<Web::UIEvents::KeyCode>(keycode) ==
+            Web::UIEvents::KeyCode::Key_Escape) {
+      if (type == Web::KeyEvent::Type::KeyDown)
+        node_picker_cancel();
+      return;
+    }
     enqueue_input_event(
         Web::KeyEvent{type, static_cast<Web::UIEvents::KeyCode>(keycode),
                       static_cast<Web::UIEvents::KeyModifier>(modifiers),
@@ -2364,6 +2416,8 @@ static void forget_embedder_callbacks() {
   g_permission_cancel_callback = nullptr;
   g_picture_in_picture_callback = nullptr;
   g_picture_in_picture_availability_callback = nullptr;
+  g_find_in_page_callback = nullptr;
+  g_devtools_inspect_callback = nullptr;
 
   auto &bridge = WebView::ExtensionBridge::the();
   bridge.on_context_created = nullptr;
@@ -2385,6 +2439,10 @@ static void shut_down_engine() {
 
   // First, because everything below can raise events.
   forget_embedder_callbacks();
+
+  // The DevTools server takes its leave of the views as it goes, so it goes
+  // while they are all still there.
+  devtools_stop();
 
   // What uses the application goes while it is still there. A
   // picture-in-picture window refers to its view, so it goes before the views.
@@ -3672,4 +3730,62 @@ void prune_inactive_downloads() {
   (void)WebView::Application::the()
       .file_downloader()
       .prune_inactive_downloads(WebView::IsPrivate::No);
+}
+
+// ---------------------------------------------------------------------------
+// Developer tools: the engine's Firefox remote debugging server, which the
+// embedder's tools connect to over the loopback interface.
+// ---------------------------------------------------------------------------
+
+int devtools_start() {
+  if (!g_engine_ready)
+    return 0;
+
+  auto &application = WebView::Application::the();
+  if (application.devtools_enabled())
+    return g_devtools_port;
+
+  // The application only takes a port through its options. The first free one
+  // is used, so that a Firefox or Ladybird that is also being debugged, or a
+  // second copy of the browser, does not get in the way.
+  auto &options =
+      const_cast<WebView::BrowserOptions &>(WebView::Application::browser_options());
+  for (int port = 6080; port < 6100; ++port) {
+    options.devtools_port = static_cast<u16>(port);
+    auto result = application.toggle_devtools_enabled();
+    if (!result.is_error()) {
+      g_devtools_port = port;
+      return port;
+    }
+  }
+
+  std::fprintf(stderr, "devtools_start: no port from 6080 to 6099 is free\n");
+  options.devtools_port.clear();
+  return 0;
+}
+
+// The server asks nothing of whoever connects and runs script in any tab for
+// them, so the embedder stops it whenever its tools are closed.
+void devtools_stop() {
+  if (!s_app || !WebView::Application::the().devtools_enabled())
+    return;
+  if (auto result = WebView::Application::the().toggle_devtools_enabled();
+      result.is_error())
+    std::fprintf(stderr, "devtools_stop: could not stop the server\n");
+  g_devtools_port = 0;
+}
+
+uint64_t devtools_browser_id(int view_id) {
+  auto it = g_web_views.find(view_id);
+  return it == g_web_views.end() ? 0 : it->second->view_id();
+}
+
+void set_devtools_inspect_callback(DevToolsInspectCallback callback) {
+  g_devtools_inspect_callback = callback;
+}
+
+void devtools_inspect_element(int view_id, int x, int y) {
+  auto it = g_web_views.find(view_id);
+  if (it != g_web_views.end())
+    it->second->inspect_element_at(x, y);
 }

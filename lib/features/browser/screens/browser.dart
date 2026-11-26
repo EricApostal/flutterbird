@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:rubisco_browser/features/browser/components/find/find_bar.dart';
+import 'package:rubisco_browser/features/devtools/browser_devtools.dart';
 import 'package:rubisco_browser/features/browser/state/find_in_page.dart';
 import 'package:rubisco_browser/features/browser/components/browser_window.dart';
 import 'package:rubisco_browser/features/browser/components/mobile_browser_layout.dart';
@@ -123,7 +124,22 @@ class _BrowserWindowScreenState extends ConsumerState<BrowserWindowScreen> {
 
   bool _handleKeyEvent(KeyEvent event) {
     if (event is! KeyDownEvent) return false;
+    // Before the others: some of these need no Command or Control.
+    if (handleDevToolsShortcut(
+      ref,
+      event,
+      windowId: _windowId,
+      tabId: widget.viewId,
+    )) {
+      return true;
+    }
     if (!_isPrimaryShortcutModifierPressed()) return false;
+    // Searching, with the keyboard in the developer tools, is theirs.
+    if (devToolsHasFocus(ref, widget.viewId) &&
+        (event.logicalKey == LogicalKeyboardKey.keyF ||
+            event.logicalKey == LogicalKeyboardKey.keyG)) {
+      return false;
+    }
     // Keyboard handlers hear every window's keys, so each acts only on its own.
     final windows = ref.read(windowSystemProvider);
     if (!windows.claimShortcut(_windowId, event)) return false;
