@@ -455,7 +455,7 @@ class _BoxModelDiagramState extends State<BoxModelDiagram> {
           child: Text(
             _number(property),
             textAlign: TextAlign.center,
-            style: context.monoStyle(color: const Color(0xFF11141D), size: 10),
+            style: context.monoStyle(color: const Color(0xFF131417), size: 10),
           ),
         ),
       ),
@@ -469,7 +469,7 @@ class _BoxModelDiagramState extends State<BoxModelDiagram> {
         Positioned(
           left: 3,
           top: 1,
-          child: Text(label, style: context.uiStyle(color: const Color(0xFF30374B), size: 9)),
+          child: Text(label, style: context.uiStyle(color: const Color(0xFF35383E), size: 9)),
         ),
         Column(
           mainAxisSize: MainAxisSize.min,
@@ -497,8 +497,8 @@ class _BoxModelDiagramState extends State<BoxModelDiagram> {
     final content = Container(
       height: 24,
       alignment: Alignment.center,
-      decoration: BoxDecoration(color: const Color(0xFFAFCBFF), border: Border.all(color: const Color(0x66000000))),
-      child: Text('${size(width)}×${size(height)}', style: context.monoStyle(color: const Color(0xFF11141D), size: 10)),
+      decoration: BoxDecoration(color: const Color(0xFFB8CBEE), border: Border.all(color: const Color(0x66000000))),
+      child: Text('${size(width)}×${size(height)}', style: context.monoStyle(color: const Color(0xFF131417), size: 10)),
     );
     return Center(
       child: ConstrainedBox(
@@ -508,14 +508,14 @@ class _BoxModelDiagramState extends State<BoxModelDiagram> {
           'margin',
           'margin',
           '',
-          const Color(0xFFF6DFB0),
+          const Color(0xFFF2E0B9),
           _ring(
             context,
             'border',
             'border',
             '-width',
-            const Color(0xFFC9CFDF),
-            _ring(context, 'padding', 'padding', '', const Color(0xFFB9E4D2), content),
+            const Color(0xFFCDCFD4),
+            _ring(context, 'padding', 'padding', '', const Color(0xFFBFE2D3), content),
           ),
         ),
       ),
@@ -675,7 +675,7 @@ class ChangesView extends StatelessWidget {
         }
         if (change.before != null) rows.add(line('−', '  ${change.before}', colors.errorBackground));
         if (change.after != null) {
-          rows.add(line('+', '  ${change.after}', colors.isDark ? const Color(0xFF15352A) : const Color(0xFFDDF4E8)));
+          rows.add(line('+', '  ${change.after}', colors.isDark ? const Color(0xFF1B342B) : const Color(0xFFE0F3E9)));
         }
       }
       return ColoredBox(

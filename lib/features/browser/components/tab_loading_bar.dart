@@ -1,13 +1,12 @@
-import 'package:bird_ui/bird_ui.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
-// The blue of the mark, running from deep to pale along the bar.
+// The accent's blue, running from deep to pale along the bar.
 class _BarColors {
-  static const Color deep = Color(0xFF1459CC);
-  static const Color blue = BirdBrand.blue;
-  static const Color light = Color(0xFF8FBCFF);
-  static const Color pale = Color(0xFFDCEAFF);
+  static const Color deep = Color(0xFF3560AB);
+  static const Color blue = Color(0xFF4275CC);
+  static const Color light = Color(0xFF9DBCE9);
+  static const Color pale = Color(0xFFE5E9EF);
 }
 
 // A thin progress bar for a page that is loading.

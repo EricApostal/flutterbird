@@ -31,10 +31,10 @@ BIRD_UI_SHOTS=/tmp/shots flutter test test/screenshots_test.dart
 Colours come from `context.bird`, and text from `context.birdText(...)`. Add a
 colour to `BirdColors` rather than writing one into a widget.
 
-The palette is made from the two colours of the mark, `BirdBrand.blue` and
-`BirdBrand.ink`: the greys are tinted with the ink, `accent` is the blue as a
-fill, and `link` is the blue as words and marks, which differs between themes
-so that it can be read. Text keeps a contrast of at least 4.5 to 1 on what it
+The palette is a muted take on the two colours of the mark, `BirdBrand.blue`
+and `BirdBrand.ink`: the greys are only slightly cool, `accent` is a softened
+blue as a fill, and `link` is that blue as words and marks, which differs
+between themes so that it can be read. Text keeps a contrast of at least 4.5 to 1 on what it
 sits on. The developer tools have their own table, `DtColors`, with the same
 greys and a set of colours for code. Icons are drawn
 in `lib/src/icons.dart` on a 16 by 16 grid.

@@ -402,7 +402,7 @@ class _NetworkPanelState extends State<NetworkPanel> {
                 span: span,
                 domContentLoaded: _relative(network.domContentLoadedMs, first),
                 load: _relative(network.loadMs, first),
-                color: selected ? colors.selectionText : const Color(0xFF6FA4F7),
+                color: selected ? colors.selectionText : const Color(0xFF81A5DD),
                 label: request.totalMs == null ? '' : formatMillis(request.totalMs),
                 style: context.uiStyle(size: 10, color: selected ? colors.selectionText : colors.textDim),
               ),
@@ -928,13 +928,13 @@ class _RequestDetailsState extends State<RequestDetails> {
       return DtEmptyState(request.complete ? request.detailsError ?? 'Loading…' : 'Waiting for the request to finish.');
     }
     const labels = {
-      'blocked': ('Blocked', Color(0xFF9AA3BA)),
-      'dns': ('DNS Resolution', Color(0xFF2BAFBF)),
-      'connect': ('Connecting', Color(0xFFD29B14)),
-      'ssl': ('TLS Setup', Color(0xFFD9692B)),
-      'send': ('Sending', Color(0xFF7A55D6)),
-      'wait': ('Waiting', Color(0xFFC4548F)),
-      'receive': ('Receiving', Color(0xFF277AFF)),
+      'blocked': ('Blocked', Color(0xFFA0A3AA)),
+      'dns': ('DNS Resolution', Color(0xFF4EACB9)),
+      'connect': ('Connecting', Color(0xFFCA9E44)),
+      'ssl': ('TLS Setup', Color(0xFFCD7244)),
+      'send': ('Sending', Color(0xFF785DC5)),
+      'wait': ('Waiting', Color(0xFFBA5F8D)),
+      'receive': ('Receiving', Color(0xFF4C81D8)),
     };
     var total = 0.0;
     for (final value in timings.parts.values) {
