@@ -6,7 +6,15 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 part 'omnibox_state.g.dart';
 
-enum OmniboxSuggestionType { bookmark, history, searchQuery, searchAction }
+enum OmniboxSuggestionType {
+  bookmark,
+  history,
+  searchQuery,
+  searchAction,
+
+  /// An address itself: what was typed, or what it was completed to.
+  address,
+}
 
 class OmniboxSuggestion {
   final OmniboxSuggestionType type;
@@ -22,6 +30,20 @@ class OmniboxSuggestion {
     this.subtitle,
     this.favicon,
   });
+
+  /// Whether [value] is words to search for rather than an address.
+  bool get isSearch =>
+      type == OmniboxSuggestionType.searchAction ||
+      type == OmniboxSuggestionType.searchQuery;
+}
+
+/// What the desktop address bar offers for what has been typed. The first row
+/// is what Enter takes, and [completion] is what the field fills in for it.
+class OmniboxProposal {
+  const OmniboxProposal(this.rows, this.completion);
+
+  final List<OmniboxSuggestion> rows;
+  final InlineCompletion? completion;
 }
 
 class BrowserOmniboxState {
@@ -262,5 +284,76 @@ class BrowserOmnibox extends _$BrowserOmnibox {
     }
 
     return limited;
+  }
+
+  static const int _maxRows = 8;
+
+  /// The rows for [typed], led by the one Enter would take: an address that
+  /// completes it if [complete] allows one and one does, else what was typed,
+  /// as an address or as a search.
+  OmniboxProposal propose(
+    LadybirdController controller,
+    String typed, {
+    required bool complete,
+  }) {
+    final query = typed.trim();
+    if (query.isEmpty) return const OmniboxProposal([], null);
+    final lower = query.toLowerCase();
+
+    // Both come best first; history, which the engine ranks, leads.
+    final candidates = [
+      ..._parseHistorySuggestionsJson(
+        controller.getHistoryAutocompleteJson(query, limit: _maxRows),
+      ),
+      for (final bookmark in state.bookmarks)
+        if (bookmark.title.toLowerCase().contains(lower) ||
+            bookmark.url.toLowerCase().contains(lower))
+          OmniboxSuggestion(
+            type: OmniboxSuggestionType.bookmark,
+            title: bookmark.title,
+            value: bookmark.url,
+            favicon: bookmark.favicon,
+          ),
+    ];
+    final arranged = arrangeSuggestions(
+      typed,
+      candidates,
+      urlOf: (candidate) => candidate.value,
+      complete: complete,
+    );
+
+    final search = OmniboxSuggestion(
+      type: OmniboxSuggestionType.searchAction,
+      title: query,
+      value: query,
+      subtitle: '${searchEngineLabel(controller)} Search',
+    );
+    OmniboxSuggestion address(String url) => OmniboxSuggestion(
+      type: OmniboxSuggestionType.address,
+      title: '',
+      value: url,
+    );
+
+    final completion = arranged.completion;
+    final others = [...arranged.candidates];
+    final OmniboxSuggestion lead;
+    if (completion != null) {
+      // Filling in only a site's name goes to the site, which need not be the
+      // page that suggested it. The first row is always where Enter goes.
+      lead = others.first.value == completion.target
+          ? others.removeAt(0)
+          : address(completion.target);
+    } else {
+      lead = isLikelyUrl(query) ? address(normalizeUrl(query)) : search;
+    }
+
+    return OmniboxProposal(
+      [
+        lead,
+        if (!identical(lead, search)) search,
+        ...others.where((other) => other.value != lead.value),
+      ].take(_maxRows).toList(growable: false),
+      completion,
+    );
   }
 }

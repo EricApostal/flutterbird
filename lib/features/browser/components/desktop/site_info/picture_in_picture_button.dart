@@ -64,9 +64,7 @@ class _PictureInPictureButtonState extends State<PictureInPictureButton> {
       builder: (context, video, _) {
         if (!video.available) return const SizedBox.shrink();
         return IconButton(
-          tooltip: video.active
-              ? 'Bring the video back'
-              : 'Picture in Picture',
+          tooltip: video.active ? 'Bring the video back' : 'Picture in Picture',
           iconSize: 16,
           visualDensity: VisualDensity.compact,
           constraints: const BoxConstraints.tightFor(

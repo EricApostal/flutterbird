@@ -292,13 +292,6 @@ class _BrowserOmniboxBarState extends ConsumerState<BrowserOmniboxBar> {
   void _onTrackedTextChanged() {
     if (_suppressTrackedTextSync) return;
     _omniboxTextDirty = true;
-    final controller = _trackedTabController;
-    if (controller == null) return;
-    _scheduleSyncEngineOmnibox(
-      controller,
-      refreshBookmarks: false,
-      refreshHistory: true,
-    );
   }
 
   void _scheduleSyncEngineOmnibox(

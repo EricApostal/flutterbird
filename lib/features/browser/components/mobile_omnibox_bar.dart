@@ -689,6 +689,8 @@ class _MobileOmniboxBarState extends ConsumerState<MobileOmniboxBar> {
       case OmniboxSuggestionType.searchQuery:
       case OmniboxSuggestionType.searchAction:
         return Icons.search;
+      case OmniboxSuggestionType.address:
+        return Icons.public;
     }
   }
 

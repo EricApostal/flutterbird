@@ -2951,6 +2951,14 @@ char *get_favicon_png_base64(const char *favicon_hash) {
   return strdup(bytes.characters());
 }
 
+void remove_history_entry(const char *url) {
+  if (!url || !g_history_store)
+    return;
+  auto parsed = URL::Parser::basic_parse(StringView{url, strlen(url)});
+  if (parsed.has_value())
+    g_history_store->remove_entry_for_url(*parsed);
+}
+
 char *history_autocomplete_json(int view_id, const char *query, int limit) {
   if (!s_app)
     return nullptr;

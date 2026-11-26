@@ -213,6 +213,9 @@ LADYBIRD_API char *get_favicon_png_base64(const char *favicon_hash);
 // always come from the non-private history store, matching
 // WebView::Autocomplete, regardless of whether the target view is private.
 // Caller owns returned memory and must free it.
+// Removes a page from the history, and so from what is suggested.
+LADYBIRD_API void remove_history_entry(const char *url);
+
 LADYBIRD_API char *history_autocomplete_json(int view_id, const char *query,
                                               int limit);
 
