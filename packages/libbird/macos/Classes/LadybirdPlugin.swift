@@ -2,7 +2,14 @@ import Cocoa
 import CoreVideo
 import FlutterMacOS
 
-private let assumedPumpInterval = 1.0 / 144.0
+// The engine's event loop only runs when it is pumped: what its other processes
+// send, a finished frame included, wakes nothing here and waits for the next
+// pump. A frame held back that way for part of a refresh can miss the Flutter
+// frame it was made for, so while the page is in use the pump runs often enough
+// to hand frames over soon after they arrive, and drops back once it is idle.
+private let idlePumpInterval = 1.0 / 144.0
+private let activePumpInterval = 1.0 / 500.0
+private let pumpActivityWindow: CFTimeInterval = 0.5
 private let generationResetThreshold: UInt64 = 256
 private let queueStallGenerationThreshold: UInt64 = 120
 
@@ -46,6 +53,8 @@ class TextureContext {
   var queuedGeneration: UInt64 = 0
   var lastFrameGeneration: UInt64 = 0
   var isActive = true
+  // Called on the main thread when the engine hands over a frame.
+  var onFrame: (() -> Void)?
   var nativeFrameCallbacks: UInt64 = 0
   var queuedDrops: UInt64 = 0
   var deliveredFrames: UInt64 = 0
@@ -62,6 +71,8 @@ public class LadybirdPlugin: NSObject, FlutterPlugin {
   var runLoopObserver: CFRunLoopObserver?
   var displayLink: CVDisplayLink?
   var pumpTimer: Timer?
+  private var lastPumpActivity: CFTimeInterval = 0
+  private var inputMonitor: Any?
   var contextPtrs: [Int64: UnsafeMutableRawPointer] = [:]
   var activeTexturesForView: [Int32: Int64] = [:]
   private let pumpStateLock = NSLock()
@@ -104,6 +115,7 @@ public class LadybirdPlugin: NSObject, FlutterPlugin {
   deinit {
     stopDisplayLink()
     stopPumpTimer()
+    stopInputMonitor()
     if let observer = runLoopObserver {
       CFRunLoopRemoveObserver(CFRunLoopGetMain(), observer, .commonModes)
       runLoopObserver = nil
@@ -115,25 +127,65 @@ public class LadybirdPlugin: NSObject, FlutterPlugin {
 
     if needsDisplayLink {
       stopDisplayLink()
-      startPumpTimer()
+      startInputMonitor()
+      if pumpTimer == nil {
+        startPumpTimer(interval: idlePumpInterval)
+      }
       requestLadybirdPump()
       return
     }
 
     stopDisplayLink()
     stopPumpTimer()
+    stopInputMonitor()
   }
 
-  private func startPumpTimer() {
-    guard pumpTimer == nil else { return }
+  // Replaces the pump timer there is, if any, with one at the given interval.
+  private func startPumpTimer(interval: TimeInterval) {
+    stopPumpTimer()
 
-    let timer = Timer(timeInterval: assumedPumpInterval, repeats: true) {
+    let isActiveRate = interval == activePumpInterval
+    let timer = Timer(timeInterval: interval, repeats: true) {
       [weak self] _ in
-      self?.requestLadybirdPump()
+      guard let self else { return }
+      if isActiveRate && CACurrentMediaTime() - self.lastPumpActivity > pumpActivityWindow {
+        self.startPumpTimer(interval: idlePumpInterval)
+      }
+      self.requestLadybirdPump()
     }
-    timer.tolerance = assumedPumpInterval * 0.1
+    timer.tolerance = isActiveRate ? 0 : interval * 0.1
     RunLoop.main.add(timer, forMode: .common)
     pumpTimer = timer
+  }
+
+  // Input is about to reach the page, or a frame has just come from it.
+  private func notePumpActivity() {
+    lastPumpActivity = CACurrentMediaTime()
+    if let pumpTimer, pumpTimer.timeInterval != activePumpInterval {
+      startPumpTimer(interval: activePumpInterval)
+    }
+  }
+
+  // Frames alone would speed the pump up only after the first one of a scroll had
+  // already waited for the slow pump.
+  private func startInputMonitor() {
+    guard inputMonitor == nil else { return }
+
+    let events: NSEvent.EventTypeMask = [
+      .scrollWheel, .mouseMoved, .leftMouseDown, .leftMouseUp, .leftMouseDragged,
+      .rightMouseDown, .rightMouseUp, .otherMouseDown, .otherMouseUp, .keyDown,
+    ]
+    inputMonitor = NSEvent.addLocalMonitorForEvents(matching: events) { [weak self] event in
+      self?.notePumpActivity()
+      return event
+    }
+  }
+
+  private func stopInputMonitor() {
+    if let inputMonitor {
+      NSEvent.removeMonitor(inputMonitor)
+    }
+    inputMonitor = nil
   }
 
   private func stopPumpTimer() {
@@ -196,6 +248,7 @@ public class LadybirdPlugin: NSObject, FlutterPlugin {
       let textureId = registry.register(texture)
 
       let ctx = TextureContext(registry: registry, textureId: textureId, viewId: viewId)
+      ctx.onFrame = { [weak self] in self?.notePumpActivity() }
 
       let ctxPtr = Unmanaged.passRetained(ctx).toOpaque()
       contextPtrs[textureId] = ctxPtr
@@ -283,6 +336,7 @@ public class LadybirdPlugin: NSObject, FlutterPlugin {
           ctx.stateLock.unlock()
 
           guard isActive else { return }
+          ctx.onFrame?()
           reg.textureFrameAvailable(textureId)
         }
 

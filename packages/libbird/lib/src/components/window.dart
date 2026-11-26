@@ -58,7 +58,11 @@ const TextEditingValue _kBaselineEditingValue = TextEditingValue(
 );
 
 class _LadybirdViewState extends State<LadybirdView>
-    with SingleTickerProviderStateMixin, TextInputClient, DeltaTextInputClient {
+    with
+        SingleTickerProviderStateMixin,
+        WidgetsBindingObserver,
+        TextInputClient,
+        DeltaTextInputClient {
   int? _textureId;
   // Where a texture is a canvas of a fixed size (see
   // LadybirdController.usesFixedCanvasTextures), its size in physical pixels, and
@@ -337,6 +341,7 @@ class _LadybirdViewState extends State<LadybirdView>
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _momentumTicker = createTicker(_onMomentumTick);
     _attachControllerListeners(widget.controller);
     _resolvePreviousFrame(widget.controller);
@@ -453,6 +458,25 @@ class _LadybirdViewState extends State<LadybirdView>
     }
   }
 
+  // A window moving to a display of the same size and density rebuilds nothing,
+  // but does change the window's metrics.
+  @override
+  void didChangeMetrics() => _followDisplay();
+
+  void _followDisplay() {
+    if (!mounted) return;
+    final view = View.maybeOf(context);
+    if (view == null) return;
+    final ui.Display display;
+    try {
+      display = view.display;
+    } catch (_) {
+      // The window's display is one Flutter has not been told about yet.
+      return;
+    }
+    widget.controller.followDisplay(display);
+  }
+
   // Pushes this view's viewport to the engine, called from build -- before the
   // frame that draws at this size is rasterized -- rather than post-frame, so
   // the engine starts relaying out at this size a frame earlier. Only the view
@@ -463,6 +487,7 @@ class _LadybirdViewState extends State<LadybirdView>
     if (size.width <= 0 || size.height <= 0 || density <= 0) return;
     final physicalSize = Size(size.width * density, size.height * density);
 
+    _followDisplay();
     widget.controller.updateDevicePixelRatio(density);
     widget.controller.resizeWindow(physicalSize);
     _ensureCanvasFits(physicalSize);
@@ -878,6 +903,7 @@ class _LadybirdViewState extends State<LadybirdView>
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _detachControllerListeners(widget.controller);
     _detachTextInputConnection();
     _momentumTicker?.dispose();

@@ -76,7 +76,12 @@ class LadybirdNewWebViewRequest {
 }
 
 class LadybirdController {
+  /// What a view is paced at where the engine cannot follow a display (see
+  /// [followDisplay]).
   static const double assumedRefreshRate = 512.0;
+  static final bool _pacesByDisplay = Platform.isMacOS;
+  static ({int id, double refreshRate})? _lastDisplay;
+  ({int id, double refreshRate})? _display;
 
   final MethodChannel _channel = MethodChannel('ladybird');
   late final LadybirdBindings _bindings;
@@ -417,7 +422,7 @@ class LadybirdController {
     }
 
     _refreshNavigationState();
-    assumeFixedRefreshRate();
+    _initializeDisplayPacing();
 
     // _bindings.set_zoom(_viewId, 1.0);
     // _lastDevicePixelRatio = 1.0;
@@ -1163,10 +1168,46 @@ class LadybirdController {
     await _channel.invokeMethod('unregisterTexture', textureId);
   }
 
-  void assumeFixedRefreshRate() {
+  /// Paces the page by the display it is shown on, as Ladybird's own frontends
+  /// do: the engine then makes one frame per refresh, in step with the display.
+  /// Without that, frames reach the screen unevenly however fast they are made,
+  /// which shows as judder while scrolling. Call it whenever the view's window
+  /// may have moved to another display, or that display's refresh rate changed.
+  ///
+  /// Only macOS lets the engine follow a display; elsewhere this does nothing.
+  void followDisplay(ui.Display display) {
+    if (!_pacesByDisplay) return;
+    final next = (
+      id: display.id,
+      refreshRate: display.refreshRate > 0 ? display.refreshRate : 60.0,
+    );
+    _lastDisplay = next;
+    if (next == _display) return;
+    _display = next;
+    _applyDisplayMetadata();
+  }
+
+  // A new view starts out on the display a view was last shown on, so that one
+  // opened in the background is paced before it is first shown.
+  void _initializeDisplayPacing() {
+    if (_pacesByDisplay) {
+      _display = _lastDisplay;
+      final shown = ui.PlatformDispatcher.instance.displays.firstOrNull;
+      if (_display == null && shown != null) {
+        followDisplay(shown);
+        return;
+      }
+    }
+    _applyDisplayMetadata();
+  }
+
+  void _applyDisplayMetadata({double? maximumFramesPerSecond}) {
+    final display = _display;
+    final refreshRate = display?.refreshRate ?? assumedRefreshRate;
     setDisplayMetadata(
-      refreshRate: assumedRefreshRate,
-      maximumFramesPerSecond: assumedRefreshRate,
+      displayId: display?.id,
+      refreshRate: refreshRate,
+      maximumFramesPerSecond: maximumFramesPerSecond ?? refreshRate,
     );
   }
 
@@ -1185,10 +1226,7 @@ class LadybirdController {
   }
 
   void setMaximumFramesPerSecond(double? maximumFramesPerSecond) {
-    setDisplayMetadata(
-      refreshRate: assumedRefreshRate,
-      maximumFramesPerSecond: maximumFramesPerSecond ?? assumedRefreshRate,
-    );
+    _applyDisplayMetadata(maximumFramesPerSecond: maximumFramesPerSecond);
   }
 
   Future<Map<String, Object?>?> getTextureDiagnostics(int textureId) async {
