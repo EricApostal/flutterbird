@@ -10,6 +10,9 @@ import 'package:material_ui/material_ui.dart' show Theme;
 import 'package:rubisco_browser/features/browser/components/browser_context_menu.dart';
 import 'package:rubisco_browser/features/browser/components/tab_loading_bar.dart';
 import 'package:rubisco_browser/features/devtools/browser_devtools.dart';
+import 'package:rubisco_browser/features/mobile/browser/page_menu.dart';
+import 'package:rubisco_browser/features/mobile/mobile_platform.dart';
+import 'package:rubisco_browser/features/mobile/new_tab/mobile_new_tab_page.dart';
 import 'package:rubisco_browser/features/new_tab/new_tab_page.dart';
 import 'package:rubisco_browser/features/settings/settings_page.dart';
 import 'package:rubisco_browser/features/browser/state/fullscreen_mode.dart';
@@ -18,7 +21,16 @@ import 'package:ladybird/ladybird.dart';
 
 class BrowserWindow extends ConsumerStatefulWidget {
   final int viewId;
-  const BrowserWindow({super.key, required this.viewId});
+
+  /// Whether to draw the loading line over the top of the page. The phone's
+  /// toolbar has one of its own.
+  final bool showLoadingBar;
+
+  const BrowserWindow({
+    super.key,
+    required this.viewId,
+    this.showLoadingBar = true,
+  });
 
   // The keys every BrowserWindow is made with, by window and tab. A key per
   // window keeps the page's state when the window changes its layout, while a
@@ -197,6 +209,22 @@ class _BrowserWindowState extends ConsumerState<BrowserWindow> {
     final localPosition = Offset(request.x / density, request.y / density);
     final globalPosition = viewRenderObject.localToGlobal(localPosition);
 
+    // A phone has menus of its own, made from the same entries.
+    if (usesMobileInterface) {
+      _contextMenuVisible = true;
+      try {
+        await MobilePageMenu.show(
+          context: context,
+          tab: controller,
+          request: request,
+          position: globalPosition,
+        );
+      } finally {
+        _contextMenuVisible = false;
+      }
+      return;
+    }
+
     final items = _mapContextMenuEntries(request.items);
     if (items.isEmpty) return;
 
@@ -218,7 +246,7 @@ class _BrowserWindowState extends ConsumerState<BrowserWindow> {
 
   @override
   Widget build(BuildContext context) {
-    // The desktop's colours, or Android's Material ones.
+    // The desktop's colours, or the phone's Material ones.
     final brightness =
         BirdTheme.maybeOf(context)?.brightness ?? Theme.of(context).brightness;
     final controller = ref.watch(browserTabProvider(widget.viewId));
@@ -261,10 +289,15 @@ class _BrowserWindowState extends ConsumerState<BrowserWindow> {
                 view!,
                 if (controller.isOnNewTabPage)
                   Positioned.fill(
-                    child: NewTabPage(
-                      key: ValueKey(controller.viewId),
-                      tab: controller,
-                    ),
+                    child: usesMobileInterface
+                        ? MobileNewTabPage(
+                            key: ValueKey(controller.viewId),
+                            tab: controller,
+                          )
+                        : NewTabPage(
+                            key: ValueKey(controller.viewId),
+                            tab: controller,
+                          ),
                   ),
                 if (controller.isOnSettingsPage)
                   const Positioned.fill(child: SettingsPage()),
@@ -274,7 +307,7 @@ class _BrowserWindowState extends ConsumerState<BrowserWindow> {
         ),
         // Outside the repaint boundary, so a snapshot of the page (for tab
         // previews) never has a half-finished bar in it.
-        if (!isFullscreen)
+        if (!isFullscreen && widget.showLoadingBar)
           Positioned(
             top: 0,
             left: 0,

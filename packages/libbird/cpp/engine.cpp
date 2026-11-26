@@ -1201,6 +1201,34 @@ public:
     return "page"sv;
   }
 
+  // What the menu is about, for a UI that shows it beside the menu: a phone's
+  // long-press menu heads it with the address and a picture of the image.
+  static void describe_context_menu_target(
+      JsonObject &menu, WebView::ContextMenuRequest const &request) {
+    if (request.link_navigation.has_value())
+      menu.set("linkURL"sv, request.link_navigation->url.serialize());
+
+    if (request.kind == WebView::ContextMenuKind::Image &&
+        request.navigation.has_value())
+      menu.set("mediaURL"sv, request.navigation->url.serialize());
+    else if (request.media.has_value() && request.media->media_url.has_value())
+      menu.set("mediaURL"sv, request.media->media_url->serialize());
+
+    // A very large picture is not worth encoding to show it small.
+    static constexpr u64 largest_preview_area = 4'000'000;
+    if (!request.image_bitmap.has_value() || !request.image_bitmap->is_valid())
+      return;
+    auto const &bitmap = *request.image_bitmap->bitmap();
+    if (static_cast<u64>(bitmap.width()) * static_cast<u64>(bitmap.height()) >
+        largest_preview_area)
+      return;
+    auto png = Gfx::PNGWriter::encode(bitmap);
+    if (png.is_error())
+      return;
+    if (auto encoded = encode_base64(png.value().bytes()); !encoded.is_error())
+      menu.set("imageData"sv, encoded.release_value());
+  }
+
   // The view says what the user asked a menu for; the engine, as the UI, makes
   // the menu for it and hands Flutter its JSON.
   virtual void did_request_context_menu(WebView::ContextMenuRequest request) override {
@@ -1216,6 +1244,7 @@ public:
       menu.set("x"sv, request.widget_position.x());
       menu.set("y"sv, request.widget_position.y());
       menu.set("items"sv, JsonValue(create_context_menu(request)));
+      describe_context_menu_target(menu, request);
 
       auto serialized = JsonValue(move(menu)).serialized();
       auto bytes = serialized.to_byte_string();

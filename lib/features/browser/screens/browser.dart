@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 import 'package:bird_core/bird_core.dart';
 import 'package:bird_ui/bird_ui.dart';
 import 'package:flutter/services.dart';
@@ -9,7 +8,6 @@ import 'package:rubisco_browser/features/browser/components/find/find_bar.dart';
 import 'package:rubisco_browser/features/devtools/browser_devtools.dart';
 import 'package:rubisco_browser/features/browser/state/find_in_page.dart';
 import 'package:rubisco_browser/features/browser/components/browser_window.dart';
-import 'package:rubisco_browser/features/browser/components/mobile_browser_layout.dart';
 import 'package:rubisco_browser/features/browser/components/desktop/omnibox/omnibox_bar.dart';
 import 'package:rubisco_browser/features/browser/components/desktop/tabs/tab_bar.dart';
 import 'package:rubisco_browser/features/browser/components/desktop/tabs/tab_preview_capturer.dart';
@@ -18,6 +16,8 @@ import 'package:rubisco_browser/features/browser/state/fullscreen_mode.dart';
 import 'package:rubisco_browser/features/browser/state/history_bitmap_cache.dart';
 import 'package:rubisco_browser/features/browser/state/tab_actions.dart';
 import 'package:rubisco_browser/features/browser/state/tab_layout_mode.dart';
+import 'package:rubisco_browser/features/mobile/browser/mobile_browser_layout.dart';
+import 'package:rubisco_browser/features/mobile/mobile_platform.dart';
 import 'package:rubisco_browser/features/windows/browser_shell.dart';
 import 'package:rubisco_browser/features/windows/window_scope.dart';
 import 'package:rubisco_browser/features/windows/window_system.dart';
@@ -221,15 +221,17 @@ class _BrowserWindowScreenState extends ConsumerState<BrowserWindowScreen> {
     Widget withFullscreenBackHandling(Widget child) {
       return PopScope(
         canPop: !isFullscreen,
+        // Also called when something below this blocks the back button, which
+        // is then its own business.
         onPopInvokedWithResult: (didPop, result) {
-          if (didPop) return;
+          if (didPop || !isFullscreen) return;
           _requestExitFullscreen();
         },
         child: child,
       );
     }
 
-    if (Platform.isAndroid) {
+    if (usesMobileInterface) {
       return withFullscreenBackHandling(
         // Keeps a snapshot of the tab for the tab switcher's cards.
         TabPreviewCapturer(

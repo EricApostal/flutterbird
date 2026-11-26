@@ -5,6 +5,7 @@ export 'src/find_bridge.dart';
 export 'src/history_bridge.dart';
 export 'src/site_bridge.dart';
 export 'src/models/context_menu.dart';
+export 'src/models/context_menu_target.dart';
 export 'src/models/download.dart';
 export 'src/models/session_history.dart';
 export 'src/models/settings.dart';

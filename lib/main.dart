@@ -4,13 +4,14 @@ import 'package:bird_ui/bird_ui.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart'
-    show MaterialApp, MaterialUiCompatibilityBridge, ThemeMode;
+    show Brightness, MaterialApp, ThemeMode;
 import 'package:bird_core/bird_core.dart';
 import 'package:rubisco_browser/features/devtools/browser_devtools.dart';
 import 'package:rubisco_browser/features/downloads/downloads_bootstrap.dart';
 import 'package:rubisco_browser/features/extensions/app_browser_bridge.dart';
 import 'package:rubisco_browser/features/router/controller.dart';
-import 'package:rubisco_browser/features/theme/app_theme.dart';
+import 'package:rubisco_browser/features/mobile/mobile_platform.dart';
+import 'package:rubisco_browser/features/mobile/theme/mobile_theme.dart';
 import 'package:rubisco_browser/features/settings/settings_controller.dart';
 import 'package:rubisco_browser/features/windows/browser_shell.dart';
 import 'package:rubisco_browser/features/windows/legacy_window_system.dart';
@@ -147,7 +148,7 @@ class _MainAppState extends ConsumerState<MainApp> {
   Widget build(BuildContext context) {
     return BrowserWindowScope(
       windowId: _windowId,
-      child: Platform.isAndroid ? _androidApp() : _desktopApp(),
+      child: usesMobileInterface ? _mobileApp() : _desktopApp(),
     );
   }
 
@@ -161,15 +162,15 @@ class _MainAppState extends ConsumerState<MainApp> {
     builder: (context, child) => _keepOpen(child),
   );
 
-  Widget _androidApp() => MaterialApp.router(
+  Widget _mobileApp() => MaterialApp.router(
     routerConfig: routerController,
-    themeMode: ThemeMode.dark,
-    darkTheme: birdDarkTheme(),
-    theme: birdLightTheme(),
-    // For the packages that still use the framework's own Material, such as
-    // the one the tab switcher's grid is from. It goes when they move.
-    builder: (context, child) =>
-        // ignore: deprecated_member_use
-        MaterialUiCompatibilityBridge(child: _keepOpen(child)),
+    themeMode: switch (ref.watch(interfaceThemeModeProvider)) {
+      BirdThemeMode.light => ThemeMode.light,
+      BirdThemeMode.dark => ThemeMode.dark,
+      BirdThemeMode.system => ThemeMode.system,
+    },
+    theme: mobileTheme(Brightness.light),
+    darkTheme: mobileTheme(Brightness.dark),
+    builder: (context, child) => _keepOpen(child),
   );
 }

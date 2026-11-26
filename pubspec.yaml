@@ -30,7 +30,6 @@ dependencies:
   riverpod_annotation: ^4.0.2
   go_router: ^17.1.0
   google_fonts: ^8.1.0
-  reorderable_grid_view: ^2.2.8
   path_provider: ^2.1.5
   path: ^1.9.0
   flutter_launcher_icons: ^0.14.4
@@ -47,3 +46,5 @@ flutter:
   config:
     enable-windowing: true
   uses-material-design: true
+  assets:
+    - browser-logo.png

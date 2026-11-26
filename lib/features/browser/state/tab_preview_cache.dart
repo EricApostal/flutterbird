@@ -22,11 +22,14 @@ class TabPreviewCache {
   // shows it at 320 logical pixels, so this covers a 2x display without a
   // resample. A phone's page is much taller than a desktop window, and its cards
   // are about 500 physical pixels wide, so it takes smaller ones.
-  static double get snapshotWidth => Platform.isAndroid ? 480 : 640;
+  // The phone's tab switcher also grows one into the whole page.
+  static double get snapshotWidth => Platform.isAndroid ? 600 : 640;
 
   static int get _maxEntries => Platform.isAndroid ? 16 : 32;
 
-  // Insertion order == LRU order.
+  // Insertion order == LRU order. What is limited is the pictures held, not
+  // the entries: asking for a tab's picture must not take another's away, as a
+  // grid of more tabs than the limit would then go on doing to itself.
   final LinkedHashMap<int, ValueNotifier<ui.Image?>> _entries =
       LinkedHashMap<int, ValueNotifier<ui.Image?>>();
   final Set<int> _inFlight = <int>{};
@@ -38,12 +41,17 @@ class TabPreviewCache {
     var notifier = _entries.remove(viewId);
     notifier ??= ValueNotifier<ui.Image?>(null);
     _entries[viewId] = notifier;
-
-    while (_entries.length > _maxEntries) {
-      final oldest = _entries.keys.first;
-      _release(_entries.remove(oldest)!);
-    }
     return notifier;
+  }
+
+  void _trim() {
+    var held = _entries.values.where((entry) => entry.value != null).length;
+    for (final entry in _entries.values) {
+      if (held <= _maxEntries) return;
+      if (entry.value == null) continue;
+      _release(entry);
+      held--;
+    }
   }
 
   // Captures [viewId]'s page if its view is on screen, replacing the previous
@@ -61,6 +69,7 @@ class TabPreviewCache {
       final previous = notifier.value;
       notifier.value = image;
       _disposeLater(previous);
+      _trim();
     } finally {
       _inFlight.remove(viewId);
     }

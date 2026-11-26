@@ -793,6 +793,38 @@ class _LadybirdViewState extends State<LadybirdView>
     }
   }
 
+  // A finger held still asks for what a right click asks a mouse for: the
+  // engine answers with a context menu, and selects the word under a finger
+  // held on text.
+  void _onTouchLongPressStart(LongPressStartDetails details) {
+    _focusNode.requestFocus();
+    _momentumTicker?.stop();
+    _lastPointerPos = details.localPosition;
+
+    final density = MediaQuery.devicePixelRatioOf(context);
+    final x = (details.localPosition.dx * density).toInt();
+    final y = (details.localPosition.dy * density).toInt();
+    for (final (type, buttons) in const [
+      (LadybirdController.mouseDown, kSecondaryMouseButton),
+      (LadybirdController.mouseUp, 0),
+    ]) {
+      widget.controller.dispatchMouseEvent(
+        type: type,
+        x: x,
+        y: y,
+        button: kSecondaryMouseButton,
+        buttons: buttons,
+        modifiers: 0,
+        wheelDeltaX: 0,
+        wheelDeltaY: 0,
+      );
+    }
+  }
+
+  static bool get _hasLongPressMenu =>
+      defaultTargetPlatform == TargetPlatform.android ||
+      defaultTargetPlatform == TargetPlatform.iOS;
+
   void _onTouchPanStart(DragStartDetails details) {
     _focusNode.requestFocus();
     _momentumTicker?.stop();
@@ -1030,6 +1062,9 @@ class _LadybirdViewState extends State<LadybirdView>
                       },
                       onTapDown: _onTouchTapDown,
                       onTapUp: _onTouchTapUp,
+                      onLongPressStart: _hasLongPressMenu
+                          ? _onTouchLongPressStart
+                          : null,
                       onPanStart: _onTouchPanStart,
                       onPanUpdate: _onTouchPanUpdate,
                       onPanEnd: _onTouchPanEnd,

@@ -8,6 +8,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:ladybird/src/generated/engine_bindings.g.dart';
 import 'package:ladybird/src/models/context_menu.dart';
+import 'package:ladybird/src/models/context_menu_target.dart';
 import 'package:ladybird/src/models/download.dart';
 import 'package:ladybird/src/models/session_history.dart';
 import 'package:ladybird/src/models/settings.dart';
@@ -163,6 +164,11 @@ class LadybirdController {
   final Set<VoidCallback> _resizeListeners = <VoidCallback>{};
   void Function()? onCrossSiteNavigation;
   void Function(LadybirdContextMenuRequest request)? onContextMenuRequest;
+
+  /// What the menu last passed to [onContextMenuRequest] was asked for on.
+  LadybirdContextMenuTarget get contextMenuTarget => _contextMenuTarget;
+  LadybirdContextMenuTarget _contextMenuTarget =
+      const LadybirdContextMenuTarget();
 
   /// Set by whoever keeps the app's tabs. A view that has none of its own,
   /// such as an extension's popup, falls back to [fallbackNewWebViewHandler].
@@ -516,9 +522,9 @@ class LadybirdController {
       final decoded = jsonDecode(jsonString);
       if (decoded is! Map) return;
 
-      final request = LadybirdContextMenuRequestMapper.fromMap(
-        Map<String, dynamic>.from(decoded),
-      );
+      final map = Map<String, dynamic>.from(decoded);
+      final request = LadybirdContextMenuRequestMapper.fromMap(map);
+      _contextMenuTarget = LadybirdContextMenuTarget.fromMap(map);
       onContextMenuRequest?.call(request);
     } finally {
       malloc.free(menuJson);
@@ -928,16 +934,13 @@ class LadybirdController {
     return engines.isNotEmpty ? engines.first : fallbackSearchEngine;
   }
 
-  /// What a new tab opens. On a desktop the app shows its own page over the
-  /// engine's plain one at this address; elsewhere it is [homeUrl].
-  String get newTabUrl =>
-      Platform.isAndroid || Platform.isIOS ? homeUrl : 'about:newtab';
+  /// What a new tab opens: the app shows its own page over the engine's plain
+  /// one at this address.
+  String get newTabUrl => 'about:newtab';
 
   /// Whether the tab is on the new tab page, or is on its way there as a tab
   /// that has only just opened.
   bool get isOnNewTabPage {
-    // Only the desktop has a page of the app's own to show.
-    if (Platform.isAndroid || Platform.isIOS) return false;
     final url = urlNotifier.value.trim();
     if (url == 'about:newtab') return true;
     // Before the engine reports an address, and while it is still on the empty
