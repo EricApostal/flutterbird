@@ -32,7 +32,7 @@ abstract class HttpFetcher {
 class IoHttpFetcher implements HttpFetcher {
   IoHttpFetcher({
     HttpClient? client,
-    this.userAgent = 'FlutterBird',
+    this.userAgent = 'Rubisco',
     this.timeout = const Duration(seconds: 30),
   }) : _client = client ?? HttpClient();
 
