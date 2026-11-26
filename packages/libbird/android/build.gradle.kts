@@ -69,6 +69,15 @@ if (!usePrebuiltNative) {
     // the copy is no longer what the fetch's stamp says. Forget the stamp, so
     // that going back to prebuilt unpacks it again.
     layout.buildDirectory.file("generated/.libbird-native-fingerprint").get().asFile.delete()
+
+    // It does not overwrite all of them, though. A local build puts only the
+    // helper processes here: the C++ runtime, the engine and the plugin come
+    // from CMake's own output. A prebuilt copy of those would be packaged a
+    // second time beside them, which Gradle refuses.
+    val helperLibs = ladybirdHelperJniDir.get().asFile.resolve("arm64-v8a")
+    listOf("libc++_shared.so", "libengine.so", "libladybird_plugin.so").forEach { name ->
+        helperLibs.resolve(name).delete()
+    }
 }
 
 data class Sdl3JavaInputs(val jar: File?, val sourceDirs: List<File>)
