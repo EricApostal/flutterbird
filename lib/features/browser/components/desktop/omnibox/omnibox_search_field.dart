@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutterbird/features/browser/components/desktop/omnibox/omnibox_style.dart';
 import 'package:flutterbird/features/browser/components/desktop/omnibox/omnibox_suggestions_overlay.dart';
 import 'package:flutterbird/features/browser/components/desktop/omnibox/omnibox_url_text.dart';
+import 'package:flutterbird/features/browser/components/desktop/site_info/picture_in_picture_button.dart';
 import 'package:flutterbird/features/browser/components/desktop/site_info/site_info_button.dart';
 import 'package:flutterbird/features/browser/state/omnibox_state.dart';
 import 'package:ladybird/ladybird.dart';
@@ -33,7 +34,11 @@ class OmniboxSearchField extends ConsumerWidget {
     return Positioned.fill(
       child: IgnorePointer(
         child: Padding(
-          padding: const EdgeInsets.only(left: kSiteInfoButtonWidth, right: 10),
+          // Clear of the buttons at either end of the field.
+          padding: const EdgeInsets.only(
+            left: kSiteInfoButtonWidth,
+            right: kPictureInPictureButtonWidth,
+          ),
           child: Align(
             alignment: Alignment.centerLeft,
             child: Text.rich(
@@ -99,6 +104,13 @@ class OmniboxSearchField extends ConsumerWidget {
                               minWidth: kSiteInfoButtonWidth,
                               maxWidth: kSiteInfoButtonWidth,
                               minHeight: 30,
+                            ),
+                            suffixIcon: PictureInPictureButton(
+                              tab: currentTabController,
+                            ),
+                            suffixIconConstraints: const BoxConstraints(
+                              minHeight: 30,
+                              maxWidth: kPictureInPictureButtonWidth,
                             ),
                             filled: true,
                             fillColor: omniboxSurfaceColor(theme),

@@ -69,6 +69,7 @@
 #include <LibWebCommon/Clipboard/SystemClipboard.h>
 #include <LibWebView/Application.h>
 #include <LibWebView/BrowsingSession.h>
+#include <LibWebView/CanonicalTraversable.h>
 #include <LibWebView/ContextMenuRequest.h>
 #include <LibWebView/ExtensionBridge.h>
 #include <LibWebView/FaviconStore.h>
@@ -488,6 +489,9 @@ struct PendingFlutterPrompt {
   WebView::PermissionPromptRequest request;
   WebView::PermissionPromptCallback on_outcome;
 };
+
+static PictureInPictureAvailabilityCallback
+    g_picture_in_picture_availability_callback = nullptr;
 
 static HashMap<u64, PendingFlutterPrompt> g_pending_prompts;
 static u64 g_next_prompt_id = 1;
@@ -1248,6 +1252,17 @@ public:
     return true;
   }
 
+  // These can be asked at any moment, including while the page is changing
+  // processes or has crashed, when page() would assert that there is one.
+  void ask_for_picture_in_picture_availability() {
+    if (auto shown = traversable().display_page(); shown && shown->is_open())
+      shown->async_request_picture_in_picture_availability();
+  }
+  void toggle_page_picture_in_picture() {
+    if (auto shown = traversable().display_page(); shown && shown->is_open())
+      shown->async_toggle_picture_in_picture_from_browser();
+  }
+
   // Turns this view, already prepared for a traversable, into the one a
   // Picture-in-Picture window shows.
   void prepare_for_picture_in_picture(WebView::CanonicalTraversable &traversable,
@@ -1323,6 +1338,10 @@ public:
     };
     on_cancel_permission_prompt = [this](WebView::PermissionPromptRequest const &request) {
       withdraw_permission_prompt(m_view_id, request);
+    };
+    on_picture_in_picture_availability = [this](bool available, bool active) {
+      if (g_picture_in_picture_availability_callback)
+        g_picture_in_picture_availability_callback(m_view_id, available, active);
     };
 
     // -----------------------------------------------------------------------
@@ -2504,6 +2523,23 @@ void reset_site_permissions(int view_id, const char *origin) {
 
 void set_picture_in_picture_callback(PictureInPictureEventCallback callback) {
   g_picture_in_picture_callback = callback;
+}
+
+void set_picture_in_picture_availability_callback(
+    PictureInPictureAvailabilityCallback callback) {
+  g_picture_in_picture_availability_callback = callback;
+}
+
+void request_picture_in_picture_availability(int view_id) {
+  auto view = g_web_views.find(view_id);
+  if (view != g_web_views.end())
+    view->second->ask_for_picture_in_picture_availability();
+}
+
+void toggle_picture_in_picture(int view_id) {
+  auto view = g_web_views.find(view_id);
+  if (view != g_web_views.end())
+    view->second->toggle_page_picture_in_picture();
 }
 
 void set_picture_in_picture_screen_size(int width, int height) {

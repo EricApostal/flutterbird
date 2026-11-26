@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutterbird/features/browser/components/browser_window.dart';
 import 'package:flutterbird/features/browser/components/desktop/omnibox/omnibox_style.dart';
 import 'package:flutterbird/features/browser/components/desktop/omnibox/omnibox_url_text.dart';
+import 'package:flutterbird/features/browser/components/desktop/site_info/picture_in_picture_button.dart';
 import 'package:flutterbird/features/browser/components/desktop/site_info/site_info_button.dart';
 import 'package:flutterbird/features/browser/state/fullscreen_mode.dart';
 import 'package:flutterbird/features/windows/browser_shell.dart';
@@ -121,6 +122,7 @@ class _PopupLocationBar extends StatelessWidget {
                   ),
                 ),
               ),
+              PictureInPictureButton(tab: tab),
               const SizedBox(width: 8),
             ],
           ),

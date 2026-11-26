@@ -468,6 +468,17 @@ LADYBIRD_API void reset_site_permissions(int view_id, const char *origin);
 // it, owner_view_id the tab the video is in. Sizes are in logical points.
 typedef void (*PictureInPictureEventCallback)(int owner_view_id, int view_id,
                                               int event, int width, int height);
+// The answer to request_picture_in_picture_availability: whether the view's
+// page has a video that can float, and whether one of its videos is floating.
+typedef void (*PictureInPictureAvailabilityCallback)(int view_id,
+                                                     bool available,
+                                                     bool active);
+
+LADYBIRD_API void set_picture_in_picture_availability_callback(
+    PictureInPictureAvailabilityCallback callback);
+LADYBIRD_API void request_picture_in_picture_availability(int view_id);
+// Floats the page's best video, or brings back the one that is floating.
+LADYBIRD_API void toggle_picture_in_picture(int view_id);
 
 LADYBIRD_API void
 set_picture_in_picture_callback(PictureInPictureEventCallback callback);

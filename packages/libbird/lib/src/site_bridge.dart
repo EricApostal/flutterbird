@@ -119,6 +119,12 @@ class PictureInPictureEvent {
   final int height;
 }
 
+/// Whether a view's page has a video that can float, and whether one of its
+/// videos is floating now.
+typedef VideoState = ({bool available, bool active});
+
+typedef _AvailabilityNative = ffi.Void Function(ffi.Int, ffi.Bool, ffi.Bool);
+
 typedef _PromptNative =
     ffi.Void Function(ffi.Int, ffi.Uint64, ffi.Pointer<ffi.Char>);
 typedef _CancelNative = ffi.Void Function(ffi.Int, ffi.Uint64);
@@ -201,6 +207,26 @@ class LadybirdSiteBridge extends ChangeNotifier {
       .lookupFunction<ffi.Void Function(ffi.Int), void Function(int)>(
         'close_picture_in_picture',
       );
+
+  late final _setAvailabilityCallback = _library
+      .lookupFunction<
+        ffi.Void Function(
+          ffi.Pointer<ffi.NativeFunction<_AvailabilityNative>>,
+        ),
+        void Function(ffi.Pointer<ffi.NativeFunction<_AvailabilityNative>>)
+      >('set_picture_in_picture_availability_callback');
+  late final _requestAvailability = _library
+      .lookupFunction<ffi.Void Function(ffi.Int), void Function(int)>(
+        'request_picture_in_picture_availability',
+      );
+  late final _togglePicture = _library
+      .lookupFunction<ffi.Void Function(ffi.Int), void Function(int)>(
+        'toggle_picture_in_picture',
+      );
+
+  static const VideoState _noVideo = (available: false, active: false);
+  final Map<int, ValueNotifier<VideoState>> _videos = {};
+  ffi.NativeCallable<_AvailabilityNative>? _availabilityCallable;
 
   final Map<int, PermissionPrompt> _prompts = {};
   final Set<int> _shown = {};
@@ -356,7 +382,45 @@ class LadybirdSiteBridge extends ChangeNotifier {
       return false;
     }
     _pictureCallable = callable;
+    _startVideoStates();
     return true;
+  }
+
+  void _startVideoStates() {
+    final callable = ffi.NativeCallable<_AvailabilityNative>.listener(
+      _onAvailability,
+    );
+    try {
+      _setAvailabilityCallback(callable.nativeFunction);
+    } on ArgumentError catch (error) {
+      callable.close();
+      debugPrint('This engine cannot say which pages have video: $error');
+      return;
+    }
+    _availabilityCallable = callable;
+  }
+
+  void _onAvailability(int viewId, bool available, bool active) {
+    _videoNotifier(viewId).value = (available: available, active: active);
+  }
+
+  ValueNotifier<VideoState> _videoNotifier(int viewId) =>
+      _videos.putIfAbsent(viewId, () => ValueNotifier(_noVideo));
+
+  /// What [viewId]'s page offers to float, as last asked with
+  /// [refreshVideoState]. It stays "nothing" where floating videos is not
+  /// possible.
+  ValueListenable<VideoState> videoState(int viewId) => _videoNotifier(viewId);
+
+  /// Asks the page again. The answer arrives on [videoState].
+  void refreshVideoState(int viewId) {
+    if (_availabilityCallable != null) _requestAvailability(viewId);
+  }
+
+  /// Floats the page's best video, or brings back the one that is floating.
+  /// The press that calls this is the gesture the page's video needs.
+  void togglePictureInPicture(int viewId) {
+    if (_availabilityCallable != null) _togglePicture(viewId);
   }
 
   void _onPicture(
