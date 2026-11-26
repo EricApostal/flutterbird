@@ -98,7 +98,7 @@ class _LadybirdViewState extends State<LadybirdView>
 
   // bool get _showFrameDiagnostics =>
   //     defaultTargetPlatform == TargetPlatform.android;
-  bool get _showFrameDiagnostics => false;
+  bool get _showFrameDiagnostics => true;
 
   void _onNativeResize() {
     if (!mounted) return;
@@ -349,10 +349,38 @@ class _LadybirdViewState extends State<LadybirdView>
     // This view is mounted because its tab is the one being shown, so it holds
     // focus until the node says otherwise.
     widget.controller.setViewFocused(true, owner: this);
+    _appOnScreen = _isOnScreen(WidgetsBinding.instance.lifecycleState);
 
     _textureId = widget.controller.textureId;
     _canvasPhysicalSize = widget.controller.textureCanvasSize;
     if (_textureId == null) _recreateTexture();
+  }
+
+  // Whether this view can be seen: the app is on screen, and nothing covers the
+  // route the view is on, which is when its tickers are turned off.
+  bool _appOnScreen = true;
+  bool _tickersEnabled = true;
+
+  // Not being the app in use, as behind a system dialog, is still being seen.
+  static bool _isOnScreen(AppLifecycleState? state) =>
+      state == null ||
+      state == AppLifecycleState.resumed ||
+      state == AppLifecycleState.inactive;
+
+  void _reportShown() =>
+      widget.controller.setShownBy(this, _appOnScreen && _tickersEnabled);
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _tickersEnabled = TickerMode.valuesOf(context).enabled;
+    _reportShown();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _appOnScreen = _isOnScreen(state);
+    _reportShown();
   }
 
   void _onFocusChanged() {
@@ -363,6 +391,8 @@ class _LadybirdViewState extends State<LadybirdView>
   void didUpdateWidget(LadybirdView oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.controller != widget.controller) {
+      oldWidget.controller.setShownBy(this, false);
+      _reportShown();
       _detachControllerListeners(oldWidget.controller);
       _detachTextInputConnection();
 
@@ -946,6 +976,7 @@ class _LadybirdViewState extends State<LadybirdView>
     _previousFrame = null;
     _focusNode.removeListener(_onFocusChanged);
     widget.controller.setViewFocused(false, owner: this);
+    widget.controller.setShownBy(this, false);
     super.dispose();
   }
 

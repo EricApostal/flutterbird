@@ -77,8 +77,8 @@ class LadybirdNewWebViewRequest {
 }
 
 class LadybirdController {
-  /// What a view is paced at where the engine cannot follow a display (see
-  /// [followDisplay]).
+  /// What a view is paced at where Flutter reports no display. On Android the
+  /// plugin reads the screen's rate itself, and that is used instead.
   static const double assumedRefreshRate = 512.0;
   static final bool _pacesByDisplay = Platform.isMacOS;
   static ({int id, double refreshRate})? _lastDisplay;
@@ -1016,7 +1016,9 @@ class LadybirdController {
 
   static dynamic configVariable(String name) {
     final namePtr = name.toNativeUtf8();
-    final ptr = _staticBindings.get_config_variable_json(namePtr.cast<ffi.Char>());
+    final ptr = _staticBindings.get_config_variable_json(
+      namePtr.cast<ffi.Char>(),
+    );
     malloc.free(namePtr);
     if (ptr == ffi.nullptr) return null;
 
@@ -1326,12 +1328,64 @@ class LadybirdController {
 
   void _applyDisplayMetadata({double? maximumFramesPerSecond}) {
     final display = _display;
-    final refreshRate = display?.refreshRate ?? assumedRefreshRate;
+    final refreshRate =
+        display?.refreshRate ?? _reportedRefreshRate ?? assumedRefreshRate;
     setDisplayMetadata(
       displayId: display?.id,
       refreshRate: refreshRate,
       maximumFramesPerSecond: maximumFramesPerSecond ?? refreshRate,
     );
+  }
+
+  // Where the engine cannot follow a display, it is still paced at its rate:
+  // frames beyond that are never seen.
+  static double? get _reportedRefreshRate {
+    final rate =
+        ui.PlatformDispatcher.instance.displays.firstOrNull?.refreshRate;
+    return rate != null && rate > 0 ? rate : null;
+  }
+
+  // Android shows one tab at a time, and the engine would go on rendering all
+  // the others. On a desktop every view is left shown.
+  static final bool _hidesUnshownPages = Platform.isAndroid;
+  final Set<Object> _viewers = {};
+  bool _pageShown = true;
+  bool _disposed = false;
+
+  /// Says whether [viewer], a widget showing this view, can be seen. A page
+  /// nothing shows is hidden, as a background tab is.
+  void setShownBy(Object viewer, bool shown) {
+    if (!_hidesUnshownPages || _disposed) return;
+    if (shown) {
+      _viewers.add(viewer);
+    } else {
+      _viewers.remove(viewer);
+    }
+    _setPageShown(_viewers.isNotEmpty);
+  }
+
+  /// For a view that is a tab: unless a widget is showing it by the end of the
+  /// next frame, as one opened in the background is not, its page is hidden.
+  /// A view that no widget is ever to show, such as an extension's background
+  /// page, is left as it is.
+  void hideUntilShown() {
+    if (!_hidesUnshownPages) return;
+    WidgetsBinding.instance
+      ..addPostFrameCallback((_) {
+        if (!_disposed) _setPageShown(_viewers.isNotEmpty);
+      })
+      ..ensureVisualUpdate();
+  }
+
+  void _setPageShown(bool shown) {
+    if (shown == _pageShown) return;
+    try {
+      _bindings.set_view_visible(_viewId, shown);
+    } on ArgumentError catch (error) {
+      // A native library from before this existed.
+      debugPrint('[LibBird] The engine cannot be told what is shown: $error');
+    }
+    _pageShown = shown;
   }
 
   void setDisplayMetadata({
@@ -1479,6 +1533,7 @@ class LadybirdController {
   }
 
   void dispose() {
+    _disposed = true;
     setViewFocused(false);
     _onCloseRequested = null;
     _bindings.set_new_web_view_callback(_viewId, ffi.nullptr);

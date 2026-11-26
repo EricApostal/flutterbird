@@ -90,6 +90,23 @@ LADYBIRD_API void set_display_metadata(int view_id, bool has_display_id,
 // created later start out with the size given last.
 LADYBIRD_API void set_screen_size(int view_id, int width, int height);
 
+// Whether the view's page is on screen. A hidden page reads as hidden
+// (`document.visibilityState`) and no frames are made for it, as for a
+// background tab. Views start out shown.
+LADYBIRD_API void set_view_visible(int view_id, bool visible);
+
+// For the Android plugin; elsewhere these do nothing.
+//
+// The fastest the screen refreshes, which pages are paced to. Set it before any
+// view is created.
+LADYBIRD_API void set_android_display_refresh_rate(double refresh_rate);
+
+// Says that the plugin has started, or finished, drawing from a view's frame
+// buffer. Call it in pairs, on the engine's thread. While any is being drawn
+// from, what arrives for the engine waits (until the next tick at the latest),
+// so that the buffer is not handed back to be rendered into.
+LADYBIRD_API void set_android_frame_in_use(bool in_use);
+
 LADYBIRD_API int get_iosurface_width(int view_id);
 
 LADYBIRD_API int get_iosurface_height(int view_id);

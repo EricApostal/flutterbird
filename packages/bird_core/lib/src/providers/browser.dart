@@ -15,11 +15,11 @@ class BrowserTabController extends _$BrowserTabController {
       }
     });
 
-    return [LadybirdController()];
+    return [LadybirdController()..hideUntilShown()];
   }
 
   LadybirdController add() {
-    final controller = LadybirdController();
+    final controller = LadybirdController()..hideUntilShown();
     final newState = state.toList();
     newState.add(controller);
     state = newState;
@@ -31,7 +31,8 @@ class BrowserTabController extends _$BrowserTabController {
     final existing = state.firstWhereOrNull((e) => e.viewId == viewId);
     if (existing != null) return existing;
 
-    final controller = LadybirdController.fromExistingViewId(viewId: viewId);
+    final controller = LadybirdController.fromExistingViewId(viewId: viewId)
+      ..hideUntilShown();
     final newState = state.toList();
     newState.add(controller);
     state = newState;

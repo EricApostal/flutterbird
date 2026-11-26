@@ -1,5 +1,6 @@
 package dev.flutterbird.ladybird;
 
+import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
@@ -10,6 +11,8 @@ import android.view.Surface;
 import android.graphics.Rect;
 
 import android.hardware.HardwareBuffer;
+import android.hardware.display.DisplayManager;
+import android.view.Display;
 import android.graphics.ColorSpace;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -82,6 +85,8 @@ public final class LadybirdPlugin implements FlutterPlugin, MethodCallHandler {
         } catch (Exception exception) {
             throw new RuntimeException("Failed to prepare Ladybird Android runtime", exception);
         }
+        // Before any view is made, so that each is paced to the screen.
+        nativeSetDisplayRefreshRate(highestRefreshRate(flutterPluginBinding.getApplicationContext()));
 
         renderThread = new android.os.HandlerThread("LadybirdRenderThread");
         renderThread.start();
@@ -123,6 +128,25 @@ public final class LadybirdPlugin implements FlutterPlugin, MethodCallHandler {
             renderThread = null;
             renderHandler = null;
         }
+    }
+
+    // The fastest the screen refreshes at the resolution it is at. Not the rate it
+    // is at now, which Android lowers while nothing on it moves.
+    private static double highestRefreshRate(Context context) {
+        DisplayManager displays = (DisplayManager) context.getSystemService(Context.DISPLAY_SERVICE);
+        Display display = displays == null ? null : displays.getDisplay(Display.DEFAULT_DISPLAY);
+        if (display == null) {
+            return 60.0;
+        }
+        Display.Mode current = display.getMode();
+        float highest = current.getRefreshRate();
+        for (Display.Mode mode : display.getSupportedModes()) {
+            if (mode.getPhysicalWidth() == current.getPhysicalWidth()
+                    && mode.getPhysicalHeight() == current.getPhysicalHeight()) {
+                highest = Math.max(highest, mode.getRefreshRate());
+            }
+        }
+        return highest;
     }
 
     private void createTexture(MethodCall call, Result result) {
@@ -173,6 +197,9 @@ public final class LadybirdPlugin implements FlutterPlugin, MethodCallHandler {
 
             @Override
             public void onSurfaceAvailable() {
+                // A new surface is blank, and a page that is not changing makes
+                // no new frame to fill it with: the latest one is drawn again.
+                textureContext.lastFrameGeneration = 0;
                 schedulePump();
             }
         });
@@ -297,6 +324,8 @@ public final class LadybirdPlugin implements FlutterPlugin, MethodCallHandler {
         textureContext.frameNotifyQueued = true;
 
         if (renderHandler != null) {
+            // Until it is drawn, the engine must not render into it again.
+            nativeSetFrameInUse(true);
             renderHandler.post(new Runnable() {
                 @Override
                 public void run() {
@@ -325,6 +354,8 @@ public final class LadybirdPlugin implements FlutterPlugin, MethodCallHandler {
                         }
                         buffer.close();
                         textureContext.frameNotifyQueued = false;
+                        // The engine is only ever called on the main thread.
+                        mainHandler.post(() -> nativeSetFrameInUse(false));
                     }
                 }
             });
@@ -392,6 +423,10 @@ public final class LadybirdPlugin implements FlutterPlugin, MethodCallHandler {
             String userDir,
             String nativeLibraryDir,
             String certificatesPath);
+
+    private static native void nativeSetDisplayRefreshRate(double refreshRate);
+
+    private static native void nativeSetFrameInUse(boolean inUse);
 
     private static native void nativeTickLadybird();
 

@@ -21,8 +21,10 @@
 #endif
 
 #ifdef __ANDROID__
+#include <LibCore/EventLoopImplementationUnix.h>
 #include <android/hardware_buffer.h>
 #include <android/log.h>
+#include <android/looper.h>
 #include <unistd.h>
 #endif
 
@@ -457,6 +459,9 @@ static std::unique_ptr<ViewBackend> create_view_backend() {
 }
 
 #ifdef __ANDROID__
+// The fastest the screen refreshes, as the plugin reports it.
+static double s_android_refresh_rate = 0.0;
+
 // An AHardwareBuffer the plugin owns and refills with each presented frame,
 // replaced whenever the frame size changes.
 class AndroidFrameBuffer {
@@ -1352,6 +1357,15 @@ public:
 
   void set_display_metadata(Optional<u64> display_id, double refresh_rate,
                             double maximum_frames_per_second) {
+#ifdef __ANDROID__
+    // Flutter reports the rate the screen is at, which falls while nothing
+    // moves, so what the plugin read is used. Frames beyond it are never seen.
+    if (!display_id.has_value() && s_android_refresh_rate > 0.0) {
+      refresh_rate = s_android_refresh_rate;
+      maximum_frames_per_second =
+          min(maximum_frames_per_second, s_android_refresh_rate);
+    }
+#endif
     auto const sanitized_refresh_rate =
         refresh_rate > 0.0 ? refresh_rate : kDefaultRefreshRate;
     auto const sanitized_maximum_frames_per_second =
@@ -1365,6 +1379,21 @@ public:
     if (has_traversable())
       ViewImplementation::set_display_metadata(m_display_id,
                                                m_maximum_frames_per_second, false);
+  }
+
+  // Whether the view's page is on screen. A hidden page is told it is, and no
+  // frames are made for it.
+  void set_shown(bool shown) {
+    if (shown == m_is_shown)
+      return;
+    m_is_shown = shown;
+    if (has_traversable())
+      set_system_visibility_state(shown_visibility_state());
+  }
+
+  Web::HTML::VisibilityState shown_visibility_state() const {
+    return m_is_shown ? Web::HTML::VisibilityState::Visible
+                      : Web::HTML::VisibilityState::Hidden;
   }
 
   void set_screen_size(Gfx::IntSize size) {
@@ -1419,7 +1448,7 @@ public:
 
   void attach_signals() {
     push_viewport();
-    set_system_visibility_state(Web::HTML::VisibilityState::Visible);
+    set_system_visibility_state(shown_visibility_state());
 
     on_request_permission = [this](WebView::PermissionPromptRequest const &request,
                                    WebView::PermissionPromptCallback on_outcome) {
@@ -2004,6 +2033,7 @@ private:
   bool m_logged_unsupported_ahb_format{false};
   bool m_logged_android_copy_fallback{false};
 #endif
+  bool m_is_shown{true};
 };
 
 #include <map>
@@ -2603,7 +2633,7 @@ void init_ladybird() {
 // RequestServer IPC sockets, timers, etc.).  The post-drain picks up
 // anything that was enqueued during that poll.
 // ---------------------------------------------------------------------------
-extern "C" void tick_ladybird() {
+static void pump_engine() {
   // Pre-drain: flush events queued since last tick.
   Core::ThreadEventQueue::current().process();
 
@@ -2613,6 +2643,87 @@ extern "C" void tick_ladybird() {
 
   // Post-drain: flush whatever the poll triggered.
   Core::ThreadEventQueue::current().process();
+}
+
+#ifdef __ANDROID__
+// The plugin ticks once for each refresh of the screen. A finished frame left
+// until the next of those holds up the frame after it, which keeps a page from
+// being drawn any faster than every other refresh. So Android's main looper,
+// whose thread the engine runs on, also watches what the engine reads from, and
+// what arrives is handled as it arrives. Timers still wait for the tick.
+
+static int s_engine_events_fd = -1;
+// How many frame buffers the plugin is drawing from. Handling a message can hand
+// one back to be rendered into, so what arrives meanwhile waits.
+static int s_frames_in_use = 0;
+static bool s_events_waiting = false;
+static bool s_pumping_arrived_events = false;
+
+static void pump_arrived_events() {
+  if (s_pumping_arrived_events)
+    return;
+  s_pumping_arrived_events = true;
+  s_events_waiting = false;
+  // Handling one message can post another, which no descriptor announces.
+  for (int round = 0; round < 4; ++round) {
+    pump_engine();
+    if (!Core::ThreadEventQueue::current().has_pending_events())
+      break;
+  }
+  s_pumping_arrived_events = false;
+}
+
+static int on_engine_events(int fd, int, void *) {
+  Core::EventLoopManagerUnix::consume_readiness(fd);
+  if (s_frames_in_use > 0)
+    s_events_waiting = true;
+  else
+    pump_arrived_events();
+  // Go on watching.
+  return 1;
+}
+
+static void watch_engine_events() {
+  if (s_engine_events_fd >= 0 || !g_engine_ready)
+    return;
+  auto *looper = ALooper_forThread();
+  if (!looper)
+    return;
+  auto fd = Core::EventLoopManagerUnix::readiness_fd_of_current_thread();
+  if (fd < 0)
+    return;
+  if (ALooper_addFd(looper, fd, ALOOPER_POLL_CALLBACK, ALOOPER_EVENT_INPUT,
+                    on_engine_events, nullptr) == 1)
+    s_engine_events_fd = fd;
+}
+#endif
+
+extern "C" void tick_ladybird() {
+#ifdef __ANDROID__
+  watch_engine_events();
+  s_events_waiting = false;
+#endif
+  // This goes ahead even while a frame is being drawn from, so that nothing can
+  // keep the engine waiting for longer than a refresh.
+  pump_engine();
+}
+
+void set_android_display_refresh_rate(double refresh_rate) {
+#ifdef __ANDROID__
+  s_android_refresh_rate = refresh_rate;
+#else
+  (void)refresh_rate;
+#endif
+}
+
+void set_android_frame_in_use(bool in_use) {
+#ifdef __ANDROID__
+  s_frames_in_use = max(0, s_frames_in_use + (in_use ? 1 : -1));
+  if (s_frames_in_use == 0 && s_events_waiting)
+    pump_arrived_events();
+#else
+  (void)in_use;
+#endif
 }
 
 int create_web_view() {
@@ -2963,6 +3074,12 @@ void set_display_metadata(int view_id, bool has_display_id, uint64_t display_id,
 
   it->second->set_display_metadata(optional_display_id, refresh_rate,
                                    maximum_frames_per_second);
+}
+
+void set_view_visible(int view_id, bool visible) {
+  auto it = g_web_views.find(view_id);
+  if (it != g_web_views.end())
+    it->second->set_shown(visible);
 }
 
 void set_screen_size(int view_id, int width, int height) {

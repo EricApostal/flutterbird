@@ -40,6 +40,19 @@ Java_dev_flutterbird_ladybird_LadybirdPlugin_nativeConfigureAndroid(
 }
 
 extern "C" JNIEXPORT void JNICALL
+Java_dev_flutterbird_ladybird_LadybirdPlugin_nativeSetDisplayRefreshRate(
+    JNIEnv *, jclass, jdouble refresh_rate) {
+  set_android_display_refresh_rate(refresh_rate);
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_dev_flutterbird_ladybird_LadybirdPlugin_nativeSetFrameInUse(JNIEnv *,
+                                                                 jclass,
+                                                                 jboolean in_use) {
+  set_android_frame_in_use(in_use == JNI_TRUE);
+}
+
+extern "C" JNIEXPORT void JNICALL
 Java_dev_flutterbird_ladybird_LadybirdPlugin_nativeTickLadybird(JNIEnv *,
                                                                 jclass) {
   tick_ladybird();
