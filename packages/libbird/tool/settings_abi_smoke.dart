@@ -1,5 +1,23 @@
-// Throwaway: exercises the settings ABI (apply_settings_json,
-// remove_custom_search_engine) against a built libengine.dylib.
+// Settings ABI smoke check: drives the settings parts of libengine's C ABI
+// directly, with no Flutter and no window, to check that the settings the app
+// writes reach the engine and come back as the engine stores them.
+//
+// The ABI is positional, and a name the engine does not recognize fails
+// silently rather than loudly, so a renamed setting would leave the settings
+// page writing into nothing. Run this after changing engine.h's settings
+// functions or the JSON keys the page uses:
+//
+//   flutter build macos --debug
+//   APP=build/macos/Build/Products/Debug/Rubisco Browser.app
+//   mkdir -p /tmp/libbird-home && ln -sfn "$PWD/packages/libbird/third_party/ladybird/Base/res" /tmp/libbird-home/.lagom
+//   # The helpers are found next to the executable that starts the engine, so
+//   # the harness runs from where the app's helpers are, and the engine is a
+//   # relative path from there.
+//   dart compile exe packages/libbird/tool/settings_abi_smoke.dart -o "$APP/Contents/MacOS/settings_abi_smoke"
+//   (cd "$APP/Contents/MacOS" && HOME=/tmp/libbird-home ./settings_abi_smoke \
+//       ../Resources/libengine.dylib)
+//
+// It exits non-zero if any check fails.
 import 'dart:convert';
 import 'dart:ffi' as ffi;
 import 'dart:io';
