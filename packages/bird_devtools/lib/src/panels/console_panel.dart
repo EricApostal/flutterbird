@@ -372,11 +372,11 @@ class ConsoleRow extends StatelessWidget {
     final Widget? icon = switch (entry.kind) {
       ConsoleEntryKind.command => DtIcon(DtGlyph.command, size: 10, color: colors.textDim),
       ConsoleEntryKind.result => entry.level == 'error'
-          ? const DtIcon(DtGlyph.error, size: 11, color: Color(0xFFD70022))
+          ? const DtIcon(DtGlyph.error, size: 11, color: DtColors.errorFill)
           : DtIcon(DtGlyph.result, size: 11, color: colors.textDim),
       ConsoleEntryKind.network => null,
       _ => isError
-          ? const DtIcon(DtGlyph.error, size: 11, color: Color(0xFFD70022))
+          ? const DtIcon(DtGlyph.error, size: 11, color: DtColors.errorFill)
           : isWarning
           ? DtIcon(DtGlyph.warning, size: 11, color: colors.warningIcon)
           : entry.level == 'info'
@@ -412,10 +412,10 @@ class ConsoleRow extends StatelessWidget {
                     padding: const EdgeInsets.symmetric(horizontal: 4),
                     decoration: BoxDecoration(
                       color: isError
-                          ? const Color(0xFFD70022)
+                          ? DtColors.errorFill
                           : isWarning
-                          ? const Color(0xFFA47F00)
-                          : const Color(0xFF0060DF),
+                          ? DtColors.warningFill
+                          : DtColors.infoFill,
                       borderRadius: BorderRadius.circular(7),
                     ),
                     child: Text(

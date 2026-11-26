@@ -682,7 +682,7 @@ class _BrowserOmniboxBarState extends ConsumerState<BrowserOmniboxBar> {
                       glyph: isBookmarked
                           ? BirdGlyph.starFilled
                           : BirdGlyph.star,
-                      color: isBookmarked ? colors.accent : null,
+                      color: isBookmarked ? colors.link : null,
                       tooltip: isBookmarked
                           ? 'Remove bookmark'
                           : 'Add bookmark',

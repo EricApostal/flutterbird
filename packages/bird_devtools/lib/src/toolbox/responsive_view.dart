@@ -93,7 +93,7 @@ class _ResponsiveViewState extends State<ResponsiveView> {
   Widget build(BuildContext context) {
     final colors = context.dt;
     return ColoredBox(
-      color: colors.isDark ? const Color(0xFF0C0C0D) : const Color(0xFFEDEDF0),
+      color: colors.isDark ? const Color(0xFF0B0D14) : const Color(0xFFE5E9F3),
       child: Column(
         children: [
           DtToolbar(

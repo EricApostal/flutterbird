@@ -310,7 +310,7 @@ class _DevToolsToolboxState extends State<DevToolsToolbox> {
               decoration: BoxDecoration(color: hovered ? context.dt.toolbarHover : null, borderRadius: BorderRadius.circular(2)),
               child: Row(
                 children: [
-                  const DtIcon(DtGlyph.error, size: 12, color: Color(0xFFD70022)),
+                  const DtIcon(DtGlyph.error, size: 12, color: DtColors.errorFill),
                   const SizedBox(width: 4),
                   Text(errors > 99 ? '99+' : '$errors', style: context.uiStyle(color: context.dt.textStrong, size: 11)),
                 ],

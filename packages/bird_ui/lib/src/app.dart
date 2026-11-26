@@ -57,7 +57,7 @@ class BirdApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const color = Color(0xFF0061E0);
+    const color = BirdBrand.blue;
     final routerConfig = this.routerConfig;
     if (routerConfig != null) {
       return WidgetsApp.router(

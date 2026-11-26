@@ -32,12 +32,12 @@ String formatMillis(num? ms) {
 
 Color statusColor(NetworkRequest request, DtColors colors) {
   final status = request.status;
-  if (request.failed) return const Color(0xFFD70022);
+  if (request.failed) return colors.red;
   if (status == null) return colors.textDim;
-  if (status >= 500) return const Color(0xFFD70022);
-  if (status >= 400) return const Color(0xFFE25141);
-  if (status >= 300) return const Color(0xFFD7B600);
-  return const Color(0xFF30A14E);
+  if (status >= 500) return colors.red;
+  if (status >= 400) return colors.orange;
+  if (status >= 300) return colors.warningIcon;
+  return colors.green;
 }
 
 /// The Network Monitor.
@@ -346,7 +346,7 @@ class _NetworkPanelState extends State<NetworkPanel> {
         final color = selected
             ? colors.selectionText
             : request.isError
-            ? (colors.isDark ? colors.errorText : const Color(0xFFD70022))
+            ? (colors.isDark ? colors.errorText : colors.red)
             : colors.textStrong;
         Widget text(String value, {bool dim = false}) => Text(
           value,
@@ -402,7 +402,7 @@ class _NetworkPanelState extends State<NetworkPanel> {
                 span: span,
                 domContentLoaded: _relative(network.domContentLoadedMs, first),
                 load: _relative(network.loadMs, first),
-                color: selected ? colors.selectionText : const Color(0xFF7BB8F4),
+                color: selected ? colors.selectionText : const Color(0xFF6FA4F7),
                 label: request.totalMs == null ? '' : formatMillis(request.totalMs),
                 style: context.uiStyle(size: 10, color: selected ? colors.selectionText : colors.textDim),
               ),
@@ -445,7 +445,7 @@ class _NetworkPanelState extends State<NetworkPanel> {
                   item('${formatBytes(network.totalContentSize)} / ${formatBytes(network.totalTransferredSize)} transferred'),
                   item('Finish: ${formatMillis(network.finishTime.inMicroseconds / 1000)}'),
                   if (network.domContentLoadedMs case final ms?) item('DOMContentLoaded: ${formatMillis(ms)}', colors.blue),
-                  if (network.loadMs case final ms?) item('load: ${formatMillis(ms)}', const Color(0xFFD70022)),
+                  if (network.loadMs case final ms?) item('load: ${formatMillis(ms)}', colors.red),
                 ],
               ],
             ),
@@ -519,8 +519,8 @@ class _WaterfallPainter extends CustomPainter {
       canvas.drawRect(Rect.fromLTWH(x(at), 0, 1, size.height), Paint()..color = color);
     }
 
-    mark(domContentLoaded, const Color(0x990060DF));
-    mark(load, const Color(0x99D70022));
+    mark(domContentLoaded, DtColors.infoFill.withValues(alpha: 0.6));
+    mark(load, DtColors.errorFill.withValues(alpha: 0.6));
     final from = x(start);
     var to = x(start + (duration ?? 0));
     if (to < from + 3) to = from + 3;
@@ -928,13 +928,13 @@ class _RequestDetailsState extends State<RequestDetails> {
       return DtEmptyState(request.complete ? request.detailsError ?? 'Loading…' : 'Waiting for the request to finish.');
     }
     const labels = {
-      'blocked': ('Blocked', Color(0xFFB1B1B3)),
-      'dns': ('DNS Resolution', Color(0xFF00C8D7)),
-      'connect': ('Connecting', Color(0xFFD7B600)),
-      'ssl': ('TLS Setup', Color(0xFFD76E00)),
-      'send': ('Sending', Color(0xFF8000D7)),
-      'wait': ('Waiting', Color(0xFFBF4FBF)),
-      'receive': ('Receiving', Color(0xFF30A14E)),
+      'blocked': ('Blocked', Color(0xFF9AA3BA)),
+      'dns': ('DNS Resolution', Color(0xFF2BAFBF)),
+      'connect': ('Connecting', Color(0xFFD29B14)),
+      'ssl': ('TLS Setup', Color(0xFFD9692B)),
+      'send': ('Sending', Color(0xFF7A55D6)),
+      'wait': ('Waiting', Color(0xFFC4548F)),
+      'receive': ('Receiving', Color(0xFF277AFF)),
     };
     var total = 0.0;
     for (final value in timings.parts.values) {

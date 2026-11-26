@@ -100,7 +100,7 @@ class DtButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = context.dt;
     final enabled = onPressed != null;
-    final foreground = primary ? const Color(0xFFFFFFFF) : colors.textStrong;
+    final foreground = primary ? context.bird.onAccent : colors.textStrong;
     return DtHover(
       onTap: onPressed,
       builder: (context, hovered) => Opacity(
@@ -110,7 +110,7 @@ class DtButton extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 12),
           decoration: BoxDecoration(
             color: primary
-                ? (hovered && enabled ? const Color(0xFF003EAA) : const Color(0xFF0060DF))
+                ? (hovered && enabled ? context.bird.accentHover : context.bird.accent)
                 : (hovered && enabled ? colors.toolbarActive : colors.toolbarHover),
             borderRadius: BorderRadius.circular(2),
           ),
@@ -200,9 +200,9 @@ class DtCheckbox extends StatelessWidget {
       width: size,
       height: size,
       decoration: BoxDecoration(
-        color: value && !radio ? const Color(0xFF0060DF) : colors.inputBackground,
+        color: value && !radio ? context.bird.accent : colors.inputBackground,
         border: Border.all(
-          color: value ? const Color(0xFF0060DF) : colors.splitterStrong,
+          color: value ? context.bird.accent : colors.splitterStrong,
         ),
         shape: radio ? BoxShape.circle : BoxShape.rectangle,
         borderRadius: radio ? null : BorderRadius.circular(2),
@@ -214,7 +214,7 @@ class DtCheckbox extends StatelessWidget {
           ? Container(
               width: size - 6,
               height: size - 6,
-              decoration: const BoxDecoration(color: Color(0xFF0060DF), shape: BoxShape.circle),
+              decoration: BoxDecoration(color: context.bird.accent, shape: BoxShape.circle),
             )
           : DtIcon(DtGlyph.check, size: size - 2, color: const Color(0xFFFFFFFF)),
     );

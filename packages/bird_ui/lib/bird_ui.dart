@@ -1,5 +1,5 @@
-/// Rubisco Browser's desktop widgets: Firefox's look, macOS manners, and no
-/// Material.
+/// Rubisco Browser's desktop widgets: as compact as a desktop browser, with
+/// macOS manners, and no Material.
 library;
 
 export 'src/app.dart';

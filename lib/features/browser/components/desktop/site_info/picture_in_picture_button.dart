@@ -73,7 +73,7 @@ class _PictureInPictureButtonState extends State<PictureInPictureButton> {
               size: 26,
               iconSize: 15,
               color: video.active
-                  ? context.bird.accent
+                  ? context.bird.link
                   : context.bird.textSecondary,
               onPressed: _press,
             ),

@@ -98,7 +98,7 @@ class ExtensionsMenu extends ConsumerWidget {
         tooltip: isPinned ? 'Unpin from toolbar' : 'Pin to toolbar',
         size: 28,
         iconSize: 14,
-        color: isPinned ? context.bird.accent : null,
+        color: isPinned ? context.bird.link : null,
         onPressed: () => unawaited(
           service.pins.setPinned(extension.uuid, pinned: !isPinned),
         ),

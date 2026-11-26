@@ -81,7 +81,7 @@ class _OmniboxSuggestionRowState extends State<OmniboxSuggestionRow> {
       color: highlighted ? colors.onSelection : colors.textSecondary,
     );
     final link = plain.copyWith(
-      color: highlighted ? colors.onSelection : colors.accent,
+      color: highlighted ? colors.onSelection : colors.link,
     );
 
     switch (option.type) {

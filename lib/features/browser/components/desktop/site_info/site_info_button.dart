@@ -99,7 +99,7 @@ class _SiteInfoButtonState extends State<SiteInfoButton> {
           final waiting = _bridge.promptFor(widget.tab.viewId) != null;
           // Filled in would say it holds something; a lit one asks to be
           // looked at.
-          final asking = waiting ? colors.accent : null;
+          final asking = waiting ? colors.link : null;
           return BirdToolbarButton(
             glyph: waiting ? BirdGlyph.help : glyph,
             tooltip: waiting

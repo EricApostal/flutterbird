@@ -137,7 +137,7 @@ class _Recording extends StatelessWidget {
                             width: (span.duration * scale).clamp(2, constraints.maxWidth),
                             top: 6,
                             height: 8,
-                            child: ColoredBox(color: span.type == 'jank' ? const Color(0xFFD70022) : span.type == 'mark' || span.type == 'measure' ? colors.purple : colors.accent),
+                            child: ColoredBox(color: span.type == 'jank' ? DtColors.errorFill : span.type == 'mark' || span.type == 'measure' ? colors.purple : colors.accent),
                           ),
                         ],
                       );
@@ -186,8 +186,8 @@ class _FrameRatePainter extends CustomPainter {
     path
       ..lineTo(left + width, 6 + height)
       ..close();
-    canvas.drawPath(path, Paint()..color = const Color(0x3330A14E));
-    canvas.drawPath(line, Paint()..color = const Color(0xFF30A14E)..style = PaintingStyle.stroke..strokeWidth = 1.2);
+    canvas.drawPath(path, Paint()..color = colors.green.withValues(alpha: 0.2));
+    canvas.drawPath(line, Paint()..color = colors.green..style = PaintingStyle.stroke..strokeWidth = 1.2);
   }
 
   @override

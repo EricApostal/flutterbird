@@ -846,8 +846,8 @@ class _Badge extends StatelessWidget {
             height: 13,
             alignment: Alignment.center,
             decoration: BoxDecoration(
-              color: active ? const Color(0xFF9400FF) : colors.toolbar,
-              border: Border.all(color: active ? const Color(0xFF9400FF) : colors.splitterStrong),
+              color: active ? DtColors.layoutMark : colors.toolbar,
+              border: Border.all(color: active ? DtColors.layoutMark : colors.splitterStrong),
               borderRadius: BorderRadius.circular(2),
             ),
             child: Text(label, style: context.uiStyle(size: 9, color: active ? const Color(0xFFFFFFFF) : colors.textDim).copyWith(height: 1)),

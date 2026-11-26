@@ -1,12 +1,13 @@
+import 'package:bird_ui/bird_ui.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
-// Ladybird's brand colors (UI/Qt/BrandColors.h in the engine's tree).
-class _BrandColors {
-  static const Color indigo30 = Color(0xFF6851D6);
-  static const Color violet10 = Color(0xFFE0D4FF);
-  static const Color violet20 = Color(0xFFCAB5FF);
-  static const Color violet500 = Color(0xFF7A4CE6);
+// The blue of the mark, running from deep to pale along the bar.
+class _BarColors {
+  static const Color deep = Color(0xFF1459CC);
+  static const Color blue = BirdBrand.blue;
+  static const Color light = Color(0xFF8FBCFF);
+  static const Color pale = Color(0xFFDCEAFF);
 }
 
 // A thin progress bar for a page that is loading.
@@ -156,7 +157,7 @@ class _TabLoadingBarPainter extends CustomPainter {
     canvas.drawRRect(
       bar,
       Paint()
-        ..color = _BrandColors.violet500.withValues(alpha: 0.55)
+        ..color = _BarColors.blue.withValues(alpha: 0.55)
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3),
     );
 
@@ -165,9 +166,9 @@ class _TabLoadingBarPainter extends CustomPainter {
       Paint()
         ..shader = const LinearGradient(
           colors: [
-            _BrandColors.indigo30,
-            _BrandColors.violet500,
-            _BrandColors.violet20,
+            _BarColors.deep,
+            _BarColors.blue,
+            _BarColors.light,
           ],
           stops: [0, 0.7, 1],
         ).createShader(Rect.fromLTWH(0, 0, filled, height)),
@@ -201,8 +202,8 @@ class _TabLoadingBarPainter extends CustomPainter {
       Paint()
         ..shader = RadialGradient(
           colors: [
-            _BrandColors.violet10.withValues(alpha: 0.95),
-            _BrandColors.violet20.withValues(alpha: 0),
+            _BarColors.pale.withValues(alpha: 0.95),
+            _BarColors.light.withValues(alpha: 0),
           ],
         ).createShader(Rect.fromCircle(center: headCenter, radius: headRadius)),
     );

@@ -54,7 +54,7 @@ class _BirdGalleryState extends State<BirdGallery> {
             _section('Toolbar', [
               for (final glyph in [BirdGlyph.back, BirdGlyph.forward, BirdGlyph.reload, BirdGlyph.star])
                 BirdToolbarButton(glyph: glyph, onPressed: () {}),
-              BirdToolbarButton(glyph: BirdGlyph.starFilled, color: colors.accent, onPressed: () {}),
+              BirdToolbarButton(glyph: BirdGlyph.starFilled, color: colors.link, onPressed: () {}),
               BirdBadge(label: '3', child: BirdToolbarButton(glyph: BirdGlyph.download, onPressed: () {})),
               const BirdToolbarButton(glyph: BirdGlyph.forward, onPressed: null),
               BirdToolbarButton(glyph: BirdGlyph.menu, active: true, onPressed: () {}),

@@ -196,7 +196,7 @@ class BirdMessageBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = context.bird;
     final (background, glyph, tint) = switch (kind) {
-      BirdMessageKind.info => (colors.infoBackground, BirdGlyph.info, colors.accent),
+      BirdMessageKind.info => (colors.infoBackground, BirdGlyph.info, colors.link),
       BirdMessageKind.success => (colors.successBackground, BirdGlyph.check, colors.success),
       BirdMessageKind.warning => (colors.warningBackground, BirdGlyph.warning, colors.warning),
       BirdMessageKind.error => (colors.dangerBackground, BirdGlyph.error, colors.danger),

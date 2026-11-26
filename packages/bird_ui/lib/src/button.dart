@@ -205,8 +205,8 @@ class BirdLink extends StatelessWidget {
         final color = !state.enabled
             ? colors.textDisabled
             : state.hovered
-            ? colors.accentHover
-            : colors.accent;
+            ? colors.linkHover
+            : colors.link;
         return BirdFocusRing(
           visible: state.focused,
           child: Text(
