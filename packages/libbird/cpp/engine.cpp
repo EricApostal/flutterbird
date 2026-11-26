@@ -3449,6 +3449,48 @@ char *get_settings_json() {
   return strdup(bytes.characters());
 }
 
+bool apply_settings_json(const char *json) {
+  if (!s_app || !json)
+    return false;
+
+  auto parsed = JsonValue::from_string(StringView(json, strlen(json)));
+  if (parsed.is_error() || !parsed.value().is_object())
+    return false;
+
+  // The engine loads a whole snapshot, so the changes are merged into the
+  // current one first; loading the changes alone would reset every key they
+  // leave out to its default.
+  auto &settings = WebView::Application::settings();
+  auto snapshot = settings.serialize_json();
+  auto merged = snapshot.as_object();
+  WebView::Settings::apply_changes(merged, parsed.value().as_object());
+
+  settings.replace_with_json(JsonValue(move(merged)),
+                             WebView::Settings::PersistChange::Yes);
+  return true;
+}
+
+bool remove_custom_search_engine(const char *name) {
+  if (!s_app || !name || strlen(name) == 0)
+    return false;
+
+  StringView engine_name(name, strlen(name));
+  // find_search_engine_by_name() also finds builtins, and removing one of
+  // those would clear the selection without removing anything.
+  for (auto const &engine : WebView::builtin_search_engines()) {
+    if (engine.name == engine_name)
+      return false;
+  }
+
+  auto &settings = WebView::Application::settings();
+  auto engine = settings.find_search_engine_by_name(engine_name);
+  if (!engine.has_value())
+    return false;
+
+  settings.remove_custom_search_engine(*engine);
+  return true;
+}
+
 void copy_selection(int view_id) {
   auto it = g_web_views.find(view_id);
   if (it == g_web_views.end())

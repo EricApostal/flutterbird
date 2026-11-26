@@ -11,6 +11,7 @@ import 'package:rubisco_browser/features/browser/components/browser_context_menu
 import 'package:rubisco_browser/features/browser/components/tab_loading_bar.dart';
 import 'package:rubisco_browser/features/devtools/browser_devtools.dart';
 import 'package:rubisco_browser/features/new_tab/new_tab_page.dart';
+import 'package:rubisco_browser/features/settings/settings_page.dart';
 import 'package:rubisco_browser/features/browser/state/fullscreen_mode.dart';
 import 'package:rubisco_browser/features/windows/window_scope.dart';
 import 'package:ladybird/ladybird.dart';
@@ -265,6 +266,8 @@ class _BrowserWindowState extends ConsumerState<BrowserWindow> {
                       tab: controller,
                     ),
                   ),
+                if (controller.isOnSettingsPage)
+                  const Positioned.fill(child: SettingsPage()),
               ],
             ),
           ),

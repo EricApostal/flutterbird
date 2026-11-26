@@ -221,6 +221,49 @@ void main() {
     expect(((entry['contentScripts']! as List).single as Map)['world'], 'MAIN');
   });
 
+  test('runs a registered script in the world it was registered for', () async {
+    amo.publish(
+      slug: 's',
+      guid: 'sample@test',
+      version: '1.0',
+      files: extension(),
+    );
+    await installer.installFromAmo('s');
+
+    // As uBlock Origin registers its scriptlets.
+    final built =
+        jsonDecode(
+              await EngineStateBuilder(
+                registry: registry,
+                dynamicScripts: (_) => [
+                  const DynamicContentScript('page', {
+                    'matches': ['https://video.example/*'],
+                    'js': [
+                      {'code': 'page()'},
+                    ],
+                    'runAt': 'document_start',
+                    'world': 'MAIN',
+                    'matchOriginAsFallback': true,
+                  }),
+                  const DynamicContentScript('own', {
+                    'matches': ['https://video.example/*'],
+                    'js': [
+                      {'code': 'own()'},
+                    ],
+                  }),
+                ],
+              ).build(),
+            )
+            as Map<String, Object?>;
+
+    final entry = (built['extensions']! as List).single as Map<String, Object?>;
+    final scripts = (entry['contentScripts']! as List)
+        .cast<Map<String, Object?>>()
+        .skip(1);
+    expect(scripts.map((script) => script['world']), ['MAIN', 'ISOLATED']);
+    expect(scripts.map((script) => script['matchAboutBlank']), [true, false]);
+  });
+
   test('is a valid empty document when nothing is installed', () async {
     final built = await state();
     expect(built['extensions'], isEmpty);

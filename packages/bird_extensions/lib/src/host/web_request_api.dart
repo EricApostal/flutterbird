@@ -136,10 +136,6 @@ class WebRequestApi extends ApiNamespace implements EventObserver {
     switch (call.method) {
       case 'handlerBehaviorChanged':
         return null;
-      case 'filterResponseData':
-        throw ApiException(
-          'webRequest.filterResponseData is not supported yet',
-        );
       case 'getSecurityInfo':
         throw ApiException('webRequest.getSecurityInfo is not supported yet');
       default:

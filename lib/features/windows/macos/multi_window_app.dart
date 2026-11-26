@@ -4,8 +4,9 @@
 import 'package:bird_devtools/bird_devtools.dart';
 import 'package:bird_ui/bird_ui.dart';
 import 'package:flutter/widgets.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/src/widgets/_window.dart';
-import 'package:rubisco_browser/features/theme/appearance.dart';
+import 'package:rubisco_browser/features/settings/settings_controller.dart';
 import 'package:rubisco_browser/features/windows/desktop_window_home.dart';
 import 'package:rubisco_browser/features/windows/macos/mac_devtools_windows.dart';
 import 'package:rubisco_browser/features/windows/macos/mac_picture_in_picture.dart';
@@ -13,14 +14,15 @@ import 'package:rubisco_browser/features/windows/macos/mac_window_system.dart';
 import 'package:rubisco_browser/features/windows/window_scope.dart';
 
 /// The root of the macOS app: not a window itself, but every window there is.
-class MultiWindowApp extends StatelessWidget {
+class MultiWindowApp extends ConsumerWidget {
   const MultiWindowApp({required this.system, required this.devTools, super.key});
 
   final MacWindowSystem system;
   final MacDevToolsWindows devTools;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final themeMode = ref.watch(interfaceThemeModeProvider);
     return ListenableBuilder(
       listenable: Listenable.merge([system, system.pictureInPicture, devTools]),
       builder: (context, _) => ViewCollection(
@@ -29,14 +31,17 @@ class MultiWindowApp extends StatelessWidget {
             Window(
               key: ValueKey(window.id),
               controller: window.controller,
-              child: _BrowserWindowApp(windowId: window.id),
+              child: _BrowserWindowApp(
+                windowId: window.id,
+                themeMode: themeMode,
+              ),
             ),
           for (final window in devTools.windows)
             Window(
               key: ValueKey('devtools-${window.tabId}'),
               controller: window.controller,
               child: BirdApp(
-                themeMode: desktopThemeMode,
+                themeMode: themeMode,
                 home: Builder(
                   builder: (context) => DevToolsToolboxHost(
                     manager: devTools.manager,
@@ -64,17 +69,18 @@ class MultiWindowApp extends StatelessWidget {
 /// What one window holds. Each has a navigator and overlays of its own, so a
 /// menu or a dialog opens in the window it was asked for in.
 class _BrowserWindowApp extends StatelessWidget {
-  const _BrowserWindowApp({required this.windowId});
+  const _BrowserWindowApp({required this.windowId, required this.themeMode});
 
   final int windowId;
+  final BirdThemeMode themeMode;
 
   @override
   Widget build(BuildContext context) {
     return BrowserWindowScope(
       windowId: windowId,
-      child: const BirdApp(
-        themeMode: desktopThemeMode,
-        home: DesktopWindowHome(),
+      child: BirdApp(
+        themeMode: themeMode,
+        home: const DesktopWindowHome(),
       ),
     );
   }

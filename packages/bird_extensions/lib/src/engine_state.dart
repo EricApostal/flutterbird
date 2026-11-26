@@ -211,8 +211,16 @@ class EngineStateBuilder {
       'excludeGlobs': strings(options['excludeGlobs']),
       'runAt': options['runAt'] is String ? options['runAt'] : 'document_idle',
       'allFrames': options['allFrames'] == true,
-      'matchAboutBlank': options['matchAboutBlank'] == true,
-      'world': 'ISOLATED',
+      // `matchOriginAsFallback` covers the blank frames this does, and more.
+      'matchAboutBlank':
+          options['matchAboutBlank'] == true ||
+          options['matchOriginAsFallback'] == true,
+      // A script for the page's own world is how an extension changes what the
+      // page's scripts see, as ad blockers do with their scriptlets.
+      'world': switch (options['world']) {
+        final String world when world.toUpperCase() == 'MAIN' => 'MAIN',
+        _ => 'ISOLATED',
+      },
       'js': js,
       'css': css,
     };

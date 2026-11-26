@@ -11,7 +11,7 @@ import 'package:rubisco_browser/features/downloads/downloads_bootstrap.dart';
 import 'package:rubisco_browser/features/extensions/app_browser_bridge.dart';
 import 'package:rubisco_browser/features/router/controller.dart';
 import 'package:rubisco_browser/features/theme/app_theme.dart';
-import 'package:rubisco_browser/features/theme/appearance.dart';
+import 'package:rubisco_browser/features/settings/settings_controller.dart';
 import 'package:rubisco_browser/features/windows/browser_shell.dart';
 import 'package:rubisco_browser/features/windows/legacy_window_system.dart';
 import 'package:rubisco_browser/features/windows/macos/mac_devtools_windows.dart';
@@ -60,6 +60,9 @@ void _runMultiWindow() {
   // The shell first: it listens for what pages do to tabs, and making its
   // first tab is what starts the engine.
   final shell = container.read(browserShellProvider);
+  // The engine is up now, so its settings can be read before the first window
+  // is built from them.
+  container.read(settingsProvider);
   windows.onCloseRequested = shell.closeWindow;
   windows.pictureInPicture.onReturnToTab = (tabId) {
     shell.showTab(tabId);
@@ -130,6 +133,9 @@ class _MainAppState extends ConsumerState<MainApp> {
     super.initState();
     // The shell starts listening to tabs, and makes the first one.
     final shell = ref.read(browserShellProvider);
+    // The engine is up now, so its settings can be read before the first
+    // frame is built from them.
+    ref.read(settingsProvider);
     // From the start, so that pages offer "Inspect" before the tools are opened.
     ref.read(devToolsProvider);
     _windowId = ref.read(browserSessionProvider).windows.first.id;
@@ -151,7 +157,7 @@ class _MainAppState extends ConsumerState<MainApp> {
 
   Widget _desktopApp() => BirdApp.router(
     routerConfig: routerController,
-    themeMode: desktopThemeMode,
+    themeMode: ref.watch(interfaceThemeModeProvider),
     builder: (context, child) => _keepOpen(child),
   );
 

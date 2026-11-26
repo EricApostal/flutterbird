@@ -805,8 +805,12 @@ class LadybirdController {
 
   // Returns every search engine the engine knows about -- its builtins plus
   // any custom engines (name + query URL template), in that order.
-  List<LadybirdSearchEngine> getSearchEngines() {
-    final ptr = _bindings.get_search_engines_json();
+  List<LadybirdSearchEngine> getSearchEngines() => searchEngines();
+
+  /// Every search engine the engine knows about, as [getSearchEngines] does,
+  /// through the process-wide bindings: the list is engine state, not a tab's.
+  static List<LadybirdSearchEngine> searchEngines() {
+    final ptr = _staticBindings.get_search_engines_json();
     if (ptr == ffi.nullptr) return const [];
     final json = ptr.cast<Utf8>().toDartString();
     malloc.free(ptr);
@@ -823,8 +827,12 @@ class LadybirdController {
   // none has been explicitly configured. The engine itself has no implicit
   // default in that case (see WebView::sanitize_url) — callers should fall
   // back to a search engine of their choosing, e.g. via [activeSearchEngine].
-  String? getSearchEngineName() {
-    final ptr = _bindings.get_search_engine_name();
+  String? getSearchEngineName() => searchEngineName();
+
+  /// The configured search engine's name, as [getSearchEngineName] gives it,
+  /// through the process-wide bindings: it is engine state, not a tab's.
+  static String? searchEngineName() {
+    final ptr = _staticBindings.get_search_engine_name();
     if (ptr == ffi.nullptr) return null;
     final name = ptr.cast<Utf8>().toDartString();
     malloc.free(ptr);
@@ -835,13 +843,17 @@ class LadybirdController {
   // and fall back to [fallbackSearchEngine]. Throws [ArgumentError] if no
   // engine by that name exists -- the engine refuses an unknown name rather
   // than silently dropping the selection, so a typo can't look like success.
-  void setSearchEngine(String? name) {
+  void setSearchEngine(String? name) => selectSearchEngine(name);
+
+  /// Sets the active search engine, as [setSearchEngine] does, for the whole
+  /// process.
+  static void selectSearchEngine(String? name) {
     if (name == null || name.isEmpty) {
-      _bindings.set_search_engine(ffi.nullptr);
+      _staticBindings.set_search_engine(ffi.nullptr);
       return;
     }
     final namePtr = name.toNativeUtf8();
-    final didSet = _bindings.set_search_engine(namePtr.cast<ffi.Char>());
+    final didSet = _staticBindings.set_search_engine(namePtr.cast<ffi.Char>());
     malloc.free(namePtr);
     if (!didSet) {
       throw ArgumentError('No search engine named "$name" is known.');
@@ -854,7 +866,12 @@ class LadybirdController {
   // Throws [ArgumentError] with a message worth showing the user if the name is
   // empty or already taken, or if the URL isn't one the engine accepts (a valid
   // absolute URL containing "%s").
-  void addCustomSearchEngine(String name, String queryUrl) {
+  void addCustomSearchEngine(String name, String queryUrl) =>
+      addNewSearchEngine(name, queryUrl);
+
+  /// Adds a custom search engine and selects it, as [addCustomSearchEngine]
+  /// does, for the whole process.
+  static void addNewSearchEngine(String name, String queryUrl) {
     final newName = name.trim();
     final newQueryUrl = queryUrl.trim();
 
@@ -870,13 +887,13 @@ class LadybirdController {
         'e.g. "https://example.com/search?q=%s".',
       );
     }
-    if (getSearchEngines().any((engine) => engine.name == newName)) {
+    if (searchEngines().any((engine) => engine.name == newName)) {
       throw ArgumentError('A search engine named "$newName" already exists.');
     }
 
     final namePtr = newName.toNativeUtf8();
     final queryUrlPtr = newQueryUrl.toNativeUtf8();
-    final didAdd = _bindings.add_custom_search_engine(
+    final didAdd = _staticBindings.add_custom_search_engine(
       namePtr.cast<ffi.Char>(),
       queryUrlPtr.cast<ffi.Char>(),
     );
@@ -889,7 +906,7 @@ class LadybirdController {
         'valid URL containing "%s".',
       );
     }
-    setSearchEngine(newName);
+    selectSearchEngine(newName);
   }
 
   // Used when no search engine has been explicitly configured.
@@ -931,6 +948,23 @@ class LadybirdController {
     return !hasStartedNavigation && initialUrl == null;
   }
 
+  /// Whether the tab is on the app's settings page, which is drawn over the
+  /// engine's own page at this address, or is on its way there.
+  bool get isOnSettingsPage {
+    // Only the desktop has a page of the app's own to show.
+    if (Platform.isAndroid || Platform.isIOS) return false;
+    final url = urlNotifier.value.trim();
+    if (_isSettingsUrl(url)) return true;
+    // Before the engine reports an address, and while it is still on the empty
+    // document every view starts with.
+    if (url.isNotEmpty && url != 'about:blank') return false;
+    final requested = _requestedUrl ?? initialUrl;
+    return requested != null && _isSettingsUrl(requested);
+  }
+
+  static bool _isSettingsUrl(String url) =>
+      url == 'about:settings' || url.startsWith('about:settings#');
+
   // The front page of the active search engine, e.g.
   // "https://duckduckgo.com/".
   String get homeUrl {
@@ -943,8 +977,28 @@ class LadybirdController {
   // Returns the schema (name/title/description/default value) for every
   // generic engine config variable, so new settings surfaced by the engine
   // don't require new bindings to be discoverable.
-  List<LadybirdConfigVariableDefinition> getConfigVariableDefinitions() {
-    final ptr = _bindings.get_config_variable_definitions_json();
+  List<LadybirdConfigVariableDefinition> getConfigVariableDefinitions() =>
+      configVariableDefinitions();
+
+  // Returns the current value of a config variable by name, or null if the
+  // name isn't recognized by the engine.
+  dynamic getConfigVariable(String name) => configVariable(name);
+
+  // Sets a config variable by name. Returns false if the name isn't
+  // recognized by the engine (invalid values for a known variable are
+  // silently ignored, matching engine behavior).
+  bool setConfigVariable(String name, Object? value) =>
+      setConfigVariableValue(name, value);
+
+  // Returns a full snapshot of every engine setting (search engine, tab
+  // settings, zoom, languages, browsing behavior, autoplay, etc), as defined
+  // by WebView::Settings::serialize_json().
+  Map<String, dynamic> getSettingsJson() => settingsSnapshot();
+
+  // Engine settings are process-global, like downloads, so these read and
+  // write them through one shared bindings handle rather than a tab's.
+  static List<LadybirdConfigVariableDefinition> configVariableDefinitions() {
+    final ptr = _staticBindings.get_config_variable_definitions_json();
     if (ptr == ffi.nullptr) return const [];
     final json = ptr.cast<Utf8>().toDartString();
     malloc.free(ptr);
@@ -957,11 +1011,9 @@ class LadybirdController {
         .toList();
   }
 
-  // Returns the current value of a config variable by name, or null if the
-  // name isn't recognized by the engine.
-  dynamic getConfigVariable(String name) {
+  static dynamic configVariable(String name) {
     final namePtr = name.toNativeUtf8();
-    final ptr = _bindings.get_config_variable_json(namePtr.cast<ffi.Char>());
+    final ptr = _staticBindings.get_config_variable_json(namePtr.cast<ffi.Char>());
     malloc.free(namePtr);
     if (ptr == ffi.nullptr) return null;
 
@@ -970,13 +1022,10 @@ class LadybirdController {
     return jsonDecode(json);
   }
 
-  // Sets a config variable by name. Returns false if the name isn't
-  // recognized by the engine (invalid values for a known variable are
-  // silently ignored, matching engine behavior).
-  bool setConfigVariable(String name, Object? value) {
+  static bool setConfigVariableValue(String name, Object? value) {
     final namePtr = name.toNativeUtf8();
     final valuePtr = jsonEncode(value).toNativeUtf8();
-    final result = _bindings.set_config_variable_json(
+    final result = _staticBindings.set_config_variable_json(
       namePtr.cast<ffi.Char>(),
       valuePtr.cast<ffi.Char>(),
     );
@@ -985,11 +1034,10 @@ class LadybirdController {
     return result;
   }
 
-  // Returns a full snapshot of every engine setting (search engine, tab
-  // settings, zoom, languages, browsing behavior, autoplay, etc), as defined
-  // by WebView::Settings::serialize_json().
-  Map<String, dynamic> getSettingsJson() {
-    final ptr = _bindings.get_settings_json();
+  /// The engine's settings as they are now, or an empty map when the engine
+  /// has not started yet.
+  static Map<String, dynamic> settingsSnapshot() {
+    final ptr = _staticBindings.get_settings_json();
     if (ptr == ffi.nullptr) return const {};
     final json = ptr.cast<Utf8>().toDartString();
     malloc.free(ptr);
@@ -997,6 +1045,29 @@ class LadybirdController {
     final decoded = jsonDecode(json);
     if (decoded is! Map<String, dynamic>) return const {};
     return decoded;
+  }
+
+  /// Applies a partial snapshot to the engine's settings and saves them: maps
+  /// merge into the ones they name, and a null removes a key. Returns whether
+  /// the engine took the change.
+  static bool applySettingsChanges(Map<String, Object?> changes) {
+    final jsonPtr = jsonEncode(changes).toNativeUtf8();
+    final applied = _staticBindings.apply_settings_json(
+      jsonPtr.cast<ffi.Char>(),
+    );
+    malloc.free(jsonPtr);
+    return applied;
+  }
+
+  /// Removes a custom search engine by name. Builtin engines and unknown
+  /// names change nothing. Removing the selected engine clears the selection.
+  static bool removeCustomSearchEngine(String name) {
+    final namePtr = name.toNativeUtf8();
+    final removed = _staticBindings.remove_custom_search_engine(
+      namePtr.cast<ffi.Char>(),
+    );
+    malloc.free(namePtr);
+    return removed;
   }
 
   void _seedDownloadsFromEngine() {

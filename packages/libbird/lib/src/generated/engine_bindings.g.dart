@@ -849,6 +849,28 @@ class LadybirdBindings {
   late final _get_settings_json = _get_settings_jsonPtr
       .asFunction<ffi.Pointer<ffi.Char> Function()>();
 
+  bool apply_settings_json(ffi.Pointer<ffi.Char> json) {
+    return _apply_settings_json(json);
+  }
+
+  late final _apply_settings_jsonPtr =
+      _lookup<ffi.NativeFunction<ffi.Bool Function(ffi.Pointer<ffi.Char>)>>(
+        'apply_settings_json',
+      );
+  late final _apply_settings_json = _apply_settings_jsonPtr
+      .asFunction<bool Function(ffi.Pointer<ffi.Char>)>();
+
+  bool remove_custom_search_engine(ffi.Pointer<ffi.Char> name) {
+    return _remove_custom_search_engine(name);
+  }
+
+  late final _remove_custom_search_enginePtr =
+      _lookup<ffi.NativeFunction<ffi.Bool Function(ffi.Pointer<ffi.Char>)>>(
+        'remove_custom_search_engine',
+      );
+  late final _remove_custom_search_engine = _remove_custom_search_enginePtr
+      .asFunction<bool Function(ffi.Pointer<ffi.Char>)>();
+
   void copy_selection(int view_id) {
     return _copy_selection(view_id);
   }

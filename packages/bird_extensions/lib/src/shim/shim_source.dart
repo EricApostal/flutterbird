@@ -765,10 +765,10 @@ const String browserShimSource = r'''
       PING: 'ping', CSP_REPORT: 'csp_report', MEDIA: 'media', WEBSOCKET: 'websocket',
       WEBBUNDLE: 'webbundle', OTHER: 'other',
     },
-    // Firefox lets an extension read and rewrite a response as it arrives.
-    filterResponseData: function (requestId) {
-      return call('webRequest', 'filterResponseData', [requestId]);
-    },
+    // NB: There is no `filterResponseData`, Firefox's way to rewrite a response
+    //     as it arrives. It is left out altogether: extensions look for it, and
+    //     do without when it is missing, where one that only threw would take
+    //     down whatever handler called it.
   }, 'webRequest', ['handlerBehaviorChanged', 'getSecurityInfo']);
   defineEvents(webRequest, 'webRequest', [
     'onBeforeRequest', 'onBeforeSendHeaders', 'onSendHeaders', 'onHeadersReceived',

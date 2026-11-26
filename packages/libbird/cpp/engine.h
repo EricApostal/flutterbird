@@ -316,6 +316,18 @@ LADYBIRD_API bool set_config_variable_json(const char *name,
 // must free it.
 LADYBIRD_API char *get_settings_json();
 
+// Applies changes to the engine settings and saves them. `json` is a JSON
+// object shaped like get_settings_json()'s, but holding only what changes:
+// objects merge into the ones they name, and a null removes a key. Returns
+// false if the engine is not initialized or `json` is not a JSON object.
+LADYBIRD_API bool apply_settings_json(const char *json);
+
+// Removes the custom search engine called `name`. Builtin engines cannot be
+// removed, and an unknown name changes nothing. Returns false when no custom
+// engine by that name exists. Removing the selected engine clears the
+// selection, as the engine's own settings page does.
+LADYBIRD_API bool remove_custom_search_engine(const char *name);
+
 LADYBIRD_API void copy_selection(int view_id);
 LADYBIRD_API void paste_from_clipboard(int view_id);
 LADYBIRD_API void select_all(int view_id);
