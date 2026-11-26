@@ -333,6 +333,25 @@ class LadybirdBindings {
   late final _set_display_metadata = _set_display_metadataPtr
       .asFunction<void Function(int, bool, int, double, double)>();
 
+  void set_screen_size(
+    int view_id,
+    int width,
+    int height,
+  ) {
+    return _set_screen_size(
+      view_id,
+      width,
+      height,
+    );
+  }
+
+  late final _set_screen_sizePtr =
+      _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Int, ffi.Int, ffi.Int)>>(
+        'set_screen_size',
+      );
+  late final _set_screen_size = _set_screen_sizePtr
+      .asFunction<void Function(int, int, int)>();
+
   int get_iosurface_width(int view_id) {
     return _get_iosurface_width(view_id);
   }

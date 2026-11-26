@@ -1174,8 +1174,10 @@ class LadybirdController {
   /// which shows as judder while scrolling. Call it whenever the view's window
   /// may have moved to another display, or that display's refresh rate changed.
   ///
-  /// Only macOS lets the engine follow a display; elsewhere this does nothing.
+  /// Only macOS lets the engine follow a display for pacing. Everywhere, this
+  /// also tells pages how large the screen is.
   void followDisplay(ui.Display display) {
+    _reportScreenSize(display);
     if (!_pacesByDisplay) return;
     final next = (
       id: display.id,
@@ -1187,9 +1189,33 @@ class LadybirdController {
     _applyDisplayMetadata();
   }
 
+  (int, int)? _screenSize;
+  static bool _hasReportedScreenSize = false;
+
+  // What pages read as `window.screen`. Without it they read a screen of no
+  // size, and sites serve what they would to a phone.
+  void _reportScreenSize(ui.Display display) {
+    final size = (display.size.width.round(), display.size.height.round());
+    if (size.$1 <= 0 || size.$2 <= 0 || size == _screenSize) return;
+    try {
+      _bindings.set_screen_size(_viewId, size.$1, size.$2);
+    } on ArgumentError catch (error) {
+      // A native library from before this existed.
+      debugPrint('[LibBird] The engine cannot be told the screen size: $error');
+    }
+    _screenSize = size;
+    _hasReportedScreenSize = true;
+  }
+
   // A new view starts out on the display a view was last shown on, so that one
   // opened in the background is paced before it is first shown.
   void _initializeDisplayPacing() {
+    // The engine gives a new view the size reported last, so only the first one
+    // has to be told, before it loads anything.
+    if (!_hasReportedScreenSize) {
+      final first = ui.PlatformDispatcher.instance.displays.firstOrNull;
+      if (first != null) _reportScreenSize(first);
+    }
     if (_pacesByDisplay) {
       _display = _lastDisplay;
       final shown = ui.PlatformDispatcher.instance.displays.firstOrNull;

@@ -84,6 +84,12 @@ LADYBIRD_API void set_display_metadata(int view_id, bool has_display_id,
                                        double refresh_rate,
                                        double maximum_frames_per_second);
 
+// The size, in physical pixels, of the screen the view is on: what pages read
+// as `window.screen` and match with `device-width` media queries. Until a size
+// is given they read zero, and sites may take the browser for a phone. Views
+// created later start out with the size given last.
+LADYBIRD_API void set_screen_size(int view_id, int width, int height);
+
 LADYBIRD_API int get_iosurface_width(int view_id);
 
 LADYBIRD_API int get_iosurface_height(int view_id);

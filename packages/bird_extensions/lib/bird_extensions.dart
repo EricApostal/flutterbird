@@ -19,6 +19,7 @@ export 'src/host/misc_apis.dart';
 export 'src/host/native_messaging_api.dart';
 export 'src/host/port_hub.dart';
 export 'src/host/runtime_api.dart';
+export 'src/host/runtime_assembly.dart';
 export 'src/host/storage_api.dart';
 export 'src/host/system_apis.dart';
 export 'src/host/tabs_api.dart';

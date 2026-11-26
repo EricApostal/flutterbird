@@ -147,8 +147,9 @@ class ExtensionHost {
     } else {
       _manifests.remove(change.extension.uuid);
     }
-    unawaited(pushState());
-    unawaited(syncBackgroundPages(changed: change));
+    // The processes have to know of an extension before its background page
+    // loads, or its files are refused to the page that asks for them.
+    unawaited(pushState().then((_) => syncBackgroundPages(changed: change)));
   }
 
   // ------------------------------------------------------------ background pages
@@ -375,7 +376,8 @@ class ExtensionHost {
         // Whether an answer was given is told by what was asked, not here.
         if (body is Map && body['error'] != null) {
           _trace(
-            () => 'context ${context.contextId} answered #$token ${_brief(body)}',
+            () =>
+                'context ${context.contextId} answered #$token ${_brief(body)}',
           );
         }
         if (token is int && body is Map) {

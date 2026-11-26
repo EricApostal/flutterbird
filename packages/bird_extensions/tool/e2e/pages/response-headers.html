@@ -1,0 +1,10 @@
+<!doctype html>
+<html><head><script src="/harness.js" data-page="headers"></script></head><body>
+<script>
+// The extension adds a policy to this page's response that forbids images.
+const image = new Image();
+image.onload = () => report("response-header-added", "the image loaded, so the added policy was not applied");
+image.onerror = () => report("response-header-added");
+image.src = "/net/policy.png";
+</script>
+</body></html>

@@ -1,0 +1,1 @@
+{"name": {"message": "Conformance"}, "greeting": {"message": "hello $WHO$", "placeholders": {"who": {"content": "$1"}}}}

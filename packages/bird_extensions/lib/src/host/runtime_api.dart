@@ -31,14 +31,20 @@ class RuntimeApi extends ApiNamespace {
   /// about who sent it.
   static Map<String, Object?> senderFor(ExtensionHost host, ApiCall call) {
     final context = call.context;
+    // A content script always says which tab it is in. So does a page of the
+    // extension that is open in one, as in Firefox; a popup or a background
+    // page is in none.
+    final tab = context.viewId == null
+        ? null
+        : host.browser?.tab(context.viewId!);
     return {
       'id': call.extension.id,
       'url': context.url,
-      if (context.kind == ExtensionContextKind.contentScript &&
+      if (tab != null)
+        'tab': tab.toJson(includeIdentity: true)
+      else if (context.kind == ExtensionContextKind.contentScript &&
           context.viewId != null)
-        'tab':
-            host.browser?.tab(context.viewId!)?.toJson(includeIdentity: true) ??
-            {'id': context.viewId, 'url': context.url},
+        'tab': {'id': context.viewId, 'url': context.url},
       'frameId': host.frameIdOf(context),
     };
   }

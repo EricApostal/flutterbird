@@ -1,0 +1,12 @@
+<!doctype html>
+<html><head><script src="/early.js"></script><script src="/harness.js" data-page="main"></script><title>main page</title></head>
+<body>
+<p id="csstarget">css</p><p id="startstyled">start</p><div id="inserted">inserted</div>
+<iframe src="/frame/same"></iframe><iframe src="http://localhost:{{PORT}}/frame/cross"></iframe>
+<p id="parsed-late">late</p>
+<script src="/shared.js"></script>
+<script>eventually("screen-size-reported", () => screen.width === 2560 && screen.height === 1440 && !matchMedia("(max-device-width: 700px)").matches ? null : "the page sees a " + screen.width + "x" + screen.height + " screen");</script>
+<script src="/net/blocked-parsed.js" onerror="window.parsedBlockedErrored = true"></script>
+<script src="/network.js"></script>
+<script>eventually("inline-script-injection-runs", () => document.documentElement.getAttribute("data-inline-ran") === "yes" ? null : "it did not run");</script>
+</body></html>

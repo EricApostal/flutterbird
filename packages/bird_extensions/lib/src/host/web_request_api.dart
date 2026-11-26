@@ -231,15 +231,26 @@ class WebRequestApi extends ApiNamespace implements EventObserver {
     return merged ?? RequestVerdict.allow;
   }
 
-  /// Asks the extensions what to do with a request about to be sent, and
+  /// Asks the extensions what to do with a request about to be sent, or with
+  /// a response whose headers have arrived (one with `responseHeaders`), and
   /// answers as the network layer wants it: JSON with any of `cancel`,
-  /// `redirectUrl` and `requestHeaders`, or `{}` to let it go ahead.
+  /// `redirectUrl`, `requestHeaders` and `responseHeaders`, or `{}` to let it
+  /// go ahead.
   Future<String> intercept(Map<String, Object?> details) async {
     final request = {
       ...details,
       'timeStamp': DateTime.now().millisecondsSinceEpoch.toDouble(),
       'processId': -1,
     };
+
+    if (details.containsKey('responseHeaders')) {
+      final verdict = await dispatch('webRequest.onHeadersReceived', request);
+      return jsonEncode({
+        if (verdict.cancel) 'cancel': true,
+        'redirectUrl': ?verdict.redirectUrl,
+        'responseHeaders': ?verdict.responseHeaders,
+      });
+    }
 
     final first = await dispatch('webRequest.onBeforeRequest', request);
     if (first.cancel) return jsonEncode({'cancel': true});

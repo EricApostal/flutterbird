@@ -25,6 +25,7 @@ class EngineStateBuilder {
     this.shim = browserShimSource,
     this.dynamicScripts,
     this.interceptRequests,
+    this.interceptResponses,
   });
 
   final ExtensionRegistry registry;
@@ -39,6 +40,9 @@ class EngineStateBuilder {
   /// content processes only hold requests for the extensions when this is true,
   /// so a browser with no request-blocking extension pays nothing.
   final bool Function()? interceptRequests;
+
+  /// The same for the headers of responses.
+  final bool Function()? interceptResponses;
 
   /// Content scripts extensions registered while running, by extension uuid.
   final Iterable<DynamicContentScript> Function(String uuid)? dynamicScripts;
@@ -58,6 +62,7 @@ class EngineStateBuilder {
       // Where extensions are unpacked, so the browser can serve their files.
       'installedRoot': '${registry.root.path}/installed',
       'interceptRequests': interceptRequests?.call() ?? false,
+      'interceptResponses': interceptResponses?.call() ?? false,
       'shim': shim,
       'extensions': extensions,
     });

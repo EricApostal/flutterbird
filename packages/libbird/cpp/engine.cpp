@@ -590,6 +590,8 @@ public:
 #endif
   Optional<u64> m_display_id;
   double m_display_refresh_rate{kDefaultRefreshRate};
+  Gfx::IntSize m_screen_size;
+  static inline Gfx::IntSize s_last_screen_size;
 
 #ifdef __APPLE__
   MacFrameSource m_last_mac_frame_source{MacFrameSource::Unknown};
@@ -1334,6 +1336,31 @@ public:
     if (has_traversable())
       ViewImplementation::set_display_metadata(m_display_id,
                                                m_maximum_frames_per_second, false);
+  }
+
+  void set_screen_size(Gfx::IntSize size) {
+    s_last_screen_size = size;
+    if (size == m_screen_size)
+      return;
+    m_screen_size = size;
+    if (has_traversable())
+      update_screen_rects();
+  }
+
+  // The engine asks this when a page starts hosting the tab, which is as soon
+  // as a view is created, before the embedder can have said which screen that
+  // view is on. The embedder gives the size alone, so the screen is placed at
+  // the origin, and none of it is counted as taken by a menu bar or a dock.
+  virtual Optional<ScreenRects> screen_rects() const override {
+    auto size = m_screen_size.is_empty() ? s_last_screen_size : m_screen_size;
+    if (size.is_empty())
+      return {};
+
+    auto screen = Gfx::IntRect{{}, size}.to_type<Web::DevicePixels>();
+    ScreenRects screens;
+    screens.rects.append(screen);
+    screens.available_rects.append(screen);
+    return screens;
   }
 
   // The engine asks for the system theme when a page starts hosting the tab.
@@ -2907,6 +2934,14 @@ void set_display_metadata(int view_id, bool has_display_id, uint64_t display_id,
 
   it->second->set_display_metadata(optional_display_id, refresh_rate,
                                    maximum_frames_per_second);
+}
+
+void set_screen_size(int view_id, int width, int height) {
+  if (width <= 0 || height <= 0)
+    return;
+  auto it = g_web_views.find(view_id);
+  if (it != g_web_views.end())
+    it->second->set_screen_size({width, height});
 }
 
 int get_iosurface_width(int view_id) {

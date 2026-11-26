@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -72,10 +71,10 @@ class ExtensionService {
       amo: AmoClient(fetcher),
     );
 
-    final actions = ActionStore();
-    final menus = MenusApi();
-    final webRequest = WebRequestApi();
-    final contentScripts = ContentScriptsApi();
+    final parts = ExtensionRuntimeParts(root: root, registry: registry);
+    final actions = parts.actions;
+    final menus = parts.menus;
+    final webRequest = parts.webRequest;
 
     // Temporary, while extensions are being made to work: the trace of the
     // latest run is also kept in a file, whole, where console output is not.
@@ -89,36 +88,8 @@ class ExtensionService {
         debugPrint(line);
         traceFile.writeln('${DateTime.now().toIso8601String()} $line');
       },
-      stateBuilder: EngineStateBuilder(
-        registry: registry,
-        platform: _platform,
-        dynamicScripts: contentScripts.scriptsFor,
-        // Requests are only held for extensions when one wants to block.
-        interceptRequests: () =>
-            webRequest.wantsToBlock('webRequest.onBeforeRequest') ||
-            webRequest.wantsToBlock('webRequest.onBeforeSendHeaders'),
-      ),
-      apis: [
-        StorageApi(Directory('${root.path}/storage')),
-        TabsApi(),
-        WindowsApi(),
-        WebNavigationApi(),
-        ActionApi('browserAction', actions),
-        ActionApi('action', actions),
-        menus,
-        AlarmsApi(),
-        CommandsApi(),
-        PermissionsApi(),
-        DnsApi(),
-        NativeMessagingApi(),
-        IdleApi(),
-        NotificationsApi(),
-        ManagementApi(),
-        DownloadsApi(),
-        ScriptingApi(),
-        contentScripts,
-        webRequest,
-      ],
+      stateBuilder: parts.stateBuilder(_platform),
+      apis: parts.apis,
     );
 
     final pins = await ToolbarPins.open(File('${root.path}/toolbar.json'));
@@ -165,16 +136,10 @@ class ExtensionService {
     // A request a process holds for the extensions is answered by asking them.
     // One that gets no answer in time goes ahead, rather than hanging the page.
     final intercepts = engine.interceptRequests.listen((request) async {
-      var verdict = '{}';
-      try {
-        final details = (jsonDecode(request.detailsJson) as Map)
-            .cast<String, Object?>();
-        details['tabId'] = request.viewId ?? -1;
-        verdict = await webRequest.intercept(details);
-      } on Object {
-        verdict = '{}';
-      }
-      engine.respondToIntercept(request.requestId, verdict);
+      engine.respondToIntercept(
+        request.requestId,
+        await parts.intercept(request.detailsJson, request.viewId),
+      );
     });
     engine.startIntercepting();
 
