@@ -1,6 +1,7 @@
 #include "engine.h"
 #include "LibWebView/Application.h"
 #include <cstdio>
+#include <cstdlib>
 #include <cerrno>
 #include <memory>
 #include <mutex>
@@ -77,6 +78,7 @@
 #include <LibWebView/HistoryDebug.h>
 #include <LibWebView/HistoryStore.h>
 #include <LibWebView/Options.h>
+#include <LibWebView/PictureInPictureManager.h>
 #include <LibWebView/PictureInPictureWindow.h>
 #if defined(AK_OS_MACOS)
 #include <LibWebView/NotificationBackendMacOS.h>
@@ -1677,6 +1679,31 @@ public:
     };
   }
 
+  // Drops every function pointer the embedder gave this view, so nothing the
+  // view does afterwards calls out of the engine.
+  void forget_embedder_callbacks() {
+    {
+      std::lock_guard lock(m_info_mutex);
+      m_url_change_callback = nullptr;
+      m_title_change_callback = nullptr;
+      m_favicon_change_callback = nullptr;
+      m_cross_site_navigation_callback = nullptr;
+      m_loading_state_change_callback = nullptr;
+      m_cursor_change_callback = nullptr;
+      m_new_web_view_callback = nullptr;
+      m_close_view_callback = nullptr;
+      m_input_caret_rect_change_callback = nullptr;
+      m_fullscreen_change_callback = nullptr;
+      m_navigation_history_change_callback = nullptr;
+    }
+    set_context_menu_request_callback(nullptr);
+
+    std::lock_guard lock(m_backend->callback_mutex);
+    m_backend->frame_callback = nullptr;
+    m_backend->frame_callback_context = nullptr;
+    m_backend->resize_callback = nullptr;
+  }
+
   void notify_loading_state(bool is_loading) {
     LoadingStateChangeCallback callback = nullptr;
     {
@@ -2298,6 +2325,56 @@ public:
 
 static AK::OwnPtr<FlutterApplication> s_app;
 
+// The embedder's callbacks mostly point into Dart. On macOS, Flutter shuts its
+// engine down when the app is about to terminate, which frees them before
+// exit() gets to tearing this library down. None may be called from here on.
+static void forget_embedder_callbacks() {
+  g_ask_user_for_download_path_callback = nullptr;
+  g_display_download_confirmation_dialog_callback = nullptr;
+  g_display_error_dialog_callback = nullptr;
+  g_get_clipboard_text_callback = nullptr;
+  g_set_clipboard_text_callback = nullptr;
+  g_download_update_callback = nullptr;
+  g_download_removed_callback = nullptr;
+  g_permission_request_callback = nullptr;
+  g_permission_cancel_callback = nullptr;
+  g_picture_in_picture_callback = nullptr;
+  g_picture_in_picture_availability_callback = nullptr;
+
+  auto &bridge = WebView::ExtensionBridge::the();
+  bridge.on_context_created = nullptr;
+  bridge.on_context_destroyed = nullptr;
+  bridge.on_message = nullptr;
+  bridge.on_intercept = nullptr;
+
+  for (auto const &[view_id, view] : g_web_views)
+    view->forget_embedder_callbacks();
+}
+
+// Runs at exit(). Left to the static destructors, the application would call
+// back into the embedder while ending its processes, and the views, which are
+// destroyed after it, would then reach for an application that is gone.
+static void shut_down_engine() {
+  if (!s_app)
+    return;
+  g_engine_ready = false;
+
+  // First, because everything below can raise events.
+  forget_embedder_callbacks();
+
+  // What uses the application goes while it is still there. A
+  // picture-in-picture window refers to its view, so it goes before the views.
+  g_download_observer = nullptr;
+  g_pending_prompts.clear();
+  WebView::PictureInPictureManager::the().destroy_all_windows();
+  while (!g_web_views.empty())
+    destroy_web_view(g_web_views.begin()->first);
+  g_history_store = nullptr;
+  g_favicon_store = nullptr;
+
+  s_app = nullptr;
+}
+
 struct LatestFrameHandle {
   AK::RefPtr<Gfx::Bitmap const> bitmap;
   int width{0};
@@ -2368,6 +2445,10 @@ void init_ladybird() {
   register_history_page();
   g_download_observer = make<FlutterFileDownloaderObserver>();
   g_engine_ready = true;
+
+  // Registered this late so that it runs before the destructors of this file's
+  // statics, all of which were registered when the library was loaded.
+  std::atexit(shut_down_engine);
 }
 
 // ---------------------------------------------------------------------------
