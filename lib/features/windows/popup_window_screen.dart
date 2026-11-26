@@ -2,6 +2,8 @@ import 'package:bird_core/bird_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:rubisco_browser/features/browser/components/find/find_bar.dart';
+import 'package:rubisco_browser/features/browser/state/find_in_page.dart';
 import 'package:rubisco_browser/features/browser/components/browser_window.dart';
 import 'package:rubisco_browser/features/browser/components/desktop/omnibox/omnibox_style.dart';
 import 'package:rubisco_browser/features/browser/components/desktop/omnibox/omnibox_url_text.dart';
@@ -59,6 +61,17 @@ class _PopupWindowScreenState extends ConsumerState<PopupWindowScreen> {
       ref.read(browserShellProvider).closeWindow(_windowId);
       return true;
     }
+    if (event.logicalKey == LogicalKeyboardKey.keyF) {
+      FindInPage.instance.open(widget.viewId);
+      return true;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.keyG) {
+      FindInPage.instance.step(
+        widget.viewId,
+        forwards: !keyboard.isShiftPressed,
+      );
+      return true;
+    }
     if (event.logicalKey == LogicalKeyboardKey.keyN) {
       ref.read(browserShellProvider).openWindow();
       return true;
@@ -81,9 +94,12 @@ class _PopupWindowScreenState extends ConsumerState<PopupWindowScreen> {
         children: [
           if (!isFullscreen) _PopupLocationBar(tab: tab),
           Expanded(
-            child: BrowserWindow(
-              key: BrowserWindow.keyFor(_windowId, widget.viewId),
-              viewId: widget.viewId,
+            child: FindBarLayer(
+              tab: tab,
+              child: BrowserWindow(
+                key: BrowserWindow.keyFor(_windowId, widget.viewId),
+                viewId: widget.viewId,
+              ),
             ),
           ),
         ],

@@ -494,6 +494,7 @@ struct PendingFlutterPrompt {
 
 static PictureInPictureAvailabilityCallback
     g_picture_in_picture_availability_callback = nullptr;
+static FindInPageCallback g_find_in_page_callback = nullptr;
 
 static HashMap<u64, PendingFlutterPrompt> g_pending_prompts;
 static u64 g_next_prompt_id = 1;
@@ -1265,6 +1266,24 @@ public:
       shown->async_toggle_picture_in_picture_from_browser();
   }
 
+  // As above, a search can be asked for while there is no page to hear it.
+  void find_text(Utf16String const &query) {
+    if (auto shown = traversable().display_page(); shown && shown->is_open())
+      shown->async_find_in_page(query, CaseSensitivity::CaseInsensitive, true);
+  }
+  void find_adjacent_match(bool forwards) {
+    if (auto shown = traversable().display_page(); shown && shown->is_open()) {
+      if (forwards)
+        shown->async_find_in_page_next_match();
+      else
+        shown->async_find_in_page_previous_match();
+    }
+  }
+  void end_find() {
+    if (auto shown = traversable().display_page(); shown && shown->is_open())
+      shown->async_find_in_page_end();
+  }
+
   // Turns this view, already prepared for a traversable, into the one a
   // Picture-in-Picture window shows.
   void prepare_for_picture_in_picture(WebView::CanonicalTraversable &traversable,
@@ -1340,6 +1359,11 @@ public:
     };
     on_cancel_permission_prompt = [this](WebView::PermissionPromptRequest const &request) {
       withdraw_permission_prompt(m_view_id, request);
+    };
+    on_find_in_page = [this](size_t current, Optional<size_t> const &total) {
+      if (g_find_in_page_callback)
+        g_find_in_page_callback(m_view_id, static_cast<int>(current),
+                                total.has_value() ? static_cast<int>(*total) : -1);
     };
     on_picture_in_picture_availability = [this](bool available, bool active) {
       if (g_picture_in_picture_availability_callback)
@@ -3030,6 +3054,37 @@ char *get_favicon_png_base64(const char *favicon_hash) {
 
   auto bytes = encoded.release_value().to_byte_string();
   return strdup(bytes.characters());
+}
+
+void set_find_in_page_callback(FindInPageCallback callback) {
+  g_find_in_page_callback = callback;
+}
+
+void find_in_page(int view_id, const char *query) {
+  auto view = g_web_views.find(view_id);
+  if (view == g_web_views.end() || !query)
+    return;
+  auto text = String::from_utf8(StringView{query, strlen(query)});
+  if (!text.is_error())
+    view->second->find_text(Utf16String::from_utf8(text.value()));
+}
+
+void find_in_page_next(int view_id) {
+  auto view = g_web_views.find(view_id);
+  if (view != g_web_views.end())
+    view->second->find_adjacent_match(true);
+}
+
+void find_in_page_previous(int view_id) {
+  auto view = g_web_views.find(view_id);
+  if (view != g_web_views.end())
+    view->second->find_adjacent_match(false);
+}
+
+void find_in_page_end(int view_id) {
+  auto view = g_web_views.find(view_id);
+  if (view != g_web_views.end())
+    view->second->end_find();
 }
 
 void remove_history_entry(const char *url) {

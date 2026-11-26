@@ -213,6 +213,21 @@ LADYBIRD_API char *get_favicon_png_base64(const char *favicon_hash);
 // always come from the non-private history store, matching
 // WebView::Autocomplete, regardless of whether the target view is private.
 // Caller owns returned memory and must free it.
+// ---------------------------------------------------------------------------
+// Find in page
+// ---------------------------------------------------------------------------
+
+// Where a search stands: current is the 0-based match that is selected, and
+// total how many there are, or -1 while that is not known.
+typedef void (*FindInPageCallback)(int view_id, int current, int total);
+
+LADYBIRD_API void set_find_in_page_callback(FindInPageCallback callback);
+// Searches the view's page, highlighting every match. An empty query clears.
+LADYBIRD_API void find_in_page(int view_id, const char *query);
+LADYBIRD_API void find_in_page_next(int view_id);
+LADYBIRD_API void find_in_page_previous(int view_id);
+LADYBIRD_API void find_in_page_end(int view_id);
+
 // Removes a page from the history, and so from what is suggested.
 LADYBIRD_API void remove_history_entry(const char *url);
 

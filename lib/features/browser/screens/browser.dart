@@ -4,6 +4,8 @@ import 'package:bird_core/bird_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:rubisco_browser/features/browser/components/find/find_bar.dart';
+import 'package:rubisco_browser/features/browser/state/find_in_page.dart';
 import 'package:rubisco_browser/features/browser/components/browser_window.dart';
 import 'package:rubisco_browser/features/browser/components/mobile_browser_layout.dart';
 import 'package:rubisco_browser/features/browser/components/desktop/omnibox/omnibox_bar.dart';
@@ -137,6 +139,15 @@ class _BrowserWindowScreenState extends ConsumerState<BrowserWindowScreen> {
       }
     }
 
+    if (event.logicalKey == LogicalKeyboardKey.keyF && !_isShiftPressed()) {
+      FindInPage.instance.open(widget.viewId);
+      return true;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.keyG) {
+      FindInPage.instance.step(widget.viewId, forwards: !_isShiftPressed());
+      return true;
+    }
+
     if (event.logicalKey == LogicalKeyboardKey.keyT) {
       // Shift+T brings the last closed tab back instead of opening a blank one.
       if (_isShiftPressed()) {
@@ -257,9 +268,12 @@ class _BrowserWindowScreenState extends ConsumerState<BrowserWindowScreen> {
                   ),
                   Expanded(
                     child: isFullscreen
-                        ? BrowserWindow(
-                            key: BrowserWindow.keyFor(windowId, viewId),
-                            viewId: viewId,
+                        ? FindBarLayer(
+                            tab: currentTabController,
+                            child: BrowserWindow(
+                              key: BrowserWindow.keyFor(windowId, viewId),
+                              viewId: viewId,
+                            ),
                           )
                         // No cross-fade between the two layouts: it faded the
                         // page itself, so switching the tab layout showed the
@@ -282,12 +296,15 @@ class _BrowserWindowScreenState extends ConsumerState<BrowserWindowScreen> {
                                           borderRadius: .only(
                                             topLeft: .circular(8),
                                           ),
-                                          child: BrowserWindow(
-                                            key: BrowserWindow.keyFor(
-                                              windowId,
-                                              viewId,
+                                          child: FindBarLayer(
+                                            tab: currentTabController,
+                                            child: BrowserWindow(
+                                              key: BrowserWindow.keyFor(
+                                                windowId,
+                                                viewId,
+                                              ),
+                                              viewId: viewId,
                                             ),
-                                            viewId: viewId,
                                           ),
                                         ),
                                       ),
@@ -300,12 +317,15 @@ class _BrowserWindowScreenState extends ConsumerState<BrowserWindowScreen> {
                                     SizedBox(height: padding.top),
                                     BrowserTabBar(currentViewId: viewId),
                                     Expanded(
-                                      child: BrowserWindow(
-                                        key: BrowserWindow.keyFor(
-                                          windowId,
-                                          viewId,
+                                      child: FindBarLayer(
+                                        tab: currentTabController,
+                                        child: BrowserWindow(
+                                          key: BrowserWindow.keyFor(
+                                            windowId,
+                                            viewId,
+                                          ),
+                                          viewId: viewId,
                                         ),
-                                        viewId: viewId,
                                       ),
                                     ),
                                   ],
