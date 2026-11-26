@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:flutterbird/features/browser/components/desktop/downloads/download_row.dart';
-import 'package:flutterbird/features/browser/components/desktop/omnibox/omnibox_style.dart';
+import 'package:rubisco_browser/features/browser/components/desktop/downloads/download_row.dart';
+import 'package:rubisco_browser/features/browser/components/desktop/omnibox/omnibox_style.dart';
 import 'package:ladybird/ladybird.dart';
 
 class DownloadsPanel extends StatelessWidget {

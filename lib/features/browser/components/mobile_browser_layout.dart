@@ -1,12 +1,12 @@
 import 'package:bird_core/bird_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutterbird/features/browser/components/browser_window.dart';
-import 'package:flutterbird/features/browser/components/mobile_omnibox_bar.dart';
-import 'package:flutterbird/features/browser/state/fullscreen_mode.dart';
-import 'package:flutterbird/features/browser/state/tab_actions.dart';
-import 'package:flutterbird/features/browser/state/tab_history.dart';
-import 'package:flutterbird/features/windows/window_scope.dart';
+import 'package:rubisco_browser/features/browser/components/browser_window.dart';
+import 'package:rubisco_browser/features/browser/components/mobile_omnibox_bar.dart';
+import 'package:rubisco_browser/features/browser/state/fullscreen_mode.dart';
+import 'package:rubisco_browser/features/browser/state/tab_actions.dart';
+import 'package:rubisco_browser/features/browser/state/tab_history.dart';
+import 'package:rubisco_browser/features/windows/window_scope.dart';
 
 class MobileBrowserLayout extends ConsumerWidget {
   final int viewId;

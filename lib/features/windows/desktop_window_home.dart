@@ -1,10 +1,10 @@
 import 'package:bird_core/bird_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutterbird/features/browser/screens/browser.dart';
-import 'package:flutterbird/features/windows/popup_window_screen.dart';
-import 'package:flutterbird/features/windows/window_scope.dart';
-import 'package:flutterbird/features/windows/window_system.dart';
+import 'package:rubisco_browser/features/browser/screens/browser.dart';
+import 'package:rubisco_browser/features/windows/popup_window_screen.dart';
+import 'package:rubisco_browser/features/windows/window_scope.dart';
+import 'package:rubisco_browser/features/windows/window_system.dart';
 import 'package:ladybird/ladybird.dart';
 
 /// A window's page: the tab its session says is showing, in a browser window

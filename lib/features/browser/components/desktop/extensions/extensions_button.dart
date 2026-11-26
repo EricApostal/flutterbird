@@ -4,10 +4,10 @@ import 'package:bird_core/bird_core.dart';
 import 'package:bird_extensions/bird_extensions.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutterbird/features/extensions/extension_popup.dart';
-import 'package:flutterbird/features/extensions/extension_toolbar.dart';
-import 'package:flutterbird/features/extensions/extensions_menu.dart';
-import 'package:flutterbird/features/extensions/extensions_panel.dart';
+import 'package:rubisco_browser/features/extensions/extension_popup.dart';
+import 'package:rubisco_browser/features/extensions/extension_toolbar.dart';
+import 'package:rubisco_browser/features/extensions/extensions_menu.dart';
+import 'package:rubisco_browser/features/extensions/extensions_panel.dart';
 
 /// What hangs from the extensions button.
 sealed class _Showing {

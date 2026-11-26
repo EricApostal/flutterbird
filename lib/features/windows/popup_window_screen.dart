@@ -2,15 +2,15 @@ import 'package:bird_core/bird_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutterbird/features/browser/components/browser_window.dart';
-import 'package:flutterbird/features/browser/components/desktop/omnibox/omnibox_style.dart';
-import 'package:flutterbird/features/browser/components/desktop/omnibox/omnibox_url_text.dart';
-import 'package:flutterbird/features/browser/components/desktop/site_info/picture_in_picture_button.dart';
-import 'package:flutterbird/features/browser/components/desktop/site_info/site_info_button.dart';
-import 'package:flutterbird/features/browser/state/fullscreen_mode.dart';
-import 'package:flutterbird/features/windows/browser_shell.dart';
-import 'package:flutterbird/features/windows/window_scope.dart';
-import 'package:flutterbird/features/windows/window_system.dart';
+import 'package:rubisco_browser/features/browser/components/browser_window.dart';
+import 'package:rubisco_browser/features/browser/components/desktop/omnibox/omnibox_style.dart';
+import 'package:rubisco_browser/features/browser/components/desktop/omnibox/omnibox_url_text.dart';
+import 'package:rubisco_browser/features/browser/components/desktop/site_info/picture_in_picture_button.dart';
+import 'package:rubisco_browser/features/browser/components/desktop/site_info/site_info_button.dart';
+import 'package:rubisco_browser/features/browser/state/fullscreen_mode.dart';
+import 'package:rubisco_browser/features/windows/browser_shell.dart';
+import 'package:rubisco_browser/features/windows/window_scope.dart';
+import 'package:rubisco_browser/features/windows/window_system.dart';
 import 'package:ladybird/ladybird.dart';
 
 /// What a popup window shows: one page, with no tabs and nowhere to type an

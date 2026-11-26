@@ -4,8 +4,8 @@ import 'package:bird_core/bird_core.dart';
 import 'package:bird_extensions/bird_extensions.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutterbird/features/browser/components/desktop/omnibox/omnibox_style.dart';
-import 'package:flutterbird/features/extensions/install_prompt_dialog.dart';
+import 'package:rubisco_browser/features/browser/components/desktop/omnibox/omnibox_style.dart';
+import 'package:rubisco_browser/features/extensions/install_prompt_dialog.dart';
 
 /// The list of installed extensions, with where to add more.
 class ExtensionsPanel extends ConsumerStatefulWidget {
@@ -131,7 +131,10 @@ class _ExtensionsPanelState extends ConsumerState<ExtensionsPanel> {
               child: Row(
                 children: [
                   Expanded(
-                    child: Text('Extensions', style: theme.textTheme.titleSmall),
+                    child: Text(
+                      'Extensions',
+                      style: theme.textTheme.titleSmall,
+                    ),
                   ),
                   IconButton(
                     icon: const Icon(Icons.system_update_alt, size: 18),
@@ -281,10 +284,7 @@ class _InstalledList extends ConsumerWidget {
           dense: true,
           leading: const Icon(Icons.extension_outlined),
           title: Text(extension.name, overflow: TextOverflow.ellipsis),
-          subtitle: Text(
-            extension.version,
-            style: theme.textTheme.bodySmall,
-          ),
+          subtitle: Text(extension.version, style: theme.textTheme.bodySmall),
           trailing: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -296,7 +296,10 @@ class _InstalledList extends ConsumerWidget {
                         final service = await ref.read(
                           extensionServiceProvider.future,
                         );
-                        await service.setEnabled(extension.id, enabled: enabled);
+                        await service.setEnabled(
+                          extension.id,
+                          enabled: enabled,
+                        );
                       },
               ),
               IconButton(

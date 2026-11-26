@@ -4,8 +4,8 @@ import 'package:bird_core/bird_core.dart';
 import 'package:bird_extensions/bird_extensions.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutterbird/features/extensions/extension_popup.dart';
-import 'package:flutterbird/features/extensions/extension_toolbar.dart';
+import 'package:rubisco_browser/features/extensions/extension_popup.dart';
+import 'package:rubisco_browser/features/extensions/extension_toolbar.dart';
 
 /// The buttons of the extensions the user pinned to the toolbar. The others
 /// are in the extensions menu.
@@ -92,10 +92,14 @@ class _PinnedButtonState extends ConsumerState<_PinnedButton> {
   }
 
   Future<void> _showMenu(ExtensionService service, Offset at) async {
-    final overlay = Overlay.of(context).context.findRenderObject()! as RenderBox;
+    final overlay =
+        Overlay.of(context).context.findRenderObject()! as RenderBox;
     final choice = await showMenu<String>(
       context: context,
-      position: RelativeRect.fromRect(at & Size.zero, Offset.zero & overlay.size),
+      position: RelativeRect.fromRect(
+        at & Size.zero,
+        Offset.zero & overlay.size,
+      ),
       items: const [
         PopupMenuItem(value: 'unpin', child: Text('Unpin from toolbar')),
       ],

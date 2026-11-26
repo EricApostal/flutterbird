@@ -3,16 +3,16 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:bird_core/bird_core.dart';
-import 'package:flutterbird/features/downloads/downloads_bootstrap.dart';
-import 'package:flutterbird/features/extensions/app_browser_bridge.dart';
-import 'package:flutterbird/features/router/controller.dart';
-import 'package:flutterbird/features/theme/app_theme.dart';
-import 'package:flutterbird/features/windows/browser_shell.dart';
-import 'package:flutterbird/features/windows/legacy_window_system.dart';
-import 'package:flutterbird/features/windows/macos/mac_window_system.dart';
-import 'package:flutterbird/features/windows/macos/multi_window_app.dart';
-import 'package:flutterbird/features/windows/window_scope.dart';
-import 'package:flutterbird/features/windows/window_system.dart';
+import 'package:rubisco_browser/features/downloads/downloads_bootstrap.dart';
+import 'package:rubisco_browser/features/extensions/app_browser_bridge.dart';
+import 'package:rubisco_browser/features/router/controller.dart';
+import 'package:rubisco_browser/features/theme/app_theme.dart';
+import 'package:rubisco_browser/features/windows/browser_shell.dart';
+import 'package:rubisco_browser/features/windows/legacy_window_system.dart';
+import 'package:rubisco_browser/features/windows/macos/mac_window_system.dart';
+import 'package:rubisco_browser/features/windows/macos/multi_window_app.dart';
+import 'package:rubisco_browser/features/windows/window_scope.dart';
+import 'package:rubisco_browser/features/windows/window_system.dart';
 import 'package:window_manager/window_manager.dart';
 
 void main() async {
@@ -42,7 +42,7 @@ void _runMultiWindow() {
     // The macOS runner makes no window of its own, so there is nothing to show
     // this in but the log.
     throw UnsupportedError(
-      'FlutterBird needs Flutter\'s windowing feature on macOS. Use the master '
+      'Rubisco Browser needs Flutter\'s windowing feature on macOS. Use the master '
       'channel (puro flutter ...) with `flutter: config: enable-windowing: '
       'true` in pubspec.yaml.',
     );

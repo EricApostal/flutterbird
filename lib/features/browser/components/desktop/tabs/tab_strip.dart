@@ -3,7 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutterbird/features/windows/tab_drag_controller.dart';
+import 'package:rubisco_browser/features/windows/tab_drag_controller.dart';
 
 /// A row, or column, of tabs that can be dragged: along it, out of it into a
 /// window of their own, and into the strip of another window.

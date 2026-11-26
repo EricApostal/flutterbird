@@ -1,18 +1,18 @@
 import 'package:bird_core/bird_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutterbird/features/browser/components/browser_context_menu.dart';
-import 'package:flutterbird/features/browser/components/desktop/downloads/downloads_button.dart';
-import 'package:flutterbird/features/browser/components/desktop/extensions/extensions_button.dart';
-import 'package:flutterbird/features/extensions/extension_action_buttons.dart';
-import 'package:flutterbird/features/browser/components/desktop/omnibox/omnibox_bookmarks_bar.dart';
-import 'package:flutterbird/features/browser/components/desktop/omnibox/omnibox_search_field.dart';
-import 'package:flutterbird/features/browser/state/tab_actions.dart';
-import 'package:flutterbird/features/windows/browser_shell.dart';
-import 'package:flutterbird/features/windows/window_scope.dart';
-import 'package:flutterbird/features/windows/window_system.dart';
-import 'package:flutterbird/features/browser/state/tab_layout_mode.dart';
-import 'package:flutterbird/features/browser/state/omnibox_state.dart';
+import 'package:rubisco_browser/features/browser/components/browser_context_menu.dart';
+import 'package:rubisco_browser/features/browser/components/desktop/downloads/downloads_button.dart';
+import 'package:rubisco_browser/features/browser/components/desktop/extensions/extensions_button.dart';
+import 'package:rubisco_browser/features/extensions/extension_action_buttons.dart';
+import 'package:rubisco_browser/features/browser/components/desktop/omnibox/omnibox_bookmarks_bar.dart';
+import 'package:rubisco_browser/features/browser/components/desktop/omnibox/omnibox_search_field.dart';
+import 'package:rubisco_browser/features/browser/state/tab_actions.dart';
+import 'package:rubisco_browser/features/windows/browser_shell.dart';
+import 'package:rubisco_browser/features/windows/window_scope.dart';
+import 'package:rubisco_browser/features/windows/window_system.dart';
+import 'package:rubisco_browser/features/browser/state/tab_layout_mode.dart';
+import 'package:rubisco_browser/features/browser/state/omnibox_state.dart';
 import 'package:ladybird/ladybird.dart';
 
 enum _ToolbarMenuAction {

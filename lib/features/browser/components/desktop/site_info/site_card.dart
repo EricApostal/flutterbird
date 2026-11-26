@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutterbird/features/browser/components/desktop/omnibox/omnibox_style.dart';
+import 'package:rubisco_browser/features/browser/components/desktop/omnibox/omnibox_style.dart';
 
 /// The panel that hangs from the site information button.
 class SiteCard extends StatelessWidget {

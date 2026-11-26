@@ -139,19 +139,19 @@
 #           echo "Packaging $APP"
 #           codesign --verify --deep --verbose=2 "$APP" || true
 #           mkdir -p dist
-#           ditto -c -k --sequesterRsrc --keepParent "$APP" "dist/flutterbird-macos-arm64.zip"
+#           ditto -c -k --sequesterRsrc --keepParent "$APP" "dist/rubisco-browser-macos-arm64.zip"
 #           ls -lh dist
 
 #       - uses: actions/upload-artifact@v4
 #         with:
-#           name: flutterbird-macos-arm64
-#           path: dist/flutterbird-macos-arm64.zip
+#           name: rubisco-browser-macos-arm64
+#           path: dist/rubisco-browser-macos-arm64.zip
 #           if-no-files-found: error
 
 #       - name: Publish GitHub release
 #         if: startsWith(github.ref, 'refs/tags/v')
 #         uses: softprops/action-gh-release@v2
 #         with:
-#           files: dist/flutterbird-macos-arm64.zip
+#           files: dist/rubisco-browser-macos-arm64.zip
 #         env:
 #           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

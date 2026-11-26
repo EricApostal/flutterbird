@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:flutterbird/features/browser/components/desktop/site_info/permission_kinds.dart';
-import 'package:flutterbird/features/browser/components/desktop/site_info/site_card.dart';
+import 'package:rubisco_browser/features/browser/components/desktop/site_info/permission_kinds.dart';
+import 'package:rubisco_browser/features/browser/components/desktop/site_info/site_card.dart';
 import 'package:ladybird/ladybird.dart';
 
 /// A site's question: may it have this?
@@ -52,7 +52,7 @@ class _PermissionPromptCardState extends State<PermissionPromptCard> {
               Expanded(
                 child: Text(
                   prompt.isSystemDeniedNotice
-                      ? 'macOS does not let FlutterBird ${kind.action}, so '
+                      ? 'macOS does not let Rubisco Browser ${kind.action}, so '
                             '$site cannot either. You can change this in '
                             'System Settings.'
                       : '$site wants to ${kind.action}',

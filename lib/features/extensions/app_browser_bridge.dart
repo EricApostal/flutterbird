@@ -3,8 +3,8 @@ import 'dart:async';
 import 'package:bird_core/bird_core.dart';
 import 'package:bird_extensions/bird_extensions.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutterbird/features/windows/browser_shell.dart';
-import 'package:flutterbird/features/windows/window_system.dart';
+import 'package:rubisco_browser/features/windows/browser_shell.dart';
+import 'package:rubisco_browser/features/windows/window_system.dart';
 import 'package:ladybird/ladybird.dart';
 
 /// Gives extensions the app's tabs and windows, and runs their background

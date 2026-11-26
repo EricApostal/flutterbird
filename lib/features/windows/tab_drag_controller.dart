@@ -5,7 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutterbird/features/windows/window_system.dart';
+import 'package:rubisco_browser/features/windows/window_system.dart';
 
 /// What a mounted tab strip says about itself, in its window's coordinates.
 class TabStripReport {

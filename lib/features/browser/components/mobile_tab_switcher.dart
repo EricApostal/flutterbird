@@ -1,9 +1,9 @@
 import 'package:bird_core/bird_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutterbird/features/browser/components/mobile_tab_card.dart';
-import 'package:flutterbird/features/browser/state/tab_actions.dart';
-import 'package:flutterbird/features/windows/window_scope.dart';
+import 'package:rubisco_browser/features/browser/components/mobile_tab_card.dart';
+import 'package:rubisco_browser/features/browser/state/tab_actions.dart';
+import 'package:rubisco_browser/features/windows/window_scope.dart';
 import 'package:reorderable_grid_view/reorderable_grid_view.dart';
 
 class MobileTabSwitcher extends ConsumerStatefulWidget {

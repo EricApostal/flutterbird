@@ -4,15 +4,15 @@ import 'package:bird_core/bird_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutterbird/features/browser/components/desktop/omnibox/omnibox_style.dart';
-import 'package:flutterbird/features/browser/components/desktop/tabs/tab.dart';
-import 'package:flutterbird/features/browser/components/desktop/tabs/tab_strip.dart';
-import 'package:flutterbird/features/browser/state/tab_actions.dart';
-import 'package:flutterbird/features/browser/state/fullscreen_mode.dart';
-import 'package:flutterbird/features/browser/state/tab_layout_mode.dart';
-import 'package:flutterbird/features/windows/tab_drag_controller.dart';
-import 'package:flutterbird/features/windows/window_drag_area.dart';
-import 'package:flutterbird/features/windows/window_scope.dart';
+import 'package:rubisco_browser/features/browser/components/desktop/omnibox/omnibox_style.dart';
+import 'package:rubisco_browser/features/browser/components/desktop/tabs/tab.dart';
+import 'package:rubisco_browser/features/browser/components/desktop/tabs/tab_strip.dart';
+import 'package:rubisco_browser/features/browser/state/tab_actions.dart';
+import 'package:rubisco_browser/features/browser/state/fullscreen_mode.dart';
+import 'package:rubisco_browser/features/browser/state/tab_layout_mode.dart';
+import 'package:rubisco_browser/features/windows/tab_drag_controller.dart';
+import 'package:rubisco_browser/features/windows/window_drag_area.dart';
+import 'package:rubisco_browser/features/windows/window_scope.dart';
 
 class BrowserVerticalTabSidebar extends ConsumerStatefulWidget {
   static const double sidebarWidth = 272;

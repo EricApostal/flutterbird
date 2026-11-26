@@ -1,8 +1,8 @@
 import 'dart:async';
 
 import 'package:bird_core/bird_core.dart';
-import 'package:flutterbird/features/browser/components/browser_window.dart';
-import 'package:flutterbird/features/browser/state/history_bitmap_cache.dart';
+import 'package:rubisco_browser/features/browser/components/browser_window.dart';
+import 'package:rubisco_browser/features/browser/state/history_bitmap_cache.dart';
 import 'package:ladybird/ladybird.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 

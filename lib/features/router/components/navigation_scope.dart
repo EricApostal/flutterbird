@@ -1,5 +1,5 @@
 // import 'package:flutter/material.dart';
-// import 'package:flutterbird/features/browser/components/tab_bar.dart';
+// import 'package:rubisco_browser/features/browser/components/tab_bar.dart';
 
 // class NavigationScope extends StatelessWidget {
 //   final Widget child;

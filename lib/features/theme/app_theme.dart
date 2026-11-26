@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutterbird/features/theme/base.dart';
+import 'package:rubisco_browser/features/theme/base.dart';
 import 'package:go_transitions/go_transitions.dart';
 
 const PageTransitionsTheme _noPageTransitions = PageTransitionsTheme(

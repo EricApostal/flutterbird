@@ -1,5 +1,5 @@
 import 'package:bird_core/bird_core.dart';
-import 'package:flutterbird/features/windows/window_system.dart';
+import 'package:rubisco_browser/features/windows/window_system.dart';
 import 'package:window_manager/window_manager.dart';
 
 /// The single window of a desktop that does not have several here yet (Linux

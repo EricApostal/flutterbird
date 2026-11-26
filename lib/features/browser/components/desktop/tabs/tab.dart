@@ -3,8 +3,8 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutterbird/features/browser/components/desktop/tabs/tab_preview_popup.dart';
-import 'package:flutterbird/features/browser/state/tab_actions.dart';
+import 'package:rubisco_browser/features/browser/components/desktop/tabs/tab_preview_popup.dart';
+import 'package:rubisco_browser/features/browser/state/tab_actions.dart';
 import 'package:ladybird/ladybird.dart';
 
 enum BrowserTabVariant { horizontal, arcSidebar }

@@ -1,7 +1,7 @@
 import 'package:bird_session/bird_session.dart';
 import 'package:flutter/material.dart';
-import 'package:flutterbird/features/browser/components/desktop/site_info/permission_kinds.dart';
-import 'package:flutterbird/features/browser/components/desktop/site_info/site_card.dart';
+import 'package:rubisco_browser/features/browser/components/desktop/site_info/permission_kinds.dart';
+import 'package:rubisco_browser/features/browser/components/desktop/site_info/site_card.dart';
 import 'package:ladybird/ladybird.dart';
 
 /// What is known about the site a tab shows, and what it may do.

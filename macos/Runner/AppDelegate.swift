@@ -10,7 +10,7 @@ class AppDelegate: FlutterAppDelegate {
   private var engine: FlutterEngine?
 
   override func applicationDidFinishLaunching(_ notification: Notification) {
-    let engine = FlutterEngine(name: "flutterbird", project: nil)
+    let engine = FlutterEngine(name: "Rubisco Browser", project: nil)
     RegisterGeneratedPlugins(registry: engine)
     engine.run(withEntrypoint: nil)
     self.engine = engine

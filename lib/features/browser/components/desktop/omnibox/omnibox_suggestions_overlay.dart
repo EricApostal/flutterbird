@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutterbird/features/browser/components/desktop/omnibox/omnibox_style.dart';
-import 'package:flutterbird/features/browser/components/desktop/omnibox/omnibox_suggestion_row.dart';
-import 'package:flutterbird/features/browser/state/omnibox_state.dart';
+import 'package:rubisco_browser/features/browser/components/desktop/omnibox/omnibox_style.dart';
+import 'package:rubisco_browser/features/browser/components/desktop/omnibox/omnibox_suggestion_row.dart';
+import 'package:rubisco_browser/features/browser/state/omnibox_state.dart';
 
 /// The suggestions, as the lower part of the address field: the same colour,
 /// the same width, and nothing between the two.

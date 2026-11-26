@@ -4,7 +4,7 @@ import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
-import 'package:flutterbird/features/browser/components/browser_window.dart';
+import 'package:rubisco_browser/features/browser/components/browser_window.dart';
 
 // Small snapshots of each tab's page, shown by the hover preview on the tab
 // strip and the vertical tab sidebar.

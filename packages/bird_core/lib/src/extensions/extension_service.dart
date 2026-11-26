@@ -66,7 +66,7 @@ class ExtensionService {
     final root = Directory('$profileDirectory/extensions');
 
     final registry = await ExtensionRegistry.open(root);
-    final fetcher = IoHttpFetcher(userAgent: 'FlutterBird');
+    final fetcher = IoHttpFetcher(userAgent: 'Rubisco');
     final installer = ExtensionInstaller(
       registry: registry,
       amo: AmoClient(fetcher),

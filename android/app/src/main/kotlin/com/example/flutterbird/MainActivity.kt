@@ -1,4 +1,4 @@
-package com.example.flutterbird
+package dev.rubiscolabs.browser
 
 import io.flutter.embedding.android.FlutterActivity
 

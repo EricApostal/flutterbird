@@ -4,8 +4,8 @@ import 'package:bird_core/bird_core.dart';
 import 'package:bird_extensions/bird_extensions.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutterbird/features/windows/window_scope.dart';
-import 'package:flutterbird/features/windows/window_system.dart';
+import 'package:rubisco_browser/features/windows/window_scope.dart';
+import 'package:rubisco_browser/features/windows/window_system.dart';
 
 /// What the toolbar's own buttons and the extensions menu share.
 

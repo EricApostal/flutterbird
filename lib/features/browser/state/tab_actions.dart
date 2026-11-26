@@ -1,7 +1,7 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutterbird/features/windows/browser_shell.dart';
-import 'package:flutterbird/features/windows/window_scope.dart';
+import 'package:rubisco_browser/features/windows/browser_shell.dart';
+import 'package:rubisco_browser/features/windows/window_scope.dart';
 import 'package:ladybird/ladybird.dart';
 
 // The tabs that are on their way out: the close was accepted and their row is

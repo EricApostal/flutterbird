@@ -1,7 +1,7 @@
 import 'package:bird_session/bird_session.dart';
 import 'package:flutter/material.dart';
-import 'package:flutterbird/features/browser/components/desktop/site_info/permission_prompt_card.dart';
-import 'package:flutterbird/features/browser/components/desktop/site_info/site_info_card.dart';
+import 'package:rubisco_browser/features/browser/components/desktop/site_info/permission_prompt_card.dart';
+import 'package:rubisco_browser/features/browser/components/desktop/site_info/site_info_card.dart';
 import 'package:ladybird/ladybird.dart';
 
 /// The width the button takes at the start of the address field.

@@ -2,11 +2,11 @@ import 'dart:io';
 
 import 'package:bird_core/bird_core.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutterbird/features/browser/components/browser_window.dart';
-import 'package:flutterbird/features/browser/state/history_bitmap_cache.dart';
-import 'package:flutterbird/features/browser/state/tab_preview_cache.dart';
-import 'package:flutterbird/features/router/controller.dart';
-import 'package:flutterbird/features/windows/window_system.dart';
+import 'package:rubisco_browser/features/browser/components/browser_window.dart';
+import 'package:rubisco_browser/features/browser/state/history_bitmap_cache.dart';
+import 'package:rubisco_browser/features/browser/state/tab_preview_cache.dart';
+import 'package:rubisco_browser/features/router/controller.dart';
+import 'package:rubisco_browser/features/windows/window_system.dart';
 import 'package:ladybird/ladybird.dart';
 
 /// A tab that was closed, as much of it as can be brought back: where it was.

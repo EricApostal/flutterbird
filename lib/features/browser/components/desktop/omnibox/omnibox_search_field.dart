@@ -1,12 +1,12 @@
 import 'package:bird_session/bird_session.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutterbird/features/browser/components/desktop/omnibox/omnibox_style.dart';
-import 'package:flutterbird/features/browser/components/desktop/omnibox/omnibox_suggestions_overlay.dart';
-import 'package:flutterbird/features/browser/components/desktop/omnibox/omnibox_url_text.dart';
-import 'package:flutterbird/features/browser/components/desktop/site_info/picture_in_picture_button.dart';
-import 'package:flutterbird/features/browser/components/desktop/site_info/site_info_button.dart';
-import 'package:flutterbird/features/browser/state/omnibox_state.dart';
+import 'package:rubisco_browser/features/browser/components/desktop/omnibox/omnibox_style.dart';
+import 'package:rubisco_browser/features/browser/components/desktop/omnibox/omnibox_suggestions_overlay.dart';
+import 'package:rubisco_browser/features/browser/components/desktop/omnibox/omnibox_url_text.dart';
+import 'package:rubisco_browser/features/browser/components/desktop/site_info/picture_in_picture_button.dart';
+import 'package:rubisco_browser/features/browser/components/desktop/site_info/site_info_button.dart';
+import 'package:rubisco_browser/features/browser/state/omnibox_state.dart';
 import 'package:ladybird/ladybird.dart';
 
 /// The URL/search input in the desktop omnibox toolbar, with the suggestions
@@ -200,8 +200,7 @@ class _OmniboxSearchFieldState extends State<OmniboxSearchField> {
   KeyEventResult _key(FocusNode node, KeyEvent event) {
     if (event is KeyUpEvent) return KeyEventResult.ignored;
     // An input method composing a word has its own use for these.
-    if (_text.value.composing.isValid &&
-        !_text.value.composing.isCollapsed) {
+    if (_text.value.composing.isValid && !_text.value.composing.isCollapsed) {
       return KeyEventResult.ignored;
     }
 

@@ -3,7 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutterbird/features/windows/window_system.dart';
+import 'package:rubisco_browser/features/windows/window_system.dart';
 import 'package:ladybird/ladybird.dart';
 
 bool get _isDesktopPlatform =>

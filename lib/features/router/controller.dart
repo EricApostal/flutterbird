@@ -1,6 +1,6 @@
-import 'package:flutterbird/features/browser/components/mobile_tab_switcher.dart';
-import 'package:flutterbird/features/browser/screens/browser.dart';
-import 'package:flutterbird/features/browser/screens/loading.dart';
+import 'package:rubisco_browser/features/browser/components/mobile_tab_switcher.dart';
+import 'package:rubisco_browser/features/browser/screens/browser.dart';
+import 'package:rubisco_browser/features/browser/screens/loading.dart';
 import 'package:go_router/go_router.dart';
 
 // NB: The tab and the tab switcher are routes of their own, not children of

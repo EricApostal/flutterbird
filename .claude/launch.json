@@ -2,9 +2,13 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "flutterbird-macos",
+      "name": "rubisco-browser-macos",
       "runtimeExecutable": "flutter",
-      "runtimeArgs": ["run", "-d", "macos"],
+      "runtimeArgs": [
+        "run",
+        "-d",
+        "macos"
+      ],
       "port": 0
     }
   ]

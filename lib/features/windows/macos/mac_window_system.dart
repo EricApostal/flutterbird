@@ -15,8 +15,8 @@ import 'package:flutter/src/widgets/_window.dart';
 import 'package:flutter/src/widgets/_window_macos.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutterbird/features/windows/macos/mac_picture_in_picture.dart';
-import 'package:flutterbird/features/windows/window_system.dart';
+import 'package:rubisco_browser/features/windows/macos/mac_picture_in_picture.dart';
+import 'package:rubisco_browser/features/windows/window_system.dart';
 
 /// One browser window: Flutter's window and the `NSWindow` under it.
 class MacBrowserWindow {
@@ -143,7 +143,7 @@ class MacWindowSystem extends WindowSystem
         minWidth: minimum.width,
         minHeight: minimum.height,
       ),
-      title: 'FlutterBird',
+      title: 'Rubisco Browser',
       delegate: _MacWindowDelegate(this, model.id),
     );
     final native = MacWindow(

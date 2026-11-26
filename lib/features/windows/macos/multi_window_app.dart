@@ -3,11 +3,11 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter/src/widgets/_window.dart';
-import 'package:flutterbird/features/theme/app_theme.dart';
-import 'package:flutterbird/features/windows/desktop_window_home.dart';
-import 'package:flutterbird/features/windows/macos/mac_picture_in_picture.dart';
-import 'package:flutterbird/features/windows/macos/mac_window_system.dart';
-import 'package:flutterbird/features/windows/window_scope.dart';
+import 'package:rubisco_browser/features/theme/app_theme.dart';
+import 'package:rubisco_browser/features/windows/desktop_window_home.dart';
+import 'package:rubisco_browser/features/windows/macos/mac_picture_in_picture.dart';
+import 'package:rubisco_browser/features/windows/macos/mac_window_system.dart';
+import 'package:rubisco_browser/features/windows/window_scope.dart';
 
 /// The root of the macOS app: not a window itself, but every window there is.
 class MultiWindowApp extends StatelessWidget {

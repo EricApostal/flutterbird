@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/widgets.dart';
-import 'package:flutterbird/features/browser/state/tab_preview_cache.dart';
+import 'package:rubisco_browser/features/browser/state/tab_preview_cache.dart';
 import 'package:ladybird/ladybird.dart';
 
 // Keeps the hover-preview snapshot of the tab it wraps up to date while that

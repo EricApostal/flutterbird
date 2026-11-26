@@ -1,8 +1,8 @@
 import 'package:bird_session/bird_session.dart';
 import 'package:flutter/material.dart';
-import 'package:flutterbird/features/browser/components/desktop/omnibox/favicon_or_icon.dart';
-import 'package:flutterbird/features/browser/components/desktop/site_info/site_info_button.dart';
-import 'package:flutterbird/features/browser/state/omnibox_state.dart';
+import 'package:rubisco_browser/features/browser/components/desktop/omnibox/favicon_or_icon.dart';
+import 'package:rubisco_browser/features/browser/components/desktop/site_info/site_info_button.dart';
+import 'package:rubisco_browser/features/browser/state/omnibox_state.dart';
 
 const double _rowHeight = 38;
 const Radius _pill = Radius.circular(_rowHeight / 2);
@@ -52,7 +52,9 @@ class _OmniboxSuggestionRowState extends State<OmniboxSuggestionRow> {
     var at = 0;
     for (final range in matchRanges(text, widget.query)) {
       if (range.start > at) {
-        spans.add(TextSpan(text: text.substring(at, range.start), style: style));
+        spans.add(
+          TextSpan(text: text.substring(at, range.start), style: style),
+        );
       }
       spans.add(
         TextSpan(

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutterbird/features/browser/components/desktop/downloads/downloads_panel.dart';
+import 'package:rubisco_browser/features/browser/components/desktop/downloads/downloads_panel.dart';
 import 'package:ladybird/ladybird.dart';
 
 // Toolbar entry point for downloads: a badge-count icon button that toggles

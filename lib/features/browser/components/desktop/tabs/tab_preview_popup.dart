@@ -4,8 +4,8 @@ import 'dart:ui' as ui;
 import 'package:bird_core/bird_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutterbird/features/browser/state/tab_preview_cache.dart';
-import 'package:flutterbird/features/windows/tab_drag_controller.dart';
+import 'package:rubisco_browser/features/browser/state/tab_preview_cache.dart';
+import 'package:rubisco_browser/features/windows/tab_drag_controller.dart';
 
 // Where the preview sits relative to the tab it belongs to.
 enum TabPreviewPlacement {

@@ -1,7 +1,7 @@
 import 'package:bird_core/bird_core.dart';
 import 'package:flutter/material.dart';
-import 'package:flutterbird/features/browser/components/desktop/omnibox/favicon_or_icon.dart';
-import 'package:flutterbird/features/browser/state/omnibox_state.dart';
+import 'package:rubisco_browser/features/browser/components/desktop/omnibox/favicon_or_icon.dart';
+import 'package:rubisco_browser/features/browser/state/omnibox_state.dart';
 
 class OmniboxBookmarksBar extends StatelessWidget {
   final List<BirdBookmark> bookmarks;
