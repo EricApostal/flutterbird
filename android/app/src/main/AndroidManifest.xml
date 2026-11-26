@@ -4,7 +4,7 @@
         android:label="Rubisco Browser"
         android:name="${applicationName}"
         android:extractNativeLibs="true"
-        android:icon="@mipmap/ic_launcher"
+        android:icon="@mipmap/launcher_icon"
         android:enableOnBackInvokedCallback="true">
         <activity
             android:name=".MainActivity"
