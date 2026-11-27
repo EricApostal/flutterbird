@@ -17,6 +17,7 @@ dependencies:
   ffi: ^2.2.0
   flutter:
     sdk: flutter
+  geolocator: ^14.1.2
   hooks: ^1.0.1
   material_ui: ^1.11.0
   native_toolchain_c: ^0.17.4

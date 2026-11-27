@@ -78,9 +78,12 @@ class BrowserShell {
 
   /// Starts listening for what pages do to tabs.
   void start() {
-    // A phone has nowhere to show a prompt yet, so there the engine goes on
-    // refusing what pages ask for.
-    if (!Platform.isAndroid && !Platform.isIOS) {
+    if (Platform.isAndroid) {
+      // Android's engine has no way yet to record audio or show notifications,
+      // so only the location is asked about.
+      LadybirdSiteBridge.instance.start(only: const {'geolocation'});
+      LadybirdLocationBridge.instance.start();
+    } else if (!Platform.isIOS) {
       LadybirdSiteBridge.instance.start();
     }
     _ref.listen<List<LadybirdController>>(

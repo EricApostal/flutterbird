@@ -48,6 +48,7 @@
 #include <LibCore/Environment.h>
 #include <LibCompositing/PictureInPictureControls.h>
 #include <LibCore/EventLoop.h>
+#include <LibCore/GeolocationProvider.h>
 #include <LibCore/Promise.h>
 #include <LibCore/ResourceImplementation.h>
 #include <LibCore/ResourceImplementationFile.h>
@@ -484,6 +485,133 @@ private:
   AHardwareBuffer *m_buffer{nullptr};
   Gfx::IntSize m_size;
 };
+#endif
+
+// ---------------------------------------------------------------------------
+// Location
+// ---------------------------------------------------------------------------
+
+static GeolocationWantedCallback g_geolocation_wanted_callback = nullptr;
+
+#ifdef __ANDROID__
+// The engine has no location source of its own on Android. So this one says
+// when positions are wanted, and is handed them as the app gets them.
+class AndroidGeolocationProvider;
+static AndroidGeolocationProvider *g_geolocation_provider = nullptr;
+
+class AndroidGeolocationProvider final : public Core::GeolocationProvider {
+public:
+  AK_ALLOC_WITH_KMALLOC;
+
+  AndroidGeolocationProvider() { g_geolocation_provider = this; }
+  virtual ~AndroidGeolocationProvider() override {
+    if (g_geolocation_provider == this)
+      g_geolocation_provider = nullptr;
+  }
+
+  virtual ErrorOr<RequestId, Core::GeolocationError>
+  request_current_position(SuccessCallback on_success,
+                           ErrorCallback on_error) override {
+    if (!g_geolocation_wanted_callback)
+      return no_host();
+    auto id = m_next_id++;
+    m_requests.set(id, make_listener(move(on_success), move(on_error)));
+    g_geolocation_wanted_callback(true);
+    return id;
+  }
+
+  virtual void cancel_current_position_request(RequestId id) override {
+    if (m_requests.remove(id))
+      stop_if_idle();
+  }
+
+  virtual ErrorOr<WatchId, Core::GeolocationError>
+  start_watching_position(SuccessCallback on_success,
+                          ErrorCallback on_error) override {
+    if (!g_geolocation_wanted_callback)
+      return no_host();
+    auto id = m_next_id++;
+    m_watches.set(id, make_listener(move(on_success), move(on_error)));
+    g_geolocation_wanted_callback(true);
+    return id;
+  }
+
+  virtual void stop_watching_position(WatchId id) override {
+    if (m_watches.remove(id))
+      stop_if_idle();
+  }
+
+  void did_get_position(Core::GeolocationCoordinates const &coordinates) {
+    auto requests = move(m_requests);
+    // A listener may stop a watch, this one or another, as it is told.
+    auto watch_ids = m_watches.keys();
+    for (auto &request : requests)
+      request.value->on_success(coordinates);
+    for (auto id : watch_ids) {
+      if (auto watch = m_watches.get(id); watch.has_value()) {
+        NonnullRefPtr<Listener> listener = **watch;
+        listener->on_success(coordinates);
+      }
+    }
+    stop_if_idle();
+  }
+
+  void did_fail(Core::GeolocationError const &error) {
+    auto requests = move(m_requests);
+    auto watch_ids = m_watches.keys();
+    for (auto &request : requests)
+      request.value->on_error(error);
+    for (auto id : watch_ids) {
+      if (auto watch = m_watches.get(id); watch.has_value()) {
+        NonnullRefPtr<Listener> listener = **watch;
+        // A refusal ends a watch. Anything else it may get past.
+        if (error.type == Core::GeolocationError::Type::PermissionDenied)
+          m_watches.remove(id);
+        listener->on_error(error);
+      }
+    }
+    stop_if_idle();
+  }
+
+private:
+  struct Listener : public RefCounted<Listener> {
+    SuccessCallback on_success;
+    ErrorCallback on_error;
+  };
+
+  static NonnullRefPtr<Listener> make_listener(SuccessCallback on_success,
+                                               ErrorCallback on_error) {
+    auto listener = adopt_ref(*new Listener);
+    listener->on_success = move(on_success);
+    listener->on_error = move(on_error);
+    return listener;
+  }
+
+  static Core::GeolocationError no_host() {
+    return {Core::GeolocationError::Type::PositionUnavailable,
+            "The app is not providing locations"_string};
+  }
+
+  void stop_if_idle() {
+    if (m_requests.is_empty() && m_watches.is_empty() &&
+        g_geolocation_wanted_callback)
+      g_geolocation_wanted_callback(false);
+  }
+
+  u64 m_next_id{1};
+  HashMap<u64, NonnullRefPtr<Listener>> m_requests;
+  HashMap<u64, NonnullRefPtr<Listener>> m_watches;
+};
+
+// Has to be in place before the application is made, which refuses sites their
+// requests for good if it finds nowhere to get a location from.
+static void install_android_geolocation_provider() {
+  Core::GeolocationProvider::set_provider_functions(
+      []() -> ErrorOr<NonnullOwnPtr<Core::GeolocationProvider>> {
+        return make<AndroidGeolocationProvider>();
+      },
+      []() { return true; });
+}
 #endif
 
 // ---------------------------------------------------------------------------
@@ -2583,6 +2711,7 @@ static void forget_embedder_callbacks() {
   g_download_removed_callback = nullptr;
   g_permission_request_callback = nullptr;
   g_permission_cancel_callback = nullptr;
+  g_geolocation_wanted_callback = nullptr;
   g_picture_in_picture_callback = nullptr;
   g_picture_in_picture_availability_callback = nullptr;
   g_find_in_page_callback = nullptr;
@@ -2683,6 +2812,10 @@ void init_ladybird() {
   static char *argv[] = {program_name, nullptr};
   static AK::StringView string_views[] = {AK::StringView("ladybird", 8)};
   Main::Arguments arguments = {1, argv, {string_views, 1}};
+
+#ifdef __ANDROID__
+  install_android_geolocation_provider();
+#endif
 
   auto app = FlutterApplication::create(arguments, lib_path);
   if (app.is_error()) {
@@ -2838,6 +2971,51 @@ void destroy_web_view(int view_id) {
     g_pending_prompts.remove(prompt_id);
 
   g_web_views.erase(view_id);
+}
+
+void set_geolocation_callback(GeolocationWantedCallback wanted) {
+  g_geolocation_wanted_callback = wanted;
+}
+
+void deliver_geolocation_position(double latitude, double longitude,
+                                  double accuracy, double altitude,
+                                  double altitude_accuracy, double heading,
+                                  double speed) {
+#ifdef __ANDROID__
+  if (!g_geolocation_provider)
+    return;
+  auto known = [](double value) -> Optional<double> {
+    if (value != value) // Not a number: the system did not say.
+      return {};
+    return value;
+  };
+  g_geolocation_provider->did_get_position(
+      {latitude, longitude, accuracy, known(altitude), known(altitude_accuracy),
+       known(heading), known(speed)});
+#else
+  (void)latitude;
+  (void)longitude;
+  (void)accuracy;
+  (void)altitude;
+  (void)altitude_accuracy;
+  (void)heading;
+  (void)speed;
+#endif
+}
+
+void deliver_geolocation_error(bool denied, const char *message) {
+#ifdef __ANDROID__
+  if (!g_geolocation_provider || !message)
+    return;
+  g_geolocation_provider->did_fail(
+      {denied ? Core::GeolocationError::Type::PermissionDenied
+              : Core::GeolocationError::Type::PositionUnavailable,
+       String::from_utf8_with_replacement_character(
+           StringView{message, strlen(message)})});
+#else
+  (void)denied;
+  (void)message;
+#endif
 }
 
 void set_permission_callbacks(PermissionPromptRequestCallback request,

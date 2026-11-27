@@ -25,6 +25,7 @@ import 'package:rubisco_browser/features/mobile/browser/omnibox_editor.dart';
 import 'package:rubisco_browser/features/mobile/browser/overflow_menu.dart';
 import 'package:rubisco_browser/features/mobile/browser/page_info_sheet.dart';
 import 'package:rubisco_browser/features/mobile/browser/page_menu.dart';
+import 'package:rubisco_browser/features/mobile/browser/permission_prompt.dart';
 import 'package:rubisco_browser/features/mobile/library/bookmarks_page.dart';
 import 'package:rubisco_browser/features/mobile/library/downloads_page.dart';
 import 'package:rubisco_browser/features/mobile/library/history_page.dart';
@@ -94,6 +95,7 @@ class _MobileBrowserLayoutState extends ConsumerState<MobileBrowserLayout>
 
   LadybirdController? _watched;
   StreamSubscription<String>? _popupRequests;
+  StreamSubscription<void>? _locationRefusals;
 
   BrowserShell get _shell => ref.read(browserShellProvider);
 
@@ -113,6 +115,23 @@ class _MobileBrowserLayoutState extends ConsumerState<MobileBrowserLayout>
     );
     _tabSlide = AnimationController.unbounded(vsync: this);
     unawaited(_listenForPopups());
+    _locationRefusals = LadybirdLocationBridge.instance.refusals.listen(
+      (_) => _explainLocationRefusal(),
+    );
+  }
+
+  // The site was allowed, but the app was not: only Android's settings can
+  // change that once the user has refused it for good.
+  void _explainLocationRefusal() {
+    if (!mounted) return;
+    showMobileSnack(
+      ScaffoldMessenger.maybeOf(context),
+      'Android isn\'t letting Rubisco use your location',
+      action: 'Settings',
+      onAction: () =>
+          unawaited(LadybirdLocationBridge.instance.openAppSettings()),
+      duration: const Duration(seconds: 6),
+    );
   }
 
   // An extension can open its own popup, as a password manager does when it
@@ -180,6 +199,7 @@ class _MobileBrowserLayoutState extends ConsumerState<MobileBrowserLayout>
   @override
   void dispose() {
     unawaited(_popupRequests?.cancel());
+    unawaited(_locationRefusals?.cancel());
     _unwatch();
     _coverTimer?.cancel();
     _editor.dispose();
@@ -787,6 +807,24 @@ class _MobileBrowserLayoutState extends ConsumerState<MobileBrowserLayout>
                 bottom: 0,
                 height: safe.bottom,
                 child: ColoredBox(color: colors.surface),
+              ),
+            // Not under the address editor, where it would count as seen
+            // without being so.
+            if (!_editing)
+              Positioned(
+                left: safe.left + 8,
+                right: safe.right + 8,
+                top: pageTop + 8,
+                bottom: pageBottom + 8,
+                child: Align(
+                  alignment: Alignment.bottomCenter,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 480),
+                    child: SingleChildScrollView(
+                      child: MobilePermissionPrompt(viewId: tab.viewId),
+                    ),
+                  ),
+                ),
               ),
             if (finding && !isFullscreen)
               Positioned(

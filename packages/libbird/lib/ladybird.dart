@@ -3,6 +3,7 @@ export 'src/devtools_bridge.dart';
 export 'src/extension_bridge.dart';
 export 'src/find_bridge.dart';
 export 'src/history_bridge.dart';
+export 'src/location_bridge.dart';
 export 'src/site_bridge.dart';
 export 'src/models/context_menu.dart';
 export 'src/models/context_menu_target.dart';

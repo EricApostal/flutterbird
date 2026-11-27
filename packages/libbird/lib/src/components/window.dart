@@ -506,6 +506,10 @@ class _LadybirdViewState extends State<LadybirdView>
     return view?.physicalSize;
   }
 
+  // Set while a texture could not be asked for because the window had no size,
+  // as it may not yet as the app starts.
+  bool _awaitingWindowSize = false;
+
   Future<void> _recreateTexture() async {
     // Where a texture is a canvas, it is made as large as the window: the page
     // is then never laid out in a box that does not fit it, whatever the soft
@@ -513,6 +517,8 @@ class _LadybirdViewState extends State<LadybirdView>
     final canvasSize = LadybirdController.usesFixedCanvasTextures
         ? _windowPhysicalSize()
         : null;
+    _awaitingWindowSize = canvasSize != null && canvasSize.isEmpty;
+    if (_awaitingWindowSize) return;
     final textureId = await widget.controller.acquireTexture(
       canvasSize: canvasSize,
     );
@@ -608,6 +614,8 @@ class _LadybirdViewState extends State<LadybirdView>
     _followDisplay();
     widget.controller.updateDevicePixelRatio(density);
     widget.controller.resizeWindow(physicalSize);
+    // Laid out in a size, so the window has one now.
+    if (_awaitingWindowSize && mounted) _recreateTexture();
     _ensureCanvasFits(physicalSize);
 
     _onLayoutSettled();

@@ -541,6 +541,28 @@ LADYBIRD_API void
 set_set_clipboard_text_callback(SetClipboardTextCallback callback);
 
 // ---------------------------------------------------------------------------
+// Location
+//
+// Only Android needs these: elsewhere the engine gets locations itself.
+// ---------------------------------------------------------------------------
+
+// Called with true each time a page starts waiting for a position, and with
+// false once none is.
+typedef void (*GeolocationWantedCallback)(bool wanted);
+
+LADYBIRD_API void set_geolocation_callback(GeolocationWantedCallback wanted);
+// Degrees and meters. altitude, altitude_accuracy, heading and speed are NaN
+// where the system does not say.
+LADYBIRD_API void deliver_geolocation_position(double latitude,
+                                               double longitude,
+                                               double accuracy, double altitude,
+                                               double altitude_accuracy,
+                                               double heading, double speed);
+// denied: the system keeps the location from the browser, as against merely
+// not having one.
+LADYBIRD_API void deliver_geolocation_error(bool denied, const char *message);
+
+// ---------------------------------------------------------------------------
 // Site permissions
 // ---------------------------------------------------------------------------
 

@@ -210,9 +210,7 @@ class LadybirdSiteBridge extends ChangeNotifier {
 
   late final _setAvailabilityCallback = _library
       .lookupFunction<
-        ffi.Void Function(
-          ffi.Pointer<ffi.NativeFunction<_AvailabilityNative>>,
-        ),
+        ffi.Void Function(ffi.Pointer<ffi.NativeFunction<_AvailabilityNative>>),
         void Function(ffi.Pointer<ffi.NativeFunction<_AvailabilityNative>>)
       >('set_picture_in_picture_availability_callback');
   late final _requestAvailability = _library
@@ -240,11 +238,22 @@ class LadybirdSiteBridge extends ChangeNotifier {
   /// may call them, which is as long as the app runs.
   bool get isStarted => _promptCallable != null && _cancelCallable != null;
 
+  /// The permissions there is any use asking for, or null for all of them.
+  Set<String>? _offered;
+
+  /// Whether pages can be given the permission [name] at all.
+  bool offers(String name) => _offered?.contains(name) ?? true;
+
   /// Starts showing permission prompts. Returns whether the engine can: a
   /// native library from before this existed cannot, and its pages are then
   /// refused what they ask for.
-  bool start() {
+  ///
+  /// Where the app cannot make good on every permission, [only] names those it
+  /// can. Pages are refused the others without the user being asked, and
+  /// nothing is remembered about it.
+  bool start({Set<String>? only}) {
     if (isStarted) return true;
+    _offered = only;
 
     final prompt = ffi.NativeCallable<_PromptNative>.listener(_onPrompt);
     final cancel = ffi.NativeCallable<_CancelNative>.listener(_onCancel);
@@ -269,10 +278,15 @@ class LadybirdSiteBridge extends ChangeNotifier {
     } finally {
       malloc.free(json);
     }
+    final name = description['name'] as String? ?? '';
+    if (!offers(name)) {
+      _respond(promptId, PermissionOutcome.cancelled.index);
+      return;
+    }
     _prompts[promptId] = PermissionPrompt(
       id: promptId,
       viewId: viewId,
-      name: description['name'] as String? ?? '',
+      name: name,
       origin: description['origin'] as String? ?? '',
       isFile: description['isFile'] == true,
       showOsHint: description['showOsHint'] == true,

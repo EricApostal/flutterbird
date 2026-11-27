@@ -1,6 +1,7 @@
 import 'package:bird_session/bird_session.dart';
 import 'package:ladybird/ladybird.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:rubisco_browser/features/mobile/browser/permission_prompt.dart';
 import 'package:rubisco_browser/features/mobile/mobile_actions.dart';
 import 'package:rubisco_browser/features/mobile/theme/mobile_theme.dart';
 import 'package:rubisco_browser/features/mobile/widgets/mobile_overlays.dart';
@@ -87,6 +88,7 @@ Future<void> showPageInfoSheet(BuildContext context, LadybirdController tab) {
               subtitle: Text(detail),
             ),
             const Divider(),
+            _SitePermissionRows(viewId: tab.viewId),
             MobileMenuRow(
               icon: Icons.copy_rounded,
               label: 'Copy link',
@@ -108,4 +110,69 @@ Future<void> showPageInfoSheet(BuildContext context, LadybirdController tab) {
       );
     },
   );
+}
+
+/// What the site has been allowed, to be changed or forgotten. Takes no room
+/// for a site that has asked for nothing.
+class _SitePermissionRows extends StatelessWidget {
+  const _SitePermissionRows({required this.viewId});
+
+  final int viewId;
+
+  @override
+  Widget build(BuildContext context) {
+    final bridge = LadybirdSiteBridge.instance;
+    return ListenableBuilder(
+      listenable: bridge,
+      builder: (context, _) {
+        final site = bridge.sitePermissions(viewId);
+        final rows = [
+          for (final row in site?.permissions ?? const <SitePermission>[])
+            if (bridge.offers(row.name) &&
+                (row.setting != PermissionSetting.ask || row.requestedByPage))
+              row,
+        ];
+        if (site == null || site.isOpaque || rows.isEmpty) {
+          return const SizedBox.shrink();
+        }
+        final decided = rows.any((row) => row.setting != PermissionSetting.ask);
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (final row in rows)
+              SwitchListTile(
+                contentPadding: const EdgeInsets.symmetric(horizontal: 24),
+                secondary: Icon(
+                  mobilePermissionKind(row.name).icon,
+                  color: context.mobile.textSecondary,
+                ),
+                title: Text(mobilePermissionKind(row.name).label),
+                subtitle: Text(switch (row.setting) {
+                  PermissionSetting.ask => 'Asks first',
+                  PermissionSetting.allow => 'Allowed',
+                  PermissionSetting.allowOnce => 'Allowed for now',
+                  PermissionSetting.block => 'Blocked',
+                }),
+                value:
+                    row.setting == PermissionSetting.allow ||
+                    row.setting == PermissionSetting.allowOnce,
+                onChanged: (allowed) => bridge.setSitePermission(
+                  viewId,
+                  site.origin,
+                  row.name,
+                  allowed ? PermissionSetting.allow : PermissionSetting.block,
+                ),
+              ),
+            if (decided)
+              MobileMenuRow(
+                icon: Icons.restart_alt_rounded,
+                label: 'Reset permissions',
+                onTap: () => bridge.resetSitePermissions(viewId, site.origin),
+              ),
+            const Divider(),
+          ],
+        );
+      },
+    );
+  }
 }
