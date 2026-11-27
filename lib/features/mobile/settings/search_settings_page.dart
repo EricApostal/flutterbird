@@ -116,6 +116,7 @@ class _AddEngineDialogState extends State<_AddEngineDialog> {
             controller: _name,
             autofocus: true,
             textInputAction: TextInputAction.next,
+            textCapitalization: TextCapitalization.words,
             decoration: const InputDecoration(
               labelText: 'Name',
               border: OutlineInputBorder(),
@@ -126,6 +127,7 @@ class _AddEngineDialogState extends State<_AddEngineDialog> {
             controller: _url,
             autocorrect: false,
             keyboardType: TextInputType.url,
+            textInputAction: TextInputAction.done,
             decoration: InputDecoration(
               labelText: 'Search URL',
               hintText: 'https://example.com/search?q=%s',

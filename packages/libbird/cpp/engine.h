@@ -146,6 +146,12 @@ typedef void (*InputCaretRectChangeCallback)(int view_id, bool has_rect, int x,
 // <video>'s native fullscreen control). The embedder should present its own
 // chrome accordingly (hide toolbars, go OS-fullscreen on desktop, etc).
 typedef void (*FullscreenChangeCallback)(int view_id, bool is_fullscreen);
+// What the page made of a step of a touch sent with dispatch_touch_event():
+// `claimed` when it took the touch for its own use, so that the embedder must
+// not pan with it. `phase` is a LadybirdTouchPhase. Steps the engine merged into
+// later ones, or dropped, are not reported.
+typedef void (*TouchResultCallback)(int view_id, int pointer_id, int phase,
+                                    bool claimed);
 // Fired whenever the tab's real session history changes for any reason (new
 // navigation, pushState/replaceState, back/forward traversal, reload, or
 // crash-recovery reseed). history_json is a JSON array of
@@ -394,6 +400,38 @@ LADYBIRD_API void dispatch_mouse_event(
     int view_id, int type, int x, int y, int button, int buttons, int modifiers,
     double wheel_delta_x, double wheel_delta_y,
     int wheel_delta_precision, int scroll_gesture_phase);
+
+// A step of one finger's touch.
+typedef enum {
+  LADYBIRD_TOUCH_DOWN = 0,
+  LADYBIRD_TOUCH_UP = 1,
+  LADYBIRD_TOUCH_MOVE = 2,
+  // The browser takes the touch back, as when it starts panning with it.
+  LADYBIRD_TOUCH_CANCEL = 3,
+} LadybirdTouchPhase;
+
+// Gives the page a finger's touch, as pointer events of type "touch" and as
+// touch events. A tap brings the page the mouse events and the click that go
+// with it. The page is never scrolled by this: panning is the embedder's to do,
+// with wheel events, for the touches the page leaves to it (see
+// set_touch_result_callback). `pointer_id` is positive and is the finger's own
+// from its going down to its going up. `x`, `y` are in physical pixels, and
+// `width`, `height` are the size of the contact in CSS pixels.
+LADYBIRD_API void dispatch_touch_event(int view_id, int phase, int pointer_id,
+                                       int x, int y, double width,
+                                       double height, double pressure);
+
+// What the page's focused field takes, and what the page says of it, as JSON:
+// `tag` ("input", "textarea" or "contenteditable"), `type` (of an input),
+// `editable`, `id`, `inForm`, `hasNext` (another field of its form follows),
+// and the `inputmode`, `enterkeyhint`, `autocorrect` and `autocapitalize`
+// attributes where set. An empty string where nothing that takes text has the
+// focus. Up to date whenever the input caret rect callback is called. The
+// caller frees it; NULL for a view that is not there.
+LADYBIRD_API char *get_focused_field_json(int view_id);
+
+LADYBIRD_API void set_touch_result_callback(int view_id,
+                                            TouchResultCallback callback);
 
 // Tells the engine whether this view (and so its tab) holds system focus.
 // WebContent only has a focused navigable while it does, and the actions that

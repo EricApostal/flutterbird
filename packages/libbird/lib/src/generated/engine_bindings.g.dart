@@ -369,6 +369,80 @@ class LadybirdBindings {
   late final _set_view_visible = _set_view_visiblePtr
       .asFunction<void Function(int, bool)>();
 
+  void dispatch_touch_event(
+    int view_id,
+    int phase,
+    int pointer_id,
+    int x,
+    int y,
+    double width,
+    double height,
+    double pressure,
+  ) {
+    return _dispatch_touch_event(
+      view_id,
+      phase,
+      pointer_id,
+      x,
+      y,
+      width,
+      height,
+      pressure,
+    );
+  }
+
+  late final _dispatch_touch_eventPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.Void Function(
+            ffi.Int,
+            ffi.Int,
+            ffi.Int,
+            ffi.Int,
+            ffi.Int,
+            ffi.Double,
+            ffi.Double,
+            ffi.Double,
+          )
+        >
+      >('dispatch_touch_event');
+  late final _dispatch_touch_event = _dispatch_touch_eventPtr
+      .asFunction<
+        void Function(int, int, int, int, int, double, double, double)
+      >();
+
+  void set_touch_result_callback(
+    int view_id,
+    TouchResultCallback callback,
+  ) {
+    return _set_touch_result_callback(
+      view_id,
+      callback,
+    );
+  }
+
+  late final _set_touch_result_callbackPtr =
+      _lookup<
+        ffi.NativeFunction<ffi.Void Function(ffi.Int, TouchResultCallback)>
+      >('set_touch_result_callback');
+  late final _set_touch_result_callback = _set_touch_result_callbackPtr
+      .asFunction<void Function(int, TouchResultCallback)>();
+
+  ffi.Pointer<ffi.Char> get_focused_field_json(
+    int view_id,
+  ) {
+    return _get_focused_field_json(
+      view_id,
+    );
+  }
+
+  late final _get_focused_field_jsonPtr =
+      _lookup<ffi.NativeFunction<ffi.Pointer<ffi.Char> Function(ffi.Int)>>(
+        'get_focused_field_json',
+      );
+  late final _get_focused_field_json = _get_focused_field_jsonPtr
+      .asFunction<ffi.Pointer<ffi.Char> Function(int)>();
+
   int get_iosurface_width(int view_id) {
     return _get_iosurface_width(view_id);
   }
@@ -1384,6 +1458,17 @@ typedef DartInputCaretRectChangeCallbackFunction =
       int width,
       int height,
     );
+typedef TouchResultCallback =
+    ffi.Pointer<ffi.NativeFunction<TouchResultCallbackFunction>>;
+typedef TouchResultCallbackFunction =
+    ffi.Void Function(
+      ffi.Int view_id,
+      ffi.Int pointer_id,
+      ffi.Int phase,
+      ffi.Bool claimed,
+    );
+typedef DartTouchResultCallbackFunction =
+    void Function(int view_id, int pointer_id, int phase, bool claimed);
 typedef FullscreenChangeCallback =
     ffi.Pointer<ffi.NativeFunction<FullscreenChangeCallbackFunction>>;
 typedef FullscreenChangeCallbackFunction =

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/gestures.dart';
@@ -9,6 +10,8 @@ import 'package:flutter/services.dart';
 import 'package:ladybird/ladybird.dart';
 
 import 'keys.dart';
+import 'page_field.dart';
+import 'touch_arbiter.dart';
 
 class LadybirdView extends StatefulWidget {
   final LadybirdController controller;
@@ -87,6 +90,13 @@ class _LadybirdViewState extends State<LadybirdView>
   double _accumulatedWheelX = 0;
   double _accumulatedWheelY = 0;
   Ticker? _momentumTicker;
+
+  // Fingers: who each gesture belongs to, where each finger was last, and how
+  // long the page may still take to say whether it keeps one.
+  TouchArbiter _touch = TouchArbiter();
+  final Map<int, PointerEvent> _fingers = {};
+  Timer? _touchAnswerTimer;
+  static const Duration _touchAnswerPatience = Duration(milliseconds: 150);
   Offset _lastPointerPos = Offset.zero;
   VelocityTracker? _panZoomVelocityTracker;
 
@@ -176,28 +186,105 @@ class _LadybirdViewState extends State<LadybirdView>
     );
   }
 
+  // The field the keyboard is set up for.
+  PageField _pageField = PageField.unknown;
+
   void _ensureTextInputConnectionAttached() {
-    if (_textInputConnection != null && _textInputConnection!.attached) {
+    final field = PageField.parse(widget.controller.focusedFieldJson());
+    // A field that cannot be typed into, or that has keys of its own, gets no
+    // keyboard.
+    if (!field.editable || field.keyboard == FieldKeyboard.none) {
+      _detachTextInputConnection();
+      return;
+    }
+
+    if (_textInputConnection != null &&
+        _textInputConnection!.attached &&
+        field == _pageField) {
       _textInputConnection!.show();
       return;
     }
 
+    // A keyboard is told what it is typing into when it is connected, so
+    // another field takes another connection, which starts it afresh.
+    _pageField = field;
     _shadowEditingValue = _kBaselineEditingValue;
     _textInputConnection = TextInput.attach(
       this,
-      TextInputConfiguration(
-        // Which window the keyboard is typing into. Left out, macOS assumes the
-        // app's main view, which an app with several windows does not have.
-        viewId: View.of(context).viewId,
-        inputType: TextInputType.text,
-        enableDeltaModel: true,
-        autocorrect: true,
-        enableSuggestions: true,
-        inputAction: TextInputAction.done,
-      ),
+      _keyboardFor(field, View.of(context).viewId),
     );
     _textInputConnection!.setEditingState(_shadowEditingValue);
     _textInputConnection!.show();
+  }
+
+  // NB: Suggestions are never turned off for what is not a password. Android's
+  //     way of turning them off, as Flutter does it, is to call the field a
+  //     visible password, which the keyboard and password managers believe.
+  static TextInputConfiguration _keyboardFor(PageField field, int viewId) {
+    // A keyboard for several lines has no key but a new line's.
+    final takesNewLines =
+        field.keyboard == FieldKeyboard.multiline &&
+        field.action == FieldAction.newline;
+    return TextInputConfiguration(
+      // Which window the keyboard is typing into. Left out, macOS assumes the
+      // app's main view, which an app with several windows does not have.
+      viewId: viewId,
+      inputType: switch (field.keyboard) {
+        FieldKeyboard.multiline =>
+          takesNewLines ? TextInputType.multiline : TextInputType.text,
+        FieldKeyboard.text => TextInputType.text,
+        FieldKeyboard.email => TextInputType.emailAddress,
+        FieldKeyboard.url => TextInputType.url,
+        FieldKeyboard.phone => TextInputType.phone,
+        FieldKeyboard.signedDecimal => const TextInputType.numberWithOptions(
+          signed: true,
+          decimal: true,
+        ),
+        FieldKeyboard.decimal => const TextInputType.numberWithOptions(
+          decimal: true,
+        ),
+        FieldKeyboard.digits => TextInputType.number,
+        FieldKeyboard.none => TextInputType.none,
+      },
+      inputAction: switch (field.action) {
+        FieldAction.done => TextInputAction.done,
+        FieldAction.go => TextInputAction.go,
+        FieldAction.next => TextInputAction.next,
+        FieldAction.previous => TextInputAction.previous,
+        FieldAction.search => TextInputAction.search,
+        FieldAction.send => TextInputAction.send,
+        FieldAction.newline => TextInputAction.newline,
+      },
+      textCapitalization: switch (field.capitals) {
+        FieldCapitals.none => TextCapitalization.none,
+        FieldCapitals.sentences => TextCapitalization.sentences,
+        FieldCapitals.words => TextCapitalization.words,
+        FieldCapitals.characters => TextCapitalization.characters,
+      },
+      obscureText: field.secret,
+      autocorrect: field.autocorrect,
+      enableSuggestions: !field.secret,
+      enableIMEPersonalizedLearning: !field.secret,
+      enableDeltaModel: true,
+    );
+  }
+
+  // Presses and releases a key in the page.
+  void _pressKey(LogicalKeyboardKey key, int codePoint, {bool shift = false}) {
+    final keycode = getLadybirdKeyCode(key);
+    final modifiers = getModifiersForEvent({
+      ...HardwareKeyboard.instance.logicalKeysPressed,
+      if (shift) LogicalKeyboardKey.shiftLeft,
+    });
+    for (final type in const [0, 1]) {
+      widget.controller.dispatchKeyEvent(
+        type: type,
+        keycode: keycode,
+        modifiers: modifiers,
+        codePoint: codePoint,
+        repeat: false,
+      );
+    }
   }
 
   void _detachTextInputConnection() {
@@ -226,7 +313,11 @@ class _LadybirdViewState extends State<LadybirdView>
       return;
     }
 
-    if (delta is TextEditingDeltaInsertion) {
+    if (delta is TextEditingDeltaInsertion && delta.textInserted == '\n') {
+      // The enter key of a keyboard for several lines types a new line. The page
+      // is given the key itself, which it may have its own use for.
+      _pressKey(LogicalKeyboardKey.enter, 0x0D);
+    } else if (delta is TextEditingDeltaInsertion) {
       widget.controller.commitTextFromInputMethod(delta.textInserted);
     } else if (delta is TextEditingDeltaReplacement) {
       // commit_text_from_input_method replaces any in-progress marked text
@@ -303,24 +394,20 @@ class _LadybirdViewState extends State<LadybirdView>
 
   @override
   void performAction(TextInputAction action) {
-    final keycode = getLadybirdKeyCode(LogicalKeyboardKey.enter);
-    final modifiers = getModifiersForEvent(
-      HardwareKeyboard.instance.logicalKeysPressed,
-    );
-    widget.controller.dispatchKeyEvent(
-      type: 0,
-      keycode: keycode,
-      modifiers: modifiers,
-      codePoint: 0x0D,
-      repeat: false,
-    );
-    widget.controller.dispatchKeyEvent(
-      type: 1,
-      keycode: keycode,
-      modifiers: modifiers,
-      codePoint: 0x0D,
-      repeat: false,
-    );
+    switch (action) {
+      // To the next field or the one before, as Tab goes.
+      case TextInputAction.next:
+        _pressKey(LogicalKeyboardKey.tab, 0x09);
+      case TextInputAction.previous:
+        _pressKey(LogicalKeyboardKey.tab, 0x09, shift: true);
+      // Where several lines are typed, the new line arrives as text too, and is
+      // taken from there.
+      case TextInputAction.newline
+          when _pageField.keyboard == FieldKeyboard.multiline:
+        break;
+      default:
+        _pressKey(LogicalKeyboardKey.enter, 0x0D);
+    }
   }
 
   @override
@@ -391,6 +478,7 @@ class _LadybirdViewState extends State<LadybirdView>
   void didUpdateWidget(LadybirdView oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.controller != widget.controller) {
+      _forgetTouches(oldWidget.controller);
       oldWidget.controller.setShownBy(this, false);
       _reportShown();
       _detachControllerListeners(oldWidget.controller);
@@ -606,6 +694,108 @@ class _LadybirdViewState extends State<LadybirdView>
     return event.kind != PointerDeviceKind.touch;
   }
 
+  // Whether a finger is given to the page as a finger, as it moves and not just
+  // as the taps and scrolling it amounts to.
+  bool _isPageTouch(PointerEvent event) =>
+      event.kind == PointerDeviceKind.touch && widget.controller.hasTouchInput;
+
+  void _onFingerDown(PointerDownEvent event) {
+    // A finger put down on a page that is still moving stops it, and does no
+    // more than that.
+    final stopsPage = _momentumTicker?.isActive ?? false;
+    _momentumTicker?.stop();
+    _focusNode.requestFocus();
+    widget.controller.onTouchResult = _onTouchResult;
+    _lastPointerPos = event.localPosition;
+    _fingers[event.pointer] = event;
+    if (_touch.down(event.pointer, forBrowser: stopsPage)) {
+      _sendTouch(LadybirdController.touchDown, event);
+    }
+    if (!_touch.isWaiting) _stopWaitingForPage();
+  }
+
+  void _onFingerMove(PointerMoveEvent event) {
+    _fingers[event.pointer] = event;
+    if (_touch.moves(event.pointer)) {
+      _sendTouch(LadybirdController.touchMove, event);
+    }
+  }
+
+  void _onFingerGone(PointerEvent event, int phase) {
+    if (_touch.lift(event.pointer)) _sendTouch(phase, event);
+    _fingers.remove(event.pointer);
+  }
+
+  void _sendTouch(int phase, PointerEvent event) {
+    final density = MediaQuery.devicePixelRatioOf(context);
+    final size = math.max(1.0, event.radiusMajor * 2);
+    final range = event.pressureMax - event.pressureMin;
+    final pressure = range > 0
+        ? ((event.pressure - event.pressureMin) / range).clamp(0.0, 1.0)
+        : 0.0;
+    widget.controller.dispatchTouchEvent(
+      phase: phase,
+      pointer: event.pointer,
+      x: (event.localPosition.dx * density).toInt(),
+      y: (event.localPosition.dy * density).toInt(),
+      width: size,
+      height: size,
+      // What a screen that cannot tell is to report while touched.
+      pressure: pressure > 0 ? pressure : 0.5,
+    );
+  }
+
+  void _onTouchResult(int pointer, int phase, bool claimed) {
+    if (!mounted || phase == LadybirdController.touchCancel) return;
+    _applyTouch(
+      _touch.answer(
+        pointer,
+        isMove: phase == LadybirdController.touchMove,
+        claimed: claimed,
+      ),
+    );
+  }
+
+  void _applyTouch(TouchStep step) {
+    for (final pointer in step.cancel) {
+      final last = _fingers[pointer];
+      if (last != null) _sendTouch(LadybirdController.touchCancel, last);
+    }
+    if (step.dx != 0 || step.dy != 0) {
+      _dispatchWheelDelta(
+        _lastPointerPos,
+        -step.dx,
+        -step.dy,
+        precision: LadybirdController.wheelPrecise,
+      );
+    }
+    if (step.fling case final velocity?) {
+      _startFling(Offset(velocity.x, velocity.y));
+    }
+    if (!_touch.isWaiting) {
+      _stopWaitingForPage();
+      return;
+    }
+    _touchAnswerTimer ??= Timer(_touchAnswerPatience, () {
+      _touchAnswerTimer = null;
+      if (mounted) _applyTouch(_touch.timeOut());
+    });
+  }
+
+  void _stopWaitingForPage() {
+    _touchAnswerTimer?.cancel();
+    _touchAnswerTimer = null;
+  }
+
+  void _forgetTouches(LadybirdController controller) {
+    _stopWaitingForPage();
+    if (controller.onTouchResult == _onTouchResult) {
+      controller.onTouchResult = null;
+    }
+    _fingers.clear();
+    _touch = TouchArbiter();
+  }
+
   void _dispatchPrimaryTap(Offset localPosition) {
     final density = MediaQuery.devicePixelRatioOf(context);
     final x = (localPosition.dx * density).toInt();
@@ -808,7 +998,10 @@ class _LadybirdViewState extends State<LadybirdView>
     _focusNode.requestFocus();
     _momentumTicker?.stop();
     _lastPointerPos = details.localPosition;
-    _dispatchPrimaryTap(details.localPosition);
+    // A tap sent as a touch brings the page its click by itself.
+    if (!widget.controller.hasTouchInput) {
+      _dispatchPrimaryTap(details.localPosition);
+    }
 
     // A tap on a field that was already focused before this tap (e.g. the
     // user manually dismissed the platform keyboard, then tapped the same
@@ -830,6 +1023,13 @@ class _LadybirdViewState extends State<LadybirdView>
     _focusNode.requestFocus();
     _momentumTicker?.stop();
     _lastPointerPos = details.localPosition;
+
+    if (widget.controller.hasTouchInput) {
+      // Where the page keeps the touch, holding it still is the page's too.
+      final taken = _touch.hold();
+      if (taken == null) return;
+      _applyTouch(TouchStep(cancel: taken));
+    }
 
     final density = MediaQuery.devicePixelRatioOf(context);
     final x = (details.localPosition.dx * density).toInt();
@@ -865,6 +1065,10 @@ class _LadybirdViewState extends State<LadybirdView>
     _momentumTicker?.stop();
     _lastPointerPos = details.localPosition;
 
+    if (widget.controller.hasTouchInput) {
+      _applyTouch(_touch.pan(details.delta.dx, details.delta.dy));
+      return;
+    }
     _dispatchWheelDelta(
       details.localPosition,
       -details.delta.dx,
@@ -875,7 +1079,15 @@ class _LadybirdViewState extends State<LadybirdView>
 
   void _onTouchPanEnd(DragEndDetails details) {
     final velocity = details.velocity.pixelsPerSecond;
+    if (widget.controller.hasTouchInput) {
+      _applyTouch(_touch.panEnd((x: velocity.dx, y: velocity.dy)));
+      return;
+    }
+    _startFling(velocity);
+  }
 
+  // Carries a pan on by itself from the speed the finger left at.
+  void _startFling(Offset velocity) {
     _dispatchWheelDelta(
       _lastPointerPos,
       0,
@@ -883,6 +1095,7 @@ class _LadybirdViewState extends State<LadybirdView>
       precision: LadybirdController.wheelPrecise,
     );
 
+    _momentumTicker?.stop();
     _simulationX = _getPlatformSimulation(velocity.dx, Axis.horizontal);
     _simulationY = _getPlatformSimulation(velocity.dy, Axis.vertical);
     _lastSimX = 0;
@@ -977,6 +1190,7 @@ class _LadybirdViewState extends State<LadybirdView>
     _focusNode.removeListener(_onFocusChanged);
     widget.controller.setViewFocused(false, owner: this);
     widget.controller.setShownBy(this, false);
+    _forgetTouches(widget.controller);
     super.dispose();
   }
 
@@ -1101,18 +1315,29 @@ class _LadybirdViewState extends State<LadybirdView>
                       onPanEnd: _onTouchPanEnd,
                       child: Listener(
                         onPointerDown: (e) {
-                          if (_shouldDispatchAsMousePointer(e)) {
+                          if (_isPageTouch(e)) {
+                            _onFingerDown(e);
+                          } else if (_shouldDispatchAsMousePointer(e)) {
                             _focusNode.requestFocus();
                             _onPointerEvent(e, 0);
                           }
                         },
                         onPointerUp: (e) {
-                          if (_shouldDispatchAsMousePointer(e)) {
+                          if (_isPageTouch(e)) {
+                            _onFingerGone(e, LadybirdController.touchUp);
+                          } else if (_shouldDispatchAsMousePointer(e)) {
                             _onPointerEvent(e, 1);
                           }
                         },
+                        onPointerCancel: (e) {
+                          if (_isPageTouch(e)) {
+                            _onFingerGone(e, LadybirdController.touchCancel);
+                          }
+                        },
                         onPointerMove: (e) {
-                          if (_shouldDispatchAsMousePointer(e)) {
+                          if (_isPageTouch(e)) {
+                            _onFingerMove(e);
+                          } else if (_shouldDispatchAsMousePointer(e)) {
                             _onPointerEvent(e, 2);
                           }
                         },

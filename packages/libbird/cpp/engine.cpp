@@ -617,6 +617,7 @@ public:
   bool m_closed_by_page = false;
   InputCaretRectChangeCallback m_input_caret_rect_change_callback = nullptr;
   FullscreenChangeCallback m_fullscreen_change_callback = nullptr;
+  TouchResultCallback m_touch_result_callback = nullptr;
   NavigationHistoryChangeCallback m_navigation_history_change_callback =
       nullptr;
 
@@ -1681,6 +1682,11 @@ public:
       }
     };
 
+    on_finish_handling_touch_event = [this](Web::MouseEvent const &event,
+                                            Web::EventResult result) {
+      report_touch_result(event, result);
+    };
+
     on_cursor_change = [this](Gfx::Cursor const &cursor) {
       std::lock_guard lock(m_info_mutex);
       if (m_cursor_change_callback)
@@ -1963,6 +1969,84 @@ public:
                             ? 1
                             : 0,
                         nullptr});
+  }
+
+  void dispatch_touch_event(int phase, int pointer_id, int x, int y,
+                            double width, double height, double pressure) {
+    Web::MouseEvent::Type type;
+    switch (phase) {
+    case LADYBIRD_TOUCH_DOWN:
+      type = Web::MouseEvent::Type::MouseDown;
+      break;
+    case LADYBIRD_TOUCH_UP:
+      type = Web::MouseEvent::Type::MouseUp;
+      break;
+    case LADYBIRD_TOUCH_MOVE:
+      type = Web::MouseEvent::Type::MouseMove;
+      break;
+    case LADYBIRD_TOUCH_CANCEL:
+      type = Web::MouseEvent::Type::MouseCancel;
+      break;
+    default:
+      std::fprintf(stderr, "dispatch_touch_event: unknown phase %d\n", phase);
+      return;
+    }
+    auto const is_press_or_release = phase == LADYBIRD_TOUCH_DOWN ||
+                                     phase == LADYBIRD_TOUCH_UP;
+    auto const is_in_contact = phase == LADYBIRD_TOUCH_DOWN ||
+                               phase == LADYBIRD_TOUCH_MOVE;
+
+    Web::PointerProperties properties;
+    properties.pointer_id = pointer_id;
+    properties.pointer_type = Web::PointerType::Touch;
+    properties.width = width;
+    properties.height = height;
+    properties.pressure = is_in_contact ? pressure : 0;
+
+    Web::DevicePixelPoint position = {x, y};
+    Web::MouseEvent event{
+        type,
+        position,
+        position,
+        phase == LADYBIRD_TOUCH_MOVE ? Web::UIEvents::MouseButton::None
+                                     : Web::UIEvents::MouseButton::Primary,
+        is_in_contact ? Web::UIEvents::MouseButton::Primary
+                      : Web::UIEvents::MouseButton::None,
+        Web::UIEvents::KeyModifier::Mod_None,
+        0,
+        0,
+        0,
+        0,
+        Web::WheelDeltaPrecision::Discrete,
+        Web::ScrollGesturePhase::None,
+        is_press_or_release ? 1 : 0,
+        nullptr};
+    event.pointer_data = Web::PointerInputData{properties};
+    enqueue_input_event(move(event));
+  }
+
+  void report_touch_result(Web::MouseEvent const &event,
+                           Web::EventResult result) {
+    auto const *pointer = event.pointer_data.ptr();
+    // A step that was merged into a later one says nothing about the page.
+    if (!pointer || result == Web::EventResult::Dropped)
+      return;
+    int phase = LADYBIRD_TOUCH_MOVE;
+    if (event.type == Web::MouseEvent::Type::MouseDown)
+      phase = LADYBIRD_TOUCH_DOWN;
+    else if (event.type == Web::MouseEvent::Type::MouseUp)
+      phase = LADYBIRD_TOUCH_UP;
+    else if (event.type == Web::MouseEvent::Type::MouseCancel)
+      phase = LADYBIRD_TOUCH_CANCEL;
+
+    TouchResultCallback callback = nullptr;
+    {
+      std::lock_guard lock(m_info_mutex);
+      callback = m_touch_result_callback;
+    }
+    if (callback)
+      callback(m_view_id, pointer->pointer_id, phase,
+               result == Web::EventResult::Cancelled);
   }
 
   void dispatch_key_event(Web::KeyEvent::Type type, int keycode, int modifiers,
@@ -3734,6 +3818,22 @@ void set_fullscreen_change_callback(int view_id,
   }
 }
 
+char *get_focused_field_json(int view_id) {
+  auto it = g_web_views.find(view_id);
+  if (it == g_web_views.end())
+    return nullptr;
+  auto field = it->second->focused_field().to_byte_string();
+  return strdup(field.characters());
+}
+
+void set_touch_result_callback(int view_id, TouchResultCallback callback) {
+  auto it = g_web_views.find(view_id);
+  if (it != g_web_views.end()) {
+    std::lock_guard lock(it->second->m_info_mutex);
+    it->second->m_touch_result_callback = callback;
+  }
+}
+
 void set_input_caret_rect_change_callback(
     int view_id, InputCaretRectChangeCallback callback) {
   auto it = g_web_views.find(view_id);
@@ -3792,6 +3892,15 @@ void dispatch_mouse_event(int view_id, int type, int x, int y, int button,
                                      wheel_delta_x, wheel_delta_y,
                                      wheel_delta_precision,
                                      scroll_gesture_phase);
+  }
+}
+
+void dispatch_touch_event(int view_id, int phase, int pointer_id, int x, int y,
+                          double width, double height, double pressure) {
+  auto it = g_web_views.find(view_id);
+  if (it != g_web_views.end()) {
+    it->second->dispatch_touch_event(phase, pointer_id, x, y, width, height,
+                                     pressure);
   }
 }
 

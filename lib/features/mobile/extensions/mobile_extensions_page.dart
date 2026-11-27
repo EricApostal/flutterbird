@@ -194,7 +194,6 @@ class _MobileExtensionsPageState extends ConsumerState<MobileExtensionsPage> {
                       controller: _input,
                       enabled: !_busy,
                       autocorrect: false,
-                      enableSuggestions: false,
                       keyboardType: TextInputType.url,
                       textInputAction: TextInputAction.go,
                       onSubmitted: (_) => _add(),

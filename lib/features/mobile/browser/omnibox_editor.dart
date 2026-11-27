@@ -249,7 +249,8 @@ class _OmniboxEditorState extends ConsumerState<OmniboxEditor> {
               controller: _text,
               focusNode: _focus,
               autocorrect: false,
-              enableSuggestions: false,
+              // Suggestions stay on: turning them off tells Android's keyboard
+              // that this is a visible password, and not an address.
               keyboardType: TextInputType.url,
               textInputAction: TextInputAction.go,
               textDirection: TextDirection.ltr,

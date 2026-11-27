@@ -127,6 +127,19 @@ class LadybirdController {
   late final ffi.NativeCallable<ffi.Void Function(ffi.Int, ffi.Bool)>
   _fullscreenChangeCallback;
   late final ffi.NativeCallable<
+    ffi.Void Function(ffi.Int, ffi.Int, ffi.Int, ffi.Bool)
+  >
+  _touchResultCallback;
+
+  /// Whether the engine takes a finger's touch as a touch. A native library
+  /// from before it did does not.
+  bool hasTouchInput = false;
+
+  /// What the page made of a step of a finger's touch, for the view that is
+  /// sending them: see [dispatchTouchEvent]. `claimed` when the page took the
+  /// touch for its own use.
+  void Function(int pointer, int phase, bool claimed)? onTouchResult;
+  late final ffi.NativeCallable<
     ffi.Void Function(ffi.Int, ffi.Pointer<ffi.Char>)
   >
   _navigationHistoryChangeCallback;
@@ -415,6 +428,20 @@ class LadybirdController {
       _viewId,
       _fullscreenChangeCallback.nativeFunction,
     );
+
+    _touchResultCallback =
+        ffi.NativeCallable<
+          ffi.Void Function(ffi.Int, ffi.Int, ffi.Int, ffi.Bool)
+        >.listener(_onTouchResult);
+    try {
+      _bindings.set_touch_result_callback(
+        _viewId,
+        _touchResultCallback.nativeFunction,
+      );
+      hasTouchInput = true;
+    } on ArgumentError catch (error) {
+      debugPrint('[LibBird] This engine takes no touch input: $error');
+    }
 
     _navigationHistoryChangeCallback =
         ffi.NativeCallable<
@@ -1487,6 +1514,62 @@ class LadybirdController {
     );
   }
 
+  // A step of a finger's touch, mirrored from LadybirdTouchPhase in
+  // cpp/engine.h.
+  static const int touchDown = 0;
+  static const int touchUp = 1;
+  static const int touchMove = 2;
+  static const int touchCancel = 3;
+
+  // The engine's pointer 0 is the mouse, which no finger may be taken for.
+  static const int _firstTouchId = 1;
+
+  /// Gives the page a step of one finger's touch. [pointer] is the finger's own
+  /// from its going down to its going up. The page is not scrolled by this:
+  /// panning is done with wheel events, for a touch the page leaves to the
+  /// browser (see [onTouchResult]). Only where [hasTouchInput].
+  void dispatchTouchEvent({
+    required int phase,
+    required int pointer,
+    required int x,
+    required int y,
+    required double width,
+    required double height,
+    required double pressure,
+  }) {
+    _bindings.dispatch_touch_event(
+      _viewId,
+      phase,
+      pointer + _firstTouchId,
+      x,
+      y,
+      width,
+      height,
+      pressure,
+    );
+  }
+
+  void _onTouchResult(int viewId, int pointer, int phase, bool claimed) {
+    if (viewId != _viewId || _disposed) return;
+    onTouchResult?.call(pointer - _firstTouchId, phase, claimed);
+  }
+
+  /// What the page's focused field takes, as the engine describes it (see
+  /// `get_focused_field_json` in engine.h). Empty where there is none, or for a
+  /// native library from before it could say.
+  String focusedFieldJson() {
+    try {
+      final result = _bindings.get_focused_field_json(_viewId);
+      if (result == ffi.nullptr) return '';
+      final json = result.cast<Utf8>().toDartString();
+      malloc.free(result);
+      return json;
+    } on ArgumentError catch (error) {
+      debugPrint('[LibBird] This engine cannot describe fields: $error');
+      return '';
+    }
+  }
+
   void dispatchKeyEvent({
     required int type,
     required int keycode,
@@ -1545,6 +1628,10 @@ class LadybirdController {
     _bindings.set_input_caret_rect_change_callback(_viewId, ffi.nullptr);
     _bindings.set_fullscreen_change_callback(_viewId, ffi.nullptr);
     _bindings.set_navigation_history_change_callback(_viewId, ffi.nullptr);
+    if (hasTouchInput) {
+      _bindings.set_touch_result_callback(_viewId, ffi.nullptr);
+    }
+    onTouchResult = null;
     urlNotifier.dispose();
     titleNotifier.dispose();
     faviconNotifier.dispose();
@@ -1566,6 +1653,7 @@ class LadybirdController {
     _closeViewCallback.close();
     _inputCaretRectChangeCallback.close();
     _fullscreenChangeCallback.close();
+    _touchResultCallback.close();
     _navigationHistoryChangeCallback.close();
 
     final textureId = _textureId;
