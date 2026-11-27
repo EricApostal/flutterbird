@@ -78,6 +78,14 @@ if (!usePrebuiltNative) {
     listOf("libc++_shared.so", "libengine.so", "libladybird_plugin.so").forEach { name ->
         helperLibs.resolve(name).delete()
     }
+    // Nor does it remove the helpers built under the names they had before
+    // Ladybird renamed its executables, which would be packaged as dead weight.
+    listOf(
+        "AudioServer", "Compositor", "ImageDecoder", "MediaServer",
+        "RequestServer", "SystemProbe", "VideoDecoderServer", "WebContent",
+    ).forEach { name ->
+        helperLibs.resolve("lib$name.so").delete()
+    }
 }
 
 data class Sdl3JavaInputs(val jar: File?, val sourceDirs: List<File>)
@@ -368,7 +376,7 @@ configure<LibraryExtension> {
     packaging {
         jniLibs {
             useLegacyPackaging = true
-            keepDebugSymbols.add("**/libWebContent.so")
+            keepDebugSymbols.add("**/libladybird-render.so")
         }
     }
 }

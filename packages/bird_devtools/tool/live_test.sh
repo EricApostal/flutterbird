@@ -31,7 +31,7 @@ for _ in $(seq 50); do
 done
 
 DYLD_FRAMEWORK_PATH="${BUILD}/vcpkg_installed/arm64-osx-dynamic/Frameworks" \
-  "${APP}/Contents/MacOS/Ladybird" --headless=manual --temporary-profile \
+  "${APP}/Contents/MacOS/ladybird" --headless=manual --temporary-profile \
   --devtools="${DEVTOOLS_PORT}" --window-width 1000 --window-height 700 \
   "http://127.0.0.1:${HTTP_PORT}/index.html" >"${WORK}/engine.log" 2>&1 &
 ENGINE_PID=$!

@@ -52,14 +52,14 @@ ANDROID_NATIVE_LIBS=(
   libengine.so
   libladybird_plugin.so
   libc++_shared.so
-  libAudioServer.so
-  libCompositor.so
-  libImageDecoder.so
-  libMediaServer.so
-  libRequestServer.so
-  libSystemProbe.so
-  libVideoDecoderServer.so
-  libWebContent.so
+  libladybird-audio.so
+  libladybird-gpu.so
+  libladybird-image.so
+  libladybird-media.so
+  libladybird-net.so
+  libladybird-probe.so
+  libladybird-render.so
+  libladybird-video.so
 )
 
 # Temporary directories made along the way, removed when the script ends however
@@ -238,12 +238,12 @@ download() {
 required_entries() {
   case "$1" in
     macos-arm64)
-      echo "libengine.dylib libraries binaries/WebContent binaries/RequestServer res"
+      echo "libengine.dylib libraries binaries/ladybird-render binaries/ladybird-net res"
       ;;
     android-arm64-v8a)
       echo "ladybirdHelperJniLibs/arm64-v8a/libengine.so" \
         "ladybirdHelperJniLibs/arm64-v8a/libladybird_plugin.so" \
-        "ladybirdHelperJniLibs/arm64-v8a/libWebContent.so" \
+        "ladybirdHelperJniLibs/arm64-v8a/libladybird-render.so" \
         "ladybirdAssets/ladybird-assets.zip"
       ;;
   esac

@@ -82,18 +82,23 @@ add_subdirectory("${LADYBIRD_DIR}" "${LADYBIRD_BINARY_DIR}")
 
 # Android packages native code from an ABI-named jniLibs directory, and the
 # engine launches its helpers by their APK native-library names. Build the
-# helper executables into that directory as lib<Name>.so so they are packaged
-# and visible to get_paths_for_helper_process() at runtime.
+# helper executables into that directory as lib<Name>.so, <Name> being what
+# Ladybird calls the executable (ladybird-render for WebContent), so they are
+# packaged and visible to get_paths_for_helper_process() at runtime.
 #
 # SystemProbe is one of them: the Browser launches it to describe the GPU before it
-# lets the Compositor paint on it. With no libSystemProbe.so the probe "could not be
+# lets the Compositor paint on it. With no libladybird-probe.so the probe "could not be
 # launched", GPU painting is switched off, and the Compositor paints into CPU
 # bitmaps that can never be shared as hardware buffers.
 if (ANDROID AND LADYBIRD_HELPER_JNI_DIR)
     foreach(helper_process IN ITEMS AudioServer Compositor ImageDecoder MediaServer RequestServer SystemProbe VideoDecoderServer WebContent)
         if (TARGET ${helper_process})
+            get_target_property(executable_name ${helper_process} OUTPUT_NAME)
+            if (NOT executable_name)
+                set(executable_name ${helper_process})
+            endif()
             set_target_properties(${helper_process} PROPERTIES
-                OUTPUT_NAME "lib${helper_process}"
+                OUTPUT_NAME "lib${executable_name}"
                 SUFFIX ".so"
                 RUNTIME_OUTPUT_DIRECTORY "${LADYBIRD_HELPER_JNI_DIR}/${ANDROID_ABI}"
             )
