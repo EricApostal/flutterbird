@@ -1193,6 +1193,8 @@ class _RawFrameDiagnostics {
     required this.displayLinkTicks,
     required this.pumpRequests,
     required this.pumpExecutions,
+    required this.heldNanos,
+    required this.holds,
     required this.hasDisplayLink,
     required this.frameNotifyQueued,
   });
@@ -1205,6 +1207,8 @@ class _RawFrameDiagnostics {
   final int displayLinkTicks;
   final int pumpRequests;
   final int pumpExecutions;
+  final int heldNanos;
+  final int holds;
   final bool hasDisplayLink;
   final bool frameNotifyQueued;
 
@@ -1223,6 +1227,8 @@ class _RawFrameDiagnostics {
       displayLinkTicks: readInt('displayLinkTicks'),
       pumpRequests: readInt('pumpRequests'),
       pumpExecutions: readInt('pumpExecutions'),
+      heldNanos: readInt('heldNanos'),
+      holds: readInt('holds'),
       hasDisplayLink: map['hasDisplayLink'] as bool? ?? false,
       frameNotifyQueued: map['frameNotifyQueued'] as bool? ?? false,
     );
@@ -1232,6 +1238,8 @@ class _RawFrameDiagnostics {
 class _FrameDiagnosticsSnapshot {
   const _FrameDiagnosticsSnapshot({
     required this.lastFrameGeneration,
+    this.engineFramesPerSecond = 0,
+    this.heldMillisecondsPerFrame = 0,
     required this.nativeCallbacksPerSecond,
     required this.deliveredFramesPerSecond,
     required this.queuedDropsPerSecond,
@@ -1244,6 +1252,12 @@ class _FrameDiagnosticsSnapshot {
   });
 
   final int lastFrameGeneration;
+
+  /// Frames the engine finished, whether or not they reached the screen.
+  final double engineFramesPerSecond;
+
+  /// How long the engine waits for each frame to be drawn to the screen.
+  final double heldMillisecondsPerFrame;
   final double nativeCallbacksPerSecond;
   final double deliveredFramesPerSecond;
   final double queuedDropsPerSecond;
@@ -1306,8 +1320,17 @@ class _FrameDiagnosticsSnapshot {
         ? current.deliveredFrames - previous.deliveredFrames
         : 0;
 
+    final holds = current.holds - previous.holds;
     return _FrameDiagnosticsSnapshot(
       lastFrameGeneration: current.lastFrameGeneration,
+      engineFramesPerSecond: perSecond(
+        current.lastFrameGeneration,
+        previous.lastFrameGeneration,
+        seconds,
+      ),
+      heldMillisecondsPerFrame: holds > 0
+          ? (current.heldNanos - previous.heldNanos) / holds / 1e6
+          : 0,
       nativeCallbacksPerSecond: nativePerSecond,
       deliveredFramesPerSecond: deliveredPerSecond,
       queuedDropsPerSecond: perSecond(
@@ -1353,6 +1376,8 @@ class _FrameDiagnosticsOverlay extends StatelessWidget {
 
     final lines = <String>[
       'gen ${snapshot.lastFrameGeneration}',
+      'engine ${snapshot.engineFramesPerSecond.toStringAsFixed(1)}/s',
+      'copy ${snapshot.heldMillisecondsPerFrame.toStringAsFixed(1)} ms',
       'native ${snapshot.nativeCallbacksPerSecond.toStringAsFixed(1)}/s',
       'delivered ${snapshot.deliveredFramesPerSecond.toStringAsFixed(1)}/s',
       'coalesced ${snapshot.queuedDropsPerSecond.toStringAsFixed(1)}/s',

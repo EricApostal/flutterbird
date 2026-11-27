@@ -252,6 +252,8 @@ public final class LadybirdPlugin implements FlutterPlugin, MethodCallHandler {
         diagnostics.put("displayLinkTicks", pumpTicks);
         diagnostics.put("pumpRequests", pumpRequests);
         diagnostics.put("pumpExecutions", pumpExecutions);
+        diagnostics.put("heldNanos", textureContext.heldNanos);
+        diagnostics.put("holds", textureContext.holds);
         diagnostics.put("hasDisplayLink", true);
         result.success(diagnostics);
     }
@@ -326,6 +328,7 @@ public final class LadybirdPlugin implements FlutterPlugin, MethodCallHandler {
         if (renderHandler != null) {
             // Until it is drawn, the engine must not render into it again.
             nativeSetFrameInUse(true);
+            final long heldSince = System.nanoTime();
             renderHandler.post(new Runnable() {
                 @Override
                 public void run() {
@@ -355,7 +358,11 @@ public final class LadybirdPlugin implements FlutterPlugin, MethodCallHandler {
                         buffer.close();
                         textureContext.frameNotifyQueued = false;
                         // The engine is only ever called on the main thread.
-                        mainHandler.post(() -> nativeSetFrameInUse(false));
+                        mainHandler.post(() -> {
+                            textureContext.heldNanos += System.nanoTime() - heldSince;
+                            textureContext.holds += 1;
+                            nativeSetFrameInUse(false);
+                        });
                     }
                 }
             });
@@ -401,6 +408,10 @@ public final class LadybirdPlugin implements FlutterPlugin, MethodCallHandler {
         long queuedDrops = 0;
         long deliveredFrames = 0;
         long lastDiagnosticLogMs = 0;
+        // How long the engine has been made to wait for frames to be drawn, and
+        // for how many. Main thread only.
+        long heldNanos = 0;
+        long holds = 0;
 
         TextureContext(int viewId, TextureRegistry.SurfaceProducer producer, int canvasWidth, int canvasHeight) {
             this.viewId = viewId;

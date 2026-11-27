@@ -1359,11 +1359,10 @@ public:
                             double maximum_frames_per_second) {
 #ifdef __ANDROID__
     // Flutter reports the rate the screen is at, which falls while nothing
-    // moves, so what the plugin read is used. Frames beyond it are never seen.
+    // moves, so what the plugin read is used, for the frame rate too.
     if (!display_id.has_value() && s_android_refresh_rate > 0.0) {
       refresh_rate = s_android_refresh_rate;
-      maximum_frames_per_second =
-          min(maximum_frames_per_second, s_android_refresh_rate);
+      maximum_frames_per_second = s_android_refresh_rate;
     }
 #endif
     auto const sanitized_refresh_rate =
