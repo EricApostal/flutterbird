@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:ladybird/ladybird.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:rubisco_browser/features/mobile/extensions/mobile_extensions_page.dart';
 import 'package:rubisco_browser/features/mobile/library/downloads_page.dart';
 import 'package:rubisco_browser/features/mobile/settings/general_settings_pages.dart';
 import 'package:rubisco_browser/features/mobile/settings/new_tab_settings_page.dart';
@@ -89,6 +90,12 @@ class _MobileSettingsPageState extends ConsumerState<MobileSettingsPage> {
               icon: Icons.grid_view_rounded,
               title: 'New tab page',
               onTap: () => _open(const NewTabSettingsPage()),
+            ),
+            SettingsRow(
+              icon: Icons.extension_outlined,
+              title: 'Extensions',
+              subtitle: 'Add and manage extensions',
+              onTap: () => _open(const MobileExtensionsPage()),
             ),
           ],
         ),

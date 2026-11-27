@@ -16,6 +16,9 @@ import 'package:rubisco_browser/features/browser/state/tab_actions.dart';
 import 'package:rubisco_browser/features/browser/state/tab_history.dart';
 import 'package:rubisco_browser/features/browser/state/tab_preview_cache.dart';
 import 'package:rubisco_browser/features/mobile/browser/find_bar.dart';
+import 'package:rubisco_browser/features/mobile/extensions/mobile_extension_install.dart';
+import 'package:rubisco_browser/features/mobile/extensions/mobile_extension_popup.dart';
+import 'package:rubisco_browser/features/mobile/extensions/mobile_extensions_sheet.dart';
 import 'package:rubisco_browser/features/mobile/browser/mobile_browser_scope.dart';
 import 'package:rubisco_browser/features/mobile/browser/mobile_toolbar.dart';
 import 'package:rubisco_browser/features/mobile/browser/omnibox_editor.dart';
@@ -90,6 +93,7 @@ class _MobileBrowserLayoutState extends ConsumerState<MobileBrowserLayout>
   double _scrolled = 0;
 
   LadybirdController? _watched;
+  StreamSubscription<String>? _popupRequests;
 
   BrowserShell get _shell => ref.read(browserShellProvider);
 
@@ -108,6 +112,53 @@ class _MobileBrowserLayoutState extends ConsumerState<MobileBrowserLayout>
       duration: const Duration(milliseconds: 220),
     );
     _tabSlide = AnimationController.unbounded(vsync: this);
+    unawaited(_listenForPopups());
+  }
+
+  // An extension can open its own popup, as a password manager does when it
+  // needs to be unlocked.
+  Future<void> _listenForPopups() async {
+    final ExtensionService service;
+    try {
+      service = await ref.read(extensionServiceProvider.future);
+    } on Object catch (error) {
+      debugPrint('Extensions are unavailable: $error');
+      return;
+    }
+    if (!mounted) return;
+    _popupRequests = service.actions.popupRequests.listen((uuid) {
+      // Not over a screen, a menu or another popup.
+      if (!mounted || !(ModalRoute.of(context)?.isCurrent ?? false)) return;
+      final extension = service.registry.byUuid(uuid);
+      if (extension == null) return;
+      unawaited(
+        showMobileExtensionPopup(
+          context,
+          service: service,
+          bridge: ref.read(browserBridgeProvider),
+          extension: extension,
+        ),
+      );
+    });
+  }
+
+  Future<void> _addExtension(String url) async {
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    showMobileSnack(
+      messenger,
+      'Getting the extension…',
+      duration: const Duration(minutes: 2),
+    );
+    ExtensionOutcome? outcome;
+    try {
+      final service = await ref.read(extensionServiceProvider.future);
+      if (!mounted) return;
+      outcome = await addExtension(context, service, url);
+    } on Object catch (error) {
+      outcome = (message: describeExtensionError(error), failed: true);
+    }
+    messenger?.hideCurrentSnackBar();
+    if (outcome != null) showMobileSnack(messenger, outcome.message);
   }
 
   @override
@@ -128,6 +179,7 @@ class _MobileBrowserLayoutState extends ConsumerState<MobileBrowserLayout>
 
   @override
   void dispose() {
+    unawaited(_popupRequests?.cancel());
     _unwatch();
     _coverTimer?.cancel();
     _editor.dispose();
@@ -483,6 +535,7 @@ class _MobileBrowserLayoutState extends ConsumerState<MobileBrowserLayout>
         canGoForward: tab.canGoForward(),
         isBookmarked: isWebPage && omnibox.isBookmarked(url),
         isWebPage: isWebPage,
+        isAddonPage: isWebPage && isAddonPage(url),
       ),
     );
     // The tab may have closed while the menu was up.
@@ -522,6 +575,10 @@ class _MobileBrowserLayoutState extends ConsumerState<MobileBrowserLayout>
         await pushMobilePage<void>(context, const BookmarksPage());
       case OverflowAction.recentTabs:
         await pushMobilePage<void>(context, const RecentTabsPage());
+      case OverflowAction.extensions:
+        await showMobileExtensionsSheet(context);
+      case OverflowAction.addExtension:
+        await _addExtension(url);
       case OverflowAction.share:
         await shareText(context, url, subject: tab.titleNotifier.value);
       case OverflowAction.findInPage:

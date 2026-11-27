@@ -14,6 +14,8 @@ enum OverflowAction {
   downloads,
   bookmarks,
   recentTabs,
+  extensions,
+  addExtension,
   share,
   findInPage,
   copy,
@@ -29,6 +31,7 @@ class OverflowMenuPage {
     required this.canGoForward,
     required this.isBookmarked,
     required this.isWebPage,
+    this.isAddonPage = false,
   });
 
   final bool canGoBack;
@@ -38,6 +41,9 @@ class OverflowMenuPage {
   /// Whether there is a page of the web's, which can be shared, bookmarked and
   /// searched, rather than the browser's own.
   final bool isWebPage;
+
+  /// Whether it is an add-on's page, whose extension can be added from here.
+  final bool isAddonPage;
 }
 
 /// The toolbar's menu, as Chrome lays it out: a row of buttons about the page,
@@ -141,6 +147,17 @@ Future<OverflowAction?> showOverflowMenu({
           ),
           row(Icons.star_rounded, 'Bookmarks', OverflowAction.bookmarks),
           row(Icons.tab_rounded, 'Recent tabs', OverflowAction.recentTabs),
+          row(
+            Icons.extension_outlined,
+            'Extensions',
+            OverflowAction.extensions,
+          ),
+          if (page.isAddonPage)
+            row(
+              Icons.add_circle_outline_rounded,
+              'Add extension',
+              OverflowAction.addExtension,
+            ),
           divider,
           row(
             Icons.share_outlined,
